@@ -1,5 +1,6 @@
-import { $, esc, cached, hash, local, relTime, updatedText, errorText, safeUrl } from './util.js';
-import { graph, msAccount } from './msauth.js';
+import { $, esc, cached, hash, local, relTime, updatedText, errorText, safeUrl, showToast } from './util.js';
+import { graph, graphWrite, msAccount } from './msauth.js';
+import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
 import { GMAIL_FEEDS, outlookWebUrl, msClientId } from './settings.js';
 import { icon } from './icons.js';
 
@@ -35,13 +36,19 @@ async function fetchGmail(index, feedKey = 'inbox') {
   if (!email) return { signedOut: true };
   const items = [...feed.getElementsByTagName('entry')].map((e) => {
     const author = e.getElementsByTagName('author')[0];
+    const link = (e.getElementsByTagName('link')[0]?.getAttribute('href') || '').replace(/^http:/, 'https:');
+    let msgId = '';
+    try {
+      msgId = new URL(link).searchParams.get('message_id') || '';
+    } catch {}
     return {
+      msgId,
       id: text(e, 'id'),
       subject: text(e, 'title') || '(no subject)',
       snippet: text(e, 'summary'),
       from: (author && (text(author, 'name') || text(author, 'email'))) || 'Unknown sender',
       at: Date.parse(text(e, 'issued') || text(e, 'modified')) || Date.now(),
-      url: (e.getElementsByTagName('link')[0]?.getAttribute('href') || '').replace(/^http:/, 'https:'),
+      url: link,
     };
   });
   const unread = Math.max(Number(text(feed, 'fullcount')) || 0, items.length);
@@ -114,6 +121,7 @@ export async function refreshMail(S, force) {
     accounts = await discoverGmailAccounts(force);
   } catch {}
   noGmail = accounts.length === 0;
+  googleEmail = googleConfigured() ? (await googleAccount())?.email?.toLowerCase() || '' : '';
   gmailBlocked = noGmail && !(await gmailAllowed());
   const hidden = new Set(S.gmail.hidden || []);
   accounts
@@ -163,6 +171,7 @@ export async function refreshMail(S, force) {
 }
 
 let noGmail = false;
+let googleEmail = '';
 let gmailBlocked = false;
 let outlookConnected = false;
 
@@ -216,7 +225,14 @@ function render() {
             <time class="mail-time" datetime="${new Date(m.at).toISOString()}">${relTime(m.at)}</time>
             <span class="mail-subject">${esc(m.subject)}</span>
             <span class="mail-snippet">${esc(m.snippet)}</span>
-          </a></li>`,
+          </a>${
+            canChange(sources.get(m.key))
+              ? `<div class="mail-actions">
+              <button type="button" class="mail-act" data-mail-act="read" data-key="${esc(m.key)}" data-id="${esc(m.id)}" title="Mark as read" aria-label="Mark as read: ${esc(m.subject)}">${icon('mail-open')}</button>
+              <button type="button" class="mail-act danger" data-mail-act="delete" data-key="${esc(m.key)}" data-id="${esc(m.id)}" title="Delete" aria-label="Delete: ${esc(m.subject)}">${icon('trash')}</button>
+            </div>`
+              : ''
+          }</li>`,
         )
         .join('')}</ol>`
     : live.length
@@ -245,8 +261,95 @@ function render() {
 
 const shortLabel = (s) => (s.includes('@') ? s.split('@')[0] : s);
 
+// ---- Mark as read / delete -----------------------------------------------------------
+// Outlook: any connected account. Gmail: only the account connected under Google, because
+// that's the one Chrome can get permission for.
+function canChange(src) {
+  if (!src?.data) return false;
+  if (src.kind === 'outlook') return true;
+  return Boolean(googleEmail && src.acct.email === googleEmail);
+}
+
+const cacheKeyFor = (key) => (key === 'outlook' ? 'outlook-mail' : key);
+
+async function saveSource(key) {
+  const stored = await local.get(`cache:${cacheKeyFor(key)}`);
+  const src = sources.get(key);
+  if (stored && src?.data) await local.set(`cache:${cacheKeyFor(key)}`, { ...stored, data: src.data });
+}
+
+function removeItem(key, id) {
+  const src = sources.get(key);
+  const item = src?.data?.items.find((m) => m.id === id);
+  if (!item) return null;
+  src.data = { ...src.data, items: src.data.items.filter((m) => m !== item), unread: Math.max(0, (src.data.unread || 0) - 1) };
+  return item;
+}
+
+function restoreItem(key, item) {
+  const src = sources.get(key);
+  if (!src?.data || src.data.items.some((m) => m.id === item.id)) return;
+  src.data = { ...src.data, items: [...src.data.items, item], unread: (src.data.unread || 0) + 1 };
+}
+
+async function gmailChange(action, item) {
+  if (!item.msgId) throw new Error('open this message in Gmail to change it');
+  // The feed lists conversations, so act on the whole thread.
+  const { threadId } = await gmailApi(`/messages/${encodeURIComponent(item.msgId)}?format=minimal&fields=threadId`, { method: 'GET' });
+  const thread = `/threads/${encodeURIComponent(threadId)}`;
+  if (action === 'read') {
+    await gmailApi(`${thread}/modify`, { body: { removeLabelIds: ['UNREAD'] } });
+    return () => gmailApi(`${thread}/modify`, { body: { addLabelIds: ['UNREAD'] } });
+  }
+  await gmailApi(`${thread}/trash`);
+  return () => gmailApi(`${thread}/untrash`);
+}
+
+async function outlookChange(action, item) {
+  const clientId = msClientId(settingsRef);
+  const message = `/me/messages/${encodeURIComponent(item.id)}`;
+  if (action === 'read') {
+    await graphWrite(clientId, message, { method: 'PATCH', body: { isRead: true } });
+    return () => graphWrite(clientId, message, { method: 'PATCH', body: { isRead: false } });
+  }
+  const moved = await graphWrite(clientId, `${message}/move`, { body: { destinationId: 'deleteditems' } });
+  return () => graphWrite(clientId, `/me/messages/${encodeURIComponent(moved.id)}/move`, { body: { destinationId: 'inbox' } });
+}
+
+async function change(action, key, id) {
+  const src = sources.get(key);
+  const item = removeItem(key, id);
+  if (!item) return;
+  render();
+  saveSource(key);
+  try {
+    const undo = await (src.kind === 'outlook' ? outlookChange(action, item) : gmailChange(action, item));
+    const done = action === 'read' ? 'Marked as read' : src.kind === 'outlook' ? 'Moved to Deleted Items' : 'Moved to Trash';
+    showToast(done, async () => {
+      try {
+        await undo();
+        restoreItem(key, item);
+        render();
+        saveSource(key);
+      } catch (err) {
+        showToast(`Couldn’t undo: ${errorText(err)}.`);
+      }
+    });
+  } catch (err) {
+    restoreItem(key, item);
+    render();
+    saveSource(key);
+    showToast(`Couldn’t ${action === 'read' ? 'mark that as read' : 'delete that'}: ${errorText(err)}.`);
+  }
+}
+
 export function initMail() {
   $('#mail-body').addEventListener('click', (e) => {
+    const act = e.target.closest('[data-mail-act]');
+    if (act) {
+      change(act.dataset.mailAct, act.dataset.key, act.dataset.id);
+      return;
+    }
     const chip = e.target.closest('[data-mail-filter]');
     if (!chip) return;
     filter = chip.dataset.mailFilter;

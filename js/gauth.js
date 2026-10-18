@@ -4,6 +4,8 @@ import { local } from './util.js';
 
 const KEY = 'google:account';
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+// Asked for the first time someone marks Gmail read or deletes it.
+const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 
 export class NeedsGoogle extends Error {
   constructor(message = 'Google is not connected') {
@@ -90,4 +92,49 @@ export async function gapi(path) {
     throw new Error(j.error?.message || `Google returned ${res.status}`);
   }
   return res.json();
+}
+
+async function gmailToken(interactive) {
+  const r = await chrome.identity.getAuthToken({ interactive, scopes: [GMAIL_SCOPE] });
+  const t = typeof r === 'string' ? r : r?.token;
+  if (!t) throw new Error('No token');
+  if (r?.grantedScopes && !r.grantedScopes.includes(GMAIL_SCOPE)) {
+    await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
+    throw new Error('Daybook needs permission to manage your Gmail. Try again and leave the Gmail box ticked.');
+  }
+  return t;
+}
+
+// Gmail API calls for the Google account connected in Daybook. The first call opens Google's
+// consent window for the gmail.modify permission.
+export async function gmailApi(path, { method = 'POST', body } = {}) {
+  let t;
+  try {
+    t = await gmailToken(false);
+  } catch {
+    try {
+      t = await gmailToken(true);
+    } catch (err) {
+      throw new Error(explain(err));
+    }
+  }
+  const call = (tok) =>
+    fetch(`https://gmail.googleapis.com/gmail/v1/users/me${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${tok}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  let res = await call(t);
+  if (res.status === 401) {
+    await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
+    t = await gmailToken(false);
+    res = await call(t);
+  }
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (/accessNotConfigured|SERVICE_DISABLED/i.test(JSON.stringify(j)))
+      throw new Error('The Gmail API is turned off for this copy of Daybook. The person who shared it needs to enable it in Google Cloud');
+    throw new Error(j.error?.message || `Gmail returned ${res.status}`);
+  }
+  return j;
 }

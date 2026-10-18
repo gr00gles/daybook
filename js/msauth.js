@@ -9,6 +9,8 @@ const COMMON = `${LOGIN}/common/oauth2/v2.0`;
 const authorityFor = (hint) =>
   hint?.personal ? `${LOGIN}/consumers/oauth2/v2.0` : hint?.tid ? `${LOGIN}/${hint.tid}/oauth2/v2.0` : COMMON;
 const SCOPE = 'openid profile offline_access User.Read Mail.Read Calendars.Read';
+// Asked for the first time someone marks Outlook mail read or deletes it.
+const SCOPE_WRITE = 'openid profile offline_access User.Read Mail.ReadWrite Calendars.Read';
 const KEY = 'ms:auth';
 const CONSUMER_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
 
@@ -23,7 +25,7 @@ export class NeedsConnect extends Error {
 export const adminConsentUrl = (clientId) =>
   `https://login.microsoftonline.com/organizations/v2.0/adminconsent?${new URLSearchParams({
     client_id: clientId,
-    scope: 'https://graph.microsoft.com/User.Read https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Calendars.Read',
+    scope: 'https://graph.microsoft.com/User.Read https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Calendars.Read',
     redirect_uri: chrome.identity.getRedirectURL(),
   })}`;
 
@@ -55,11 +57,11 @@ function idClaims(idToken) {
 
 const ADMIN_CODES = /AADSTS(90094|90095|900941|65001)\b/;
 
-async function tokenRequest(clientId, params, authority = COMMON) {
+async function tokenRequest(clientId, params, authority = COMMON, scope = SCOPE) {
   const res = await fetch(`${authority}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: clientId, scope: SCOPE, ...params }),
+    body: new URLSearchParams({ client_id: clientId, scope, ...params }),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -75,10 +77,12 @@ async function tokenRequest(clientId, params, authority = COMMON) {
     username: claims.preferred_username,
     tid: claims.tid,
     personal: claims.tid ? claims.tid === CONSUMER_TENANT : undefined,
+    scope,
   };
 }
 
-async function authorize(clientId, interactive, hint) {
+// `hint` is the stored sign-in: with it, Microsoft goes straight to that account.
+async function authorize(clientId, interactive, hint, scope = hint?.scope || SCOPE) {
   const verifier = randomString(48);
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   const state = randomString(16);
@@ -88,14 +92,15 @@ async function authorize(clientId, interactive, hint) {
     response_type: 'code',
     response_mode: 'query',
     redirect_uri: redirect,
-    scope: SCOPE,
+    scope,
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
-    prompt: interactive ? 'select_account' : 'none',
   };
-  if (!interactive && hint?.username) params.login_hint = hint.username;
-  const authority = interactive ? COMMON : authorityFor(hint);
+  if (!interactive) params.prompt = 'none';
+  else if (!hint) params.prompt = 'select_account';
+  if (hint?.username) params.login_hint = hint.username;
+  const authority = hint ? authorityFor(hint) : COMMON;
   let result;
   try {
     result = await chrome.identity.launchWebAuthFlow(
@@ -122,6 +127,7 @@ async function authorize(clientId, interactive, hint) {
     clientId,
     { grant_type: 'authorization_code', code: back.searchParams.get('code'), redirect_uri: redirect, code_verifier: verifier },
     authority,
+    scope,
   );
 }
 
@@ -155,13 +161,13 @@ async function getToken(clientId) {
   renewing ??= (async () => {
     let next = null;
     if (auth.refresh) {
-      next = await tokenRequest(clientId, { grant_type: 'refresh_token', refresh_token: auth.refresh }, authorityFor(auth)).catch(() => null);
+      next = await tokenRequest(clientId, { grant_type: 'refresh_token', refresh_token: auth.refresh }, authorityFor(auth), auth.scope || SCOPE).catch(() => null);
     }
     // Refresh tokens for browser apps last 24 hours. After that, sign in again silently
     // using the Microsoft session already in this Chrome profile.
     next ??= await authorize(clientId, false, auth).catch(() => null);
     if (!next) throw new NeedsConnect('Outlook sign-in expired');
-    const saved = { ...auth, ...next, username: next.username || auth.username, tid: next.tid || auth.tid, personal: next.personal ?? auth.personal };
+    const saved = { ...auth, ...next, username: next.username || auth.username, tid: next.tid || auth.tid, personal: next.personal ?? auth.personal, scope: auth.scope || SCOPE };
     await local.set(KEY, saved);
     return saved.access;
   })().finally(() => (renewing = null));
@@ -185,4 +191,33 @@ export async function graph(clientId, path, headers = {}) {
     throw new Error(j.error?.message || `Outlook returned ${res.status}`);
   }
   return res.json();
+}
+
+// Marking mail read and deleting it need Mail.ReadWrite. The first time, Microsoft shows a
+// consent window for that one extra permission; after that the stored sign-in carries it.
+async function writeToken(clientId) {
+  const auth = await local.get(KEY);
+  if (!auth || auth.clientId !== clientId) throw new NeedsConnect();
+  if (auth.scope === SCOPE_WRITE) return getToken(clientId);
+  const next = await authorize(clientId, true, auth, SCOPE_WRITE);
+  const saved = { ...auth, ...next, username: next.username || auth.username, tid: next.tid || auth.tid, personal: next.personal ?? auth.personal, scope: SCOPE_WRITE };
+  await local.set(KEY, saved);
+  return saved.access;
+}
+
+export async function graphWrite(clientId, path, { method = 'POST', body } = {}) {
+  const token = await writeToken(clientId);
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) throw new NeedsConnect('Outlook sign-in expired');
+  if (res.status === 204) return {};
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 403) throw new Error('Outlook didn’t allow the change. The person who shared Daybook needs to add the Mail.ReadWrite permission to the Microsoft app');
+    throw new Error(j.error?.message || `Outlook returned ${res.status}`);
+  }
+  return j;
 }

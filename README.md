@@ -45,6 +45,7 @@ Zip the `daybook` folder (or reuse `daybook.zip`) and send it. Each person insta
 
 ## Using it
 
+- **Unread** mail: hover over a message to **mark it as read** or **delete** it (it goes to Trash or Deleted Items). A bar at the bottom offers **Undo**. The first time, Google or Microsoft asks you to allow it. For Gmail this works on the Google account connected in Settings; other signed-in Gmail accounts can only be opened.
 - **Today** lists today's events, with a timeline and Join buttons for video calls, plus the next six days. Under it, the **month calendar** shows every event for the month; use the arrows to flip months and click a day to see its full schedule.
 - Chrome puts the cursor in the address bar on a new tab; press `/` to jump to Daybook's search box.
 - In the search box, start with `!y` (YouTube), `!m` (Maps), `!c` (Claude), `!w` (Wikipedia), `!a` (Amazon) or `!e` (search your Gmail). Ctrl+Enter or ⌘+Enter opens results in a new tab.
@@ -52,7 +53,7 @@ Zip the `daybook` folder (or reuse `daybook.zip`) and send it. Each person insta
 
 ## Privacy
 
-Daybook only reads. Settings sync through your Chrome profile; sign-ins and cached mail, calendar and weather data stay on your computer. The page talks only to Google, Microsoft, Open-Meteo (weather) and BigDataCloud (city name from coordinates). Full policy: https://gr00gles.github.io/privacy.html
+Daybook never sends email and only changes mail when you click **Mark as read** or **Delete** (deleted mail goes to Trash or Deleted Items, so it can be recovered). Settings sync through your Chrome profile; sign-ins and cached mail, calendar and weather data stay on your computer. The page talks only to Google, Microsoft, Open-Meteo (weather) and BigDataCloud (city name from coordinates). Full policy: https://gr00gles.github.io/privacy.html
 
 ## Updating
 

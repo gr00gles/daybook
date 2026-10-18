@@ -39,7 +39,7 @@ function body() {
           <li><strong>Outlook</strong> for Outlook.com or work mail and calendar</li>
           <li><strong>Weather and headlines</strong> for where you live</li>
         </ul>
-        <p class="hint">Everything stays in your browser. Daybook only reads; it can’t send, change or delete anything.</p>`;
+        <p class="hint">Everything stays in your browser. Daybook never sends email, and it only changes your mail when you click Mark as read or Delete.</p>`;
     case 'google':
       return `
         <h1 class="wiz-title">Connect Google</h1>

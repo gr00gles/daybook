@@ -634,6 +634,27 @@ kbd {
   text-decoration: none;
 }
 .mail:hover { background: var(--raised); }
+.mail-list li { position: relative; }
+.mail-actions {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--raised);
+  box-shadow: 0 0 0 1px var(--line), 0 6px 16px -10px rgb(6 10 14 / .4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+}
+.mail-list li:hover .mail-actions, .mail-list li:focus-within .mail-actions { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .mail-actions { opacity: 1; pointer-events: auto; } }
+.mail-act { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 7px; background: none; color: var(--ink-2); cursor: pointer; }
+.mail-act:hover { background: var(--surface); color: var(--ink); }
+.mail-act.danger:hover { color: var(--critical); }
+.mail-act .ui-icon { width: 17px; height: 17px; }
 .mail .src { grid-area: src; align-self: center; }
 .mail-from { grid-area: from; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mail-time { grid-area: time; font: 400 11.5px var(--font-mono); color: var(--muted); align-self: center; }
@@ -900,6 +921,25 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
   font-size: 14px;
   box-shadow: 0 12px 32px -12px rgb(6 10 14 / .5);
 }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 10px 10px 16px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 14px;
+  transform: translateX(-50%);
+  box-shadow: 0 12px 32px -12px rgb(6 10 14 / .5);
+}
+.toast .btn { background: transparent; color: var(--surface); border-color: color-mix(in srgb, var(--surface) 35%, transparent); }
 
 /* ---- First-run setup ------------------------------------------------------------ */
 

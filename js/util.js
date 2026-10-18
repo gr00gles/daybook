@@ -104,3 +104,19 @@ export const colorVar = (c) => (typeof c === 'number' ? `var(--cat-${c})` : /^#[
 
 // Only ordinary web links go into href attributes; feeds and calendars are outside data.
 export const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '').trim()) ? String(u).trim() : '#');
+
+// A short message at the bottom of the page, optionally with an Undo button.
+let toastTimer;
+export function showToast(message, undo) {
+  const el = document.querySelector('#toast');
+  if (!el) return;
+  clearTimeout(toastTimer);
+  el.innerHTML = `<span>${esc(message)}</span>${undo ? '<button class="btn small" type="button">Undo</button>' : ''}`;
+  el.hidden = false;
+  const hide = () => (el.hidden = true);
+  el.querySelector('button')?.addEventListener('click', () => {
+    hide();
+    undo();
+  });
+  toastTimer = setTimeout(hide, undo ? 7000 : 5000);
+}
