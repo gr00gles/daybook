@@ -1,0 +1,60 @@
+# Daybook
+
+A Chrome new tab page that shows the time, the weather, your Google and Outlook calendars, unread Gmail and Outlook mail, headlines, a search bar, your most-visited sites and a notes pad.
+
+It is a small Chrome extension. Everything runs in the browser; there is no server.
+
+## Install (for anyone you share it with)
+
+1. Unzip `daybook.zip` and move the `daybook` folder somewhere permanent, such as Documents. Chrome loads the extension from that folder, so don't delete it.
+2. Open `chrome://extensions` and turn on **Developer mode** (top right).
+3. Click **Load unpacked** and choose the `daybook` folder.
+4. Open a new tab. If Chrome asks whether to keep the new tab page, choose **Keep it**.
+5. Daybook's setup screen walks through three steps:
+   - **Connect Google.** Click *Sign in with Google*. Chrome may ask you to sign in to Chrome with your Google account. Google then says *"Google hasn't verified this app"*: click **Advanced**, then **Go to Daybook**, tick the calendar box and click **Continue**. Daybook also finds every Gmail account signed into Chrome; if none is, click *Sign in to Gmail*.
+   - **Connect Outlook** (optional). Click *Sign in with Microsoft* and accept. If Microsoft asks *"Stay signed in?"*, choose **Yes**. Work or school accounts often need IT approval first; Daybook gives you a link to send them.
+   - **Make it yours.** Name, °F or °C, weather location, headline topics.
+
+You can change all of this later with the gear icon, or rerun setup from Settings → Accounts.
+
+## For the owner: what's set up and how to keep it working
+
+Sign-in works for everyone because this copy carries two app IDs you registered once:
+
+- **Google:** the `oauth2.client_id` in `manifest.json` (Google Cloud project "Daybook", Chrome Extension client, Item ID `flgomcdbgonicihokfkbpopedcilcpdn`).
+- **Microsoft:** `MICROSOFT_CLIENT_ID` in `config.js` (Entra app registration "Daybook", SPA redirect `https://flgomcdbgonicihokfkbpopedcilcpdn.chromiumapp.org/`).
+
+Things to know:
+
+- **Never change the `key` in `manifest.json`.** It fixes the extension ID, and both app registrations are tied to that ID.
+- **Google publishing status must be "In production"**, not "Testing". In Testing, only listed test users can sign in and everyone has to sign in again every 7 days. Publishing needs the home page and privacy policy at `https://gr00gles.github.io/`.
+- **The Google app is unverified, so it can be used by at most 100 different Google accounts, ever.** That's plenty for friends and family. Going past it would require Google's verification review.
+- **Keep both registrations alive.** Google deletes OAuth clients nobody has used for 6 months, and Microsoft may delete an unused directory. Using Daybook yourself keeps the Google client active; sign in to entra.microsoft.com every few months.
+- **Gmail** is read through Gmail's inbox feed using the browser's own Gmail sign-in, so it needs no permission screen. Google doesn't officially document this feed for personal accounts, so it could change someday.
+
+## Sharing it
+
+Zip the `daybook` folder (or reuse `daybook.zip`) and send it. Each person installs it as above and signs in with their own accounts; nobody sees anyone else's data.
+
+## Troubleshooting
+
+- **"Google hasn't verified this app" with no Advanced link:** the person's Google account is a work or school account whose admin blocks unverified apps. Personal @gmail.com accounts work.
+- **Google sign-in does nothing:** Chrome sign-in may be turned off (Chrome settings → You and Google → *Allow Chrome sign-in*), or the window is incognito.
+- **Gmail shows nothing:** make sure you're signed in to Gmail in Chrome, and that Daybook's *Site access* in `chrome://extensions` → Details is *On all sites*.
+- **Outlook asks to reconnect now and then:** Microsoft limits browser apps to a day at a time and renews quietly using your Microsoft sign-in. If you signed out of Outlook.com or cleared cookies, click *Reconnect Outlook*.
+
+## Using it
+
+- Chrome puts the cursor in the address bar on a new tab; press `/` to jump to Daybook's search box.
+- In the search box, start with `!y` (YouTube), `!m` (Maps), `!c` (Claude), `!w` (Wikipedia), `!a` (Amazon) or `!e` (search your Gmail). Ctrl+Enter or ⌘+Enter opens results in a new tab.
+- Cards show saved data instantly and refresh in the background: Gmail every minute, Outlook every 2, calendars every 5–10, weather every 15, headlines every 20. ↻ refreshes everything now.
+
+## Privacy
+
+Daybook only reads. Settings sync through your Chrome profile; sign-ins and cached mail, calendar and weather data stay on your computer. The page talks only to Google, Microsoft, Open-Meteo (weather) and BigDataCloud (city name from coordinates). Full policy: https://gr00gles.github.io/privacy.html
+
+## Updating
+
+**Your own copy (from GitHub):** open GitHub Desktop, choose the `daybook` repository and click **Fetch origin**, then **Pull origin**. The next new tab has the changes. If it shows **Finish update**, click it once and open a new tab.
+
+**Copies you shared as a zip:** send a new zip; the person replaces the files in their `daybook` folder and opens a new tab (clicking **Finish update** if it appears). Sign-ins and settings are kept.
