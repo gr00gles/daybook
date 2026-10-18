@@ -170,7 +170,9 @@ async function getToken(clientId) {
 
 export async function graph(clientId, path, headers = {}) {
   const token = await getToken(clientId);
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+  // Accepts a path, or a full @odata.nextLink URL when paging.
+  const url = path.startsWith('https://graph.microsoft.com/') ? path : `https://graph.microsoft.com/v1.0${path}`;
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, ...headers },
   });
   if (res.status === 401) {

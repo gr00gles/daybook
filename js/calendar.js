@@ -5,6 +5,29 @@ import { BUILT_IN_HOSTS, msClientId } from './settings.js';
 import { icon } from './icons.js';
 
 const DAYS_AHEAD = 7;
+
+// First day of the week for this browser's locale (0 = Sunday).
+const locale = new Intl.Locale(navigator.language || 'en-US');
+export const FIRST_DAY = ((locale.getWeekInfo?.() ?? locale.weekInfo)?.firstDay ?? 7) % 7;
+
+// The days a month view shows: from the week containing the 1st to the week containing the last day.
+export function monthGrid(year, month) {
+  const first = new Date(year, month, 1);
+  const start = addDays(first.getTime(), -((first.getDay() - FIRST_DAY + 7) % 7));
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const weeks = Math.ceil(((first.getDay() - FIRST_DAY + 7) % 7 + daysInMonth) / 7);
+  return { start, end: addDays(start, weeks * 7), weeks };
+}
+
+// Fetched on every refresh: this month's grid through next month's, which also covers the
+// next seven days for the Today list.
+function mainRange() {
+  const now = new Date();
+  const thisMonth = monthGrid(now.getFullYear(), now.getMonth());
+  const nextMonth = monthGrid(now.getFullYear(), now.getMonth() + 1);
+  return { from: Math.min(thisMonth.start, startOfDay()), to: Math.max(nextMonth.end, addDays(startOfDay(), DAYS_AHEAD + 1)) };
+}
+let range = mainRange();
 const sources = new Map(); // calendar id -> { cal, events, at, error }
 
 let worker;
@@ -121,8 +144,14 @@ async function fetchOutlookCalendar(clientId, from, to) {
     $orderby: 'start/dateTime',
     $select: 'subject,start,end,isAllDay,isCancelled,location,webLink,onlineMeeting',
   });
-  const data = await graph(clientId, `/me/calendarView?${q}`, { Prefer: 'outlook.timezone="UTC"' });
-  return data.value
+  const items = [];
+  let next = `/me/calendarView?${q}`;
+  for (let page = 0; next && page < 4; page++) {
+    const data = await graph(clientId, next, { Prefer: 'outlook.timezone="UTC"' });
+    items.push(...(data.value || []));
+    next = data['@odata.nextLink'];
+  }
+  return items
     .filter((e) => !e.isCancelled)
     .map((e) => {
       const parse = (v) => {
@@ -144,8 +173,9 @@ async function fetchOutlookCalendar(clientId, from, to) {
 }
 
 export async function refreshCalendars(S, force, onChange) {
-  const from = startOfDay();
-  const to = addDays(from, DAYS_AHEAD + 1);
+  settingsRef = S;
+  range = mainRange();
+  const { from, to } = range;
   const wanted = new Set();
   const update = (cal) => (events, meta) => {
     sources.set(cal.id, { cal, events: events || [], ...meta });
@@ -210,10 +240,9 @@ let googleError = null;
 let googleAt = 0;
 let outlookOn = false;
 
-function allEvents() {
+const dedupe = (list) => {
   const seen = new Set();
-  return [...sources.values()]
-    .flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name })))
+  return list
     .sort((a, b) => a.start - b.start || b.allDay - a.allDay || a.title.localeCompare(b.title))
     .filter((e) => {
       // The same invite often sits on two calendars; show it once.
@@ -222,6 +251,63 @@ function allEvents() {
       seen.add(k);
       return true;
     });
+};
+
+function allEvents() {
+  return dedupe([...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))));
+}
+
+// ---- Months outside the regular window (loaded when the month view flips to them) ----
+
+const extraMonths = new Map(); // 'YYYY-M' -> { events, at, loading }
+let settingsRef = null;
+
+async function fetchAllRange(S, from, to) {
+  const out = [];
+  const decorate = (cal) => (events) => out.push(...events.map((e) => ({ ...e, color: cal.color, calName: cal.name })));
+  const jobs = [];
+  if (googleState === 'connected') {
+    jobs.push(
+      listGoogleCalendars().then((list) =>
+        Promise.allSettled(shownGoogleCalendars(S, list).map((cal) => fetchGoogleEvents(cal, from, to).then(decorate(cal)))),
+      ),
+    );
+  }
+  for (const cal of S.calendars) if (cal.enabled && cal.url) jobs.push(fetchIcs(cal.url, from, to).then(decorate(cal)));
+  if (outlookOn) {
+    const cal = { name: 'Outlook', color: S.outlook.color };
+    jobs.push(fetchOutlookCalendar(msClientId(S), from, to).then(decorate(cal)));
+  }
+  await Promise.allSettled(jobs);
+  return out;
+}
+
+const monthKey = (year, month) => {
+  const d = new Date(year, month, 1);
+  return `${d.getFullYear()}-${d.getMonth()}`;
+};
+
+// Makes sure a month's events are available. Returns true when they are already here;
+// otherwise starts loading them and calls onLoaded when done.
+export function ensureMonth(year, month, onLoaded) {
+  const { start, end } = monthGrid(year, month);
+  if (start >= range.from && end <= range.to) return true;
+  const key = monthKey(year, month);
+  const have = extraMonths.get(key);
+  if (have?.loading) return false;
+  if (have && Date.now() - have.at < 30 * 60e3) return true;
+  if (!settingsRef) return true;
+  extraMonths.set(key, { loading: true, events: have?.events || [] });
+  fetchAllRange(settingsRef, start, end).then((events) => {
+    extraMonths.set(key, { events, at: Date.now() });
+    onLoaded();
+  });
+  return false;
+}
+
+export function eventsBetween(from, to) {
+  const extra = [...extraMonths.values()].flatMap((m) => m.events);
+  return dedupe([...allEvents(), ...extra]).filter((e) => e.end > from && e.start < to);
 }
 
 export function nextUp() {
@@ -279,7 +365,7 @@ function ruler(timed, today, now, h24) {
   </div>`;
 }
 
-function timedRow(e, now, h24, { compact = false } = {}) {
+export function timedRow(e, now, h24, { compact = false } = {}) {
   const state = e.end <= now ? 'past' : e.start <= now ? 'current' : '';
   const range = compact ? fmtTime(e.start, h24) : `${fmtTime(e.start, h24)}<span class="to">${fmtTime(e.end, h24)}</span>`;
   return `<li class="ev ${state}">
@@ -293,7 +379,7 @@ function timedRow(e, now, h24, { compact = false } = {}) {
   </li>`;
 }
 
-function allDayChips(list) {
+export function allDayChips(list) {
   if (!list.length) return '';
   return `<div class="allday">${list
     .map((e) => `<a class="chip" href="${esc(eventHref(e))}" title="${esc(e.calName)}">${dot(e.color)}${esc(e.title)}</a>`)

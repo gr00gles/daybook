@@ -45,6 +45,7 @@ Zip the `daybook` folder (or reuse `daybook.zip`) and send it. Each person insta
 
 ## Using it
 
+- **Today** lists today's events, with a timeline and Join buttons for video calls, plus the next six days. Under it, the **month calendar** shows every event for the month; use the arrows to flip months and click a day to see its full schedule.
 - Chrome puts the cursor in the address bar on a new tab; press `/` to jump to Daybook's search box.
 - In the search box, start with `!y` (YouTube), `!m` (Maps), `!c` (Claude), `!w` (Wikipedia), `!a` (Amazon) or `!e` (search your Gmail). Ctrl+Enter or ⌘+Enter opens results in a new tab.
 - Cards show saved data instantly and refresh in the background: Gmail every minute, Outlook every 2, calendars every 5–10, weather every 15, headlines every 20. ↻ refreshes everything now.

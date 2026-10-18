@@ -3,6 +3,7 @@ import { $, esc, colorVar, safeUrl } from './util.js';
 import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp } from './calendar.js';
+import { initMonth, renderMonth } from './month.js';
 import { refreshNews, initNews } from './news.js';
 import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
@@ -85,7 +86,10 @@ function tick(force = false) {
   document.documentElement.dataset.phase = skyPhase();
   renderSun();
   renderNextUp();
-  if (S.show.calendar) renderAgenda(S);
+  if (S.show.calendar) {
+    renderAgenda(S);
+    renderMonth();
+  }
   if (S.show.mail) renderMail();
 }
 
@@ -233,6 +237,7 @@ function refreshAll(force = false) {
   if (S.show.calendar)
     refreshCalendars(S, force, () => {
       renderAgenda(S);
+      renderMonth();
       renderNextUp();
     });
   if (S.show.news) refreshNews(S, force);
@@ -252,6 +257,7 @@ $('#refresh-btn').addEventListener('click', (e) => {
 
 initSearch();
 initMail();
+if (S.show.calendar) initMonth(S);
 initNews();
 tick(true);
 setInterval(tick, 1000);

@@ -52,12 +52,17 @@
       </footer>
     </section>
 
-    <section class="card" id="card-notes" data-section="notes" aria-labelledby="notes-h">
-      <header class="card-head">
-        <h2 id="notes-h">Notes</h2>
-        <span class="stamp" id="notes-state"></span>
+    <section class="card" id="card-month" data-section="calendar" aria-labelledby="month-title">
+      <header class="card-head month-head">
+        <h2 id="month-title">Month</h2>
+        <span class="stamp" id="month-status"></span>
+        <div class="month-nav">
+          <button class="btn small" type="button" id="month-today" data-month="today" hidden>Today</button>
+          <button class="icon-btn small" type="button" id="month-prev" data-month="prev" aria-label="Previous month"></button>
+          <button class="icon-btn small" type="button" id="month-next" data-month="next" aria-label="Next month"></button>
+        </div>
       </header>
-      <textarea id="notes" class="notes" maxlength="6000" placeholder="Jot something down. It syncs with your Chrome profile." aria-labelledby="notes-h"></textarea>
+      <div class="card-body" id="month-body"></div>
     </section>
   </div>
 
@@ -69,6 +74,14 @@
       </header>
       <div class="card-body" id="mail-body"><p class="quiet">Checking your inboxes…</p></div>
       <footer class="card-foot"><div class="foot-links" id="mail-links"></div></footer>
+    </section>
+
+    <section class="card" id="card-notes" data-section="notes" aria-labelledby="notes-h">
+      <header class="card-head">
+        <h2 id="notes-h">Notes</h2>
+        <span class="stamp" id="notes-state"></span>
+      </header>
+      <textarea id="notes" class="notes" maxlength="6000" placeholder="Jot something down. It syncs with your Chrome profile." aria-labelledby="notes-h"></textarea>
     </section>
   </div>
 

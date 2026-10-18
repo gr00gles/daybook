@@ -43,6 +43,8 @@ const UI = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
+  'chevron-left': '<path d="M14.5 6l-6 6 6 6"/>',
+  'chevron-right': '<path d="M9.5 6l6 6-6 6"/>',
   locate: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2"/><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5"/>',
 };
 
