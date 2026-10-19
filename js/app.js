@@ -4,6 +4,7 @@ import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp } from './calendar.js';
 import { initMonth, renderMonth } from './month.js';
+import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { refreshNews, initNews } from './news.js';
 import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
@@ -115,8 +116,12 @@ function initSearch() {
     engine = b.dataset.engine;
     paint();
     input.focus();
+    updatePlaces();
   });
+  const navigate = (url, newTab) => (newTab ? window.open(url, '_blank') : (location.href = url));
+  initPlaces({ input, isActive: () => engine === 'maps' || /^!m\s/i.test(input.value), navigate });
   const go = (newTab) => {
+    if (openActivePlace(newTab)) return;
     let q = input.value.trim();
     if (!q) return;
     let use = engine;
@@ -130,8 +135,7 @@ function initSearch() {
     }
     const looksLikeUrl = !/\s/.test(q) && /^(https?:\/\/)?(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?(\/\S*)?$/i.test(q) && !bang;
     const url = looksLikeUrl ? (/^https?:\/\//i.test(q) ? q : `https://${q}`) : ENGINES[use].url.replace('%s', encodeURIComponent(q));
-    if (newTab) window.open(url, '_blank');
-    else location.href = url;
+    navigate(url, newTab);
   };
   $('#search-form').addEventListener('submit', (e) => {
     e.preventDefault();

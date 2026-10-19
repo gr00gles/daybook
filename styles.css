@@ -194,6 +194,61 @@ kbd {
   border-radius: 6px;
   padding: 1px 7px;
 }
+/* Maps mode: address suggestions with a map preview, dropped under the search box. */
+.search { position: relative; }
+.places {
+  position: absolute;
+  top: 64px;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  min-height: 300px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  box-shadow: 0 24px 48px -24px rgb(6 10 14 / .45);
+  overflow: hidden;
+}
+.places-list { margin: 0; padding: 6px; list-style: none; overflow-y: auto; max-height: 340px; }
+.place {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.place .ui-icon { width: 17px; height: 17px; margin-top: 2px; color: var(--muted); }
+.place:hover { background: var(--surface); }
+.place.on { background: var(--accent-soft); }
+.place.on .ui-icon { color: var(--accent); }
+.place-text { display: grid; min-width: 0; }
+.place-title { font-size: 14px; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+.place-detail { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.places-note { padding: 14px 12px; font-size: 13.5px; color: var(--muted); }
+.places-map { position: relative; display: grid; grid-template-rows: 1fr auto; min-height: 300px; border-left: 1px solid var(--line-2); background: var(--surface); }
+.pm-surface { position: relative; overflow: hidden; cursor: grab; touch-action: none; }
+.pm-surface.dragging { cursor: grabbing; }
+.pm-tiles { position: absolute; inset: 0; }
+.pm-tiles img { position: absolute; width: 256px; height: 256px; max-width: none; user-select: none; -webkit-user-drag: none; }
+.pm-pin { position: absolute; width: 26px; height: 34px; margin: -33px 0 0 -13px; pointer-events: none; filter: drop-shadow(0 2px 3px rgb(6 10 14 / .35)); }
+.pm-pin path { fill: var(--now); stroke: #fff; stroke-width: 1.5; }
+.pm-pin circle { fill: #fff; }
+.pm-zoom { position: absolute; top: 8px; right: 8px; display: grid; border-radius: 9px; overflow: hidden; box-shadow: 0 0 0 1px var(--line), 0 4px 10px -6px rgb(6 10 14 / .4); }
+.pm-zoom button { width: 30px; height: 30px; border: 0; background: var(--raised); color: var(--ink); font-size: 17px; line-height: 1; cursor: pointer; }
+.pm-zoom button + button { border-top: 1px solid var(--line-2); }
+.pm-zoom button:hover { background: var(--surface); }
+.pm-attrib { position: absolute; right: 0; bottom: 0; padding: 1px 6px; border-top-left-radius: 6px; background: color-mix(in srgb, var(--raised) 80%, transparent); font-size: 10px; color: var(--muted); }
+.pm-attrib a { color: inherit; }
+.pm-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border-top: 1px solid var(--line-2); background: var(--raised); }
+.pm-actions:empty { display: none; }
+@media (max-width: 640px) {
+  .places { grid-template-columns: minmax(0, 1fr); }
+  .places-map { min-height: 220px; border-left: 0; border-top: 1px solid var(--line-2); }
+  .places-list { max-height: 220px; }
+}
 .engines { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 10px; }
 .engine {
   font-size: 12.5px;
