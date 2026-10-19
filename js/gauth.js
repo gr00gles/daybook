@@ -71,7 +71,7 @@ export async function disconnectGoogle() {
     await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
   }
   // YouTube's terms require deleting its data once access is removed.
-  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'yt:subs', 'yt:feed', 'yt:seen', 'yt:shorts']);
+  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'yt:subs', 'yt:feed']);
 }
 
 export async function gapi(path) {

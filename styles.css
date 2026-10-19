@@ -735,34 +735,57 @@ kbd {
 
 /* ---- YouTube ----------------------------------------------------------------- */
 
-.yt-list { list-style: none; margin: 0 -8px; padding: 0; }
-.yt-list li + li { box-shadow: 0 -1px 0 var(--line-2); }
-.yt {
+/* A stack of cards: the front one in full, the next two peeking out above it. */
+.rolo { outline: none; }
+.rolo:focus-visible .rolo-card[data-pos="0"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rolo-stack { display: grid; padding-top: 18px; perspective: 900px; }
+.rolo-card {
+  grid-area: 1 / 1;
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
-  padding: 8px;
-  border-radius: 10px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 10px 24px -16px rgb(6 10 14 / .45);
   text-decoration: none;
+  transform-origin: 50% 0;
+  transition: transform .5s cubic-bezier(.2, .8, .2, 1), opacity .4s ease;
 }
-.yt:hover { background: var(--raised); }
-.yt-thumb { display: block; width: 112px; height: 63px; border-radius: 8px; object-fit: cover; background: var(--line-2); }
-.yt-text { display: grid; gap: 3px; min-width: 0; }
-.yt-title {
+.rolo-card[data-pos="0"] { z-index: 3; }
+.rolo-card[data-pos="1"] { z-index: 2; transform: translateY(-9px) scale(.95); opacity: .75; pointer-events: none; }
+.rolo-card[data-pos="2"] { z-index: 1; transform: translateY(-18px) scale(.9); opacity: .45; pointer-events: none; }
+.rolo-card[data-pos="wait"] { z-index: 0; transform: translateY(-24px) scale(.86); opacity: 0; pointer-events: none; }
+.rolo-card[data-pos="gone"] { z-index: 4; transform: translateY(30px) rotateX(-35deg); opacity: 0; pointer-events: none; }
+.rolo-thumb { position: relative; display: block; aspect-ratio: 16 / 9; background: var(--line-2); }
+.rolo-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.rolo-new {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--now);
+  color: #fff;
+  font: 500 10.5px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.rolo-text { display: grid; gap: 3px; padding: 10px 12px 12px; min-width: 0; }
+.rolo-title {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 650;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
-.yt.new .yt-title { font-weight: 700; }
-.yt-meta { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); min-width: 0; }
-.yt-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--now); }
-.yt-more { margin-top: 8px; font-size: 13px; }
+.rolo-meta { font-size: 12.5px; color: var(--muted); }
+.rolo-card[data-pos="0"]:hover .rolo-title { text-decoration: underline; text-underline-offset: 3px; }
+.rolo-nav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; }
+.rolo-pos { min-width: 64px; text-align: center; font: 400 12px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+#yt-count:not(:empty) { font-size: 12px; }
 
 /* ---- Weather ----------------------------------------------------------------- */
 
