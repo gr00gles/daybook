@@ -267,7 +267,8 @@ function renderCard(d, meta) {
   body.innerHTML = `
     <div class="hourly" id="wx-hourly"><div class="hourly-tip" id="wx-tip" hidden></div></div>
     <ol class="week">${week}</ol>
-    <dl class="facts">${facts.map(([k, v, sub]) => `<div><dt>${k}</dt><dd>${v}${sub ? `<small>${sub}</small>` : ''}</dd></div>`).join('')}</dl>`;
+    <dl class="facts">${facts.map(([k, v, sub]) => `<div><dt>${k}</dt><dd>${v}${sub ? `<small>${sub}</small>` : ''}</dd></div>`).join('')}</dl>
+    <p class="credit">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a></p>`;
   drawHourly();
 }
 
