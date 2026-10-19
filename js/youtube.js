@@ -15,6 +15,9 @@ const FEED_MAX_AGE = 15 * 60e3;
 // subscription list is spread out instead of hitting YouTube all at once.
 const BATCH = 40;
 const BACKOFF = 60 * 60e3;
+// When a channel's feed fails, ask the YouTube Data API instead (1 quota unit), at most this
+// often per channel.
+const API_EVERY = 60 * 60e3;
 const WINDOW = 7 * 86400e3; // uploads older than a week aren't news
 const SHOWN = 8;
 
@@ -81,6 +84,7 @@ async function channelUploads(ch) {
 // skipped and the caller backs off.
 async function pool(items, size, fn) {
   const out = new Array(items.length).fill(undefined);
+  const errors = new Array(items.length).fill('');
   let next = 0;
   let throttled = false;
   await Promise.all(
@@ -91,12 +95,42 @@ async function pool(items, size, fn) {
           out[i] = await fn(items[i]);
         } catch (err) {
           out[i] = null;
+          errors[i] = err?.message || String(err);
           if (err instanceof Throttled) throttled = true;
         }
       }
     }),
   );
-  return { out, throttled };
+  return { out, errors, throttled };
+}
+
+async function apiUploads(ch) {
+  const longOnly = settingsRef.youtube.hideShorts;
+  const q = new URLSearchParams({
+    part: 'snippet,contentDetails',
+    maxResults: '5',
+    // UULF… is the channel's long-form uploads (no Shorts or live); UU… is every upload.
+    playlistId: `${longOnly ? 'UULF' : 'UU'}${ch.id.slice(2)}`,
+    fields: 'items(snippet(title,channelTitle,resourceId/videoId),contentDetails/videoPublishedAt)',
+  });
+  let page;
+  try {
+    page = await youtubeApi(`/playlistItems?${q}`);
+  } catch (err) {
+    // A channel with no long-form videos has no UULF list at all.
+    if (longOnly && /cannot be found|not ?found/i.test(err.message)) return [];
+    throw err;
+  }
+  const now = Date.now();
+  return (page.items || [])
+    .map((it) => ({
+      id: it.snippet?.resourceId?.videoId,
+      title: it.snippet?.title || 'Untitled video',
+      channel: it.snippet?.channelTitle || ch.title,
+      channelId: ch.id,
+      at: Date.parse(it.contentDetails?.videoPublishedAt || ''),
+    }))
+    .filter((v) => v.id && v.at > now - WINDOW && v.at <= now);
 }
 
 async function refreshFeed(subs, { all = false } = {}) {
@@ -107,21 +141,50 @@ async function refreshFeed(subs, { all = false } = {}) {
   const checked = fresh ? { ...prev.checked } : {};
   if (!all && prev.pausedUntil > Date.now()) return { ...prev, byChannel, checked };
   const due = [...subs].sort((a, b) => (checked[a.id] || 0) - (checked[b.id] || 0)).slice(0, all ? subs.length : BATCH);
-  const { out, throttled } = await pool(due, 4, channelUploads);
-  let failed = 0;
+  const { out, errors, throttled } = await pool(due, 4, channelUploads);
+  const apiChecked = fresh ? { ...prev.apiChecked } : {};
+  const reasons = {};
+  const retry = [];
   due.forEach((ch, i) => {
-    if (out[i] === undefined) return; // skipped after YouTube pushed back
-    if (out[i] === null) failed++;
-    else byChannel[ch.id] = out[i];
-    checked[ch.id] = Date.now();
+    if (out[i]) {
+      byChannel[ch.id] = out[i];
+      checked[ch.id] = Date.now();
+    } else {
+      // Failed, or skipped because YouTube pushed back: try the API for this one.
+      if (out[i] === null) checked[ch.id] = Date.now();
+      retry.push({ ch, why: errors[i] || 'skipped' });
+    }
   });
+  const apiDue = retry.filter(({ ch }) => Date.now() - (apiChecked[ch.id] || 0) > API_EVERY);
+  const api = await pool(
+    apiDue.map((r) => r.ch),
+    3,
+    apiUploads,
+  );
+  let failed = 0;
+  apiDue.forEach(({ ch, why }, i) => {
+    apiChecked[ch.id] = Date.now();
+    if (api.out[i]) byChannel[ch.id] = api.out[i];
+    else {
+      failed++;
+      const reason = /^HTTP|not a feed|fetch/i.test(why) ? why : 'error';
+      reasons[reason] = (reasons[reason] || 0) + 1;
+    }
+  });
+  // Channels whose API check is still cooling down keep what they had; count them only if
+  // they have nothing at all.
+  for (const { ch, why } of retry) {
+    if (apiDue.some((r) => r.ch === ch) || byChannel[ch.id]) continue;
+    failed++;
+    reasons[why] = (reasons[why] || 0) + 1;
+  }
   // Drop channels you've unsubscribed from, and uploads that have aged out.
   const ids = new Set(subs.map((c) => c.id));
   for (const id of Object.keys(byChannel)) {
     if (!ids.has(id)) delete byChannel[id];
     else byChannel[id] = byChannel[id].filter((v) => v.at > Date.now() - WINDOW);
   }
-  const entry = { at: Date.now(), mode, byChannel, checked, failed, channels: subs.length, pausedUntil: throttled ? Date.now() + BACKOFF : 0 };
+  const entry = { at: Date.now(), mode, byChannel, checked, apiChecked, failed, reasons, channels: subs.length, pausedUntil: throttled ? Date.now() + BACKOFF : 0 };
   await local.set(FEED_KEY, entry);
   return entry;
 }
@@ -130,7 +193,7 @@ function applyFeed(entry) {
   const videos = Object.values(entry.byChannel || {})
     .flat()
     .sort((a, b) => b.at - a.at);
-  state = { status: 'ready', videos, error: null, at: entry.at, failed: entry.failed, channels: entry.channels, paused: entry.pausedUntil > Date.now() };
+  state = { status: 'ready', videos, error: null, at: entry.at, failed: entry.failed, reasons: entry.reasons || {}, channels: entry.channels, paused: entry.pausedUntil > Date.now() };
 }
 
 async function load({ interactive = false, force = false } = {}) {
@@ -165,6 +228,12 @@ export async function refreshYouTube(S, force = false) {
   })().finally(() => (refreshing = null));
   return refreshing;
 }
+
+const whyText = () =>
+  Object.entries(state.reasons || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([why, n]) => `${why} ×${n}`)
+    .join(', ') || 'no reason given';
 
 const isNew = (v) => v.at > seen.at && !seen.opened.includes(v.id);
 
@@ -216,13 +285,15 @@ function render() {
         )
         .join('')}</ol>
       ${state.videos.length > SHOWN ? `<button class="linklike yt-more" type="button" data-yt="more">${expanded ? 'Show fewer' : `Show ${Math.min(24, state.videos.length) - SHOWN} more`}</button>` : ''}`
-    : '<p class="quiet">No new videos from your subscriptions this week.</p>';
+    : state.failed && state.failed >= state.channels
+      ? `<p class="notice warn">YouTube didn’t send videos for any of your ${state.channels} channels (${esc(whyText())}). Daybook keeps trying every few minutes.</p>`
+      : '<p class="quiet">No new videos from your subscriptions this week.</p>';
   if (state.error) body.insertAdjacentHTML('beforeend', `<p class="notice warn">Couldn’t refresh: ${esc(errorText(state.error))}.</p>`);
   foot.innerHTML = `${fresh.length ? `<button class="foot-link" type="button" data-yt="seen">${icon('mail-open')}Mark all as seen</button>` : ''}<a class="foot-link" href="https://www.youtube.com/feed/subscriptions">${icon('external')}Subscriptions</a>${
     state.paused
       ? '<span class="stamp">YouTube asked Daybook to slow down; checking again within the hour</span>'
       : state.failed
-        ? `<span class="stamp">${state.failed} channel${state.failed === 1 ? '' : 's'} didn’t answer</span>`
+        ? `<span class="stamp" title="${esc(whyText())}">${state.failed} of ${state.channels} channels didn’t answer</span>`
         : ''
   }`;
 }
