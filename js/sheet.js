@@ -99,6 +99,12 @@ function build() {
     <button class="btn small" type="button" data-action="add-feed">${icon('plus')}Add a feed</button>
   </section>
 
+  <section id="set-youtube">
+    <h3>YouTube</h3>
+    <p class="hint">New uploads from the channels you subscribe to, from the last week.</p>
+    ${check('youtube.hideShorts', 'Hide Shorts', d.youtube.hideShorts)}
+  </section>
+
   <section id="set-sections">
     <h3>Sections</h3>
     <div class="topics">
@@ -107,6 +113,7 @@ function build() {
       ${check('show.mail', 'Mail', d.show.mail)}
       ${check('show.news', 'Headlines', d.show.news)}
       ${check('show.notes', 'Notes', d.show.notes)}
+      ${check('show.youtube', 'YouTube', d.show.youtube)}
       ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}
     </div>
   </section>

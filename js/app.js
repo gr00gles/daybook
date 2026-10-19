@@ -5,6 +5,7 @@ import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp } from './calendar.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
+import { initYouTube, refreshYouTube } from './youtube.js';
 import { refreshNews, initNews } from './news.js';
 import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
@@ -245,6 +246,7 @@ function refreshAll(force = false) {
       renderNextUp();
     });
   if (S.show.news) refreshNews(S, force);
+  if (S.show.youtube) refreshYouTube(S, force);
 }
 
 document.addEventListener('click', (e) => {
@@ -262,6 +264,7 @@ $('#refresh-btn').addEventListener('click', (e) => {
 initSearch();
 initMail();
 if (S.show.calendar) initMonth(S);
+if (S.show.youtube) await initYouTube(S);
 initNews();
 tick(true);
 setInterval(tick, 1000);

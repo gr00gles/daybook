@@ -60,7 +60,8 @@ export const DEFAULTS = {
   calendars: [], // extra calendars added by iCal link
   outlook: { clientId: '', mail: true, calendar: true, color: 5 }, // clientId overrides config.js
   news: { topics: ['top', 'us', 'technology'], custom: [] },
-  show: { weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true },
+  youtube: { hideShorts: true },
+  show: { weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true, youtube: true },
 };
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);

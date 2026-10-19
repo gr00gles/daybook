@@ -6,6 +6,8 @@ const KEY = 'google:account';
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 // Asked for the first time someone marks Gmail read or deletes it.
 const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
+// Asked when someone turns on the YouTube card.
+const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
 
 export class NeedsGoogle extends Error {
   constructor(message = 'Google is not connected') {
@@ -94,16 +96,19 @@ export async function gapi(path) {
   return res.json();
 }
 
-async function gmailToken(interactive) {
-  const r = await chrome.identity.getAuthToken({ interactive, scopes: [GMAIL_SCOPE] });
+// A token for one extra permission, asked for the first time a feature needs it.
+async function scopedToken(scope, interactive, what) {
+  const r = await chrome.identity.getAuthToken({ interactive, scopes: [scope] });
   const t = typeof r === 'string' ? r : r?.token;
   if (!t) throw new Error('No token');
-  if (r?.grantedScopes && !r.grantedScopes.includes(GMAIL_SCOPE)) {
+  if (r?.grantedScopes && !r.grantedScopes.includes(scope)) {
     await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
-    throw new Error('Daybook needs permission to manage your Gmail. Try again and leave the Gmail box ticked.');
+    throw new Error(`Daybook needs permission to ${what}. Try again and leave that box ticked.`);
   }
   return t;
 }
+
+const gmailToken = (interactive) => scopedToken(GMAIL_SCOPE, interactive, 'manage your Gmail');
 
 // Gmail API calls for the Google account connected in Daybook. The first call opens Google's
 // consent window for the gmail.modify permission.
@@ -135,6 +140,35 @@ export async function gmailApi(path, { method = 'POST', body } = {}) {
     if (/accessNotConfigured|SERVICE_DISABLED/i.test(JSON.stringify(j)))
       throw new Error('The Gmail API is turned off for this copy of Daybook. The person who shared it needs to enable it in Google Cloud');
     throw new Error(j.error?.message || `Gmail returned ${res.status}`);
+  }
+  return j;
+}
+
+// YouTube Data API calls. Background refreshes never pop up a window: they report
+// NeedsGoogle and the card offers a button, whose click passes interactive: true.
+export async function youtubeApi(path, { interactive = false } = {}) {
+  const get = (tok) => fetch(`https://www.googleapis.com/youtube/v3${path}`, { headers: { Authorization: `Bearer ${tok}` } });
+  let t;
+  try {
+    t = await scopedToken(YOUTUBE_SCOPE, interactive, 'see your YouTube subscriptions');
+  } catch (err) {
+    if (interactive) throw new Error(explain(err));
+    throw new NeedsGoogle('YouTube isn’t connected yet');
+  }
+  let res = await get(t);
+  if (res.status === 401) {
+    await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
+    t = await scopedToken(YOUTUBE_SCOPE, false, 'see your YouTube subscriptions');
+    res = await get(t);
+  }
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const text = JSON.stringify(j);
+    if (/accessNotConfigured|SERVICE_DISABLED/i.test(text))
+      throw new Error('The YouTube API is turned off for this copy of Daybook. The person who shared it needs to enable “YouTube Data API v3” in Google Cloud');
+    if (/quotaExceeded|dailyLimitExceeded/i.test(text)) throw new Error('YouTube’s daily limit for this copy of Daybook is used up. It resets at midnight Pacific time');
+    if (/subscriptionForbidden/i.test(text)) throw new Error('This YouTube account keeps its subscriptions private');
+    throw new Error(j.error?.message || `YouTube returned ${res.status}`);
   }
   return j;
 }
