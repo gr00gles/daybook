@@ -147,7 +147,8 @@ export async function refreshWeather(S, force, onData) {
   }
   return cached({
     key: 'weather',
-    sig: hash([loc.lat, loc.lon, S.units]),
+    // 2: the stored forecast carries its coordinates (weather alerts and event weather need them).
+    sig: hash([2, loc.lat, loc.lon, S.units]),
     maxAge: 15 * 60e3,
     force,
     fetch: () => fetchWeather(loc, S.units),

@@ -131,7 +131,10 @@ export async function refreshMail(S, force) {
       shipping = list;
       render();
     });
-  } else shipping = [];
+  } else if (shipping.length || !S.show.packages) {
+    shipping = [];
+    local.remove('cache:pkg:gmail');
+  }
   accounts
     .filter((a) => !hidden.has(a.email))
     .forEach((acct, i) => {

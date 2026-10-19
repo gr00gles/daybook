@@ -9,8 +9,14 @@ const COMMON = `${LOGIN}/common/oauth2/v2.0`;
 const authorityFor = (hint) =>
   hint?.personal ? `${LOGIN}/consumers/oauth2/v2.0` : hint?.tid ? `${LOGIN}/${hint.tid}/oauth2/v2.0` : COMMON;
 const SCOPE = 'openid profile offline_access User.Read Mail.Read Calendars.Read';
-// Asked for the first time someone marks Outlook mail read or deletes it.
-const SCOPE_WRITE = 'openid profile offline_access User.Read Mail.ReadWrite Calendars.Read';
+// Extra permissions, each asked for the first time a feature needs it: Mail.ReadWrite to mark
+// mail read or delete it, Calendars.ReadWrite to add events. Each replaces its read-only twin.
+const SUPERSEDES = { 'Mail.ReadWrite': 'Mail.Read', 'Calendars.ReadWrite': 'Calendars.Read' };
+const hasScope = (scope, need) => (scope || SCOPE).split(' ').includes(need);
+function withScope(scope, need) {
+  const parts = (scope || SCOPE).split(' ').filter((p) => p !== SUPERSEDES[need]);
+  return parts.includes(need) ? parts.join(' ') : [...parts, need].join(' ');
+}
 const KEY = 'ms:auth';
 const CONSUMER_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
 
@@ -25,7 +31,7 @@ export class NeedsConnect extends Error {
 export const adminConsentUrl = (clientId) =>
   `https://login.microsoftonline.com/organizations/v2.0/adminconsent?${new URLSearchParams({
     client_id: clientId,
-    scope: 'https://graph.microsoft.com/User.Read https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Calendars.Read',
+    scope: ['User.Read', 'Mail.Read', 'Mail.ReadWrite', 'Calendars.Read', 'Calendars.ReadWrite'].map((p) => `https://graph.microsoft.com/${p}`).join(' '),
     redirect_uri: chrome.identity.getRedirectURL(),
   })}`;
 
@@ -193,20 +199,21 @@ export async function graph(clientId, path, headers = {}) {
   return res.json();
 }
 
-// Marking mail read and deleting it need Mail.ReadWrite. The first time, Microsoft shows a
-// consent window for that one extra permission; after that the stored sign-in carries it.
-async function writeToken(clientId) {
+// Changes need a write permission. The first time, Microsoft shows a consent window for that
+// one extra permission; after that the stored sign-in carries it.
+async function writeToken(clientId, need) {
   const auth = await local.get(KEY);
   if (!auth || auth.clientId !== clientId) throw new NeedsConnect();
-  if (auth.scope === SCOPE_WRITE) return getToken(clientId);
-  const next = await authorize(clientId, true, auth, SCOPE_WRITE);
-  const saved = { ...auth, ...next, username: next.username || auth.username, tid: next.tid || auth.tid, personal: next.personal ?? auth.personal, scope: SCOPE_WRITE };
+  if (hasScope(auth.scope, need)) return getToken(clientId);
+  const scope = withScope(auth.scope, need);
+  const next = await authorize(clientId, true, auth, scope);
+  const saved = { ...auth, ...next, username: next.username || auth.username, tid: next.tid || auth.tid, personal: next.personal ?? auth.personal, scope };
   await local.set(KEY, saved);
   return saved.access;
 }
 
-export async function graphWrite(clientId, path, { method = 'POST', body } = {}) {
-  const token = await writeToken(clientId);
+export async function graphWrite(clientId, path, { method = 'POST', body, need = 'Mail.ReadWrite' } = {}) {
+  const token = await writeToken(clientId, need);
   const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -216,7 +223,7 @@ export async function graphWrite(clientId, path, { method = 'POST', body } = {})
   if (res.status === 204) return {};
   const j = await res.json().catch(() => ({}));
   if (!res.ok) {
-    if (res.status === 403) throw new Error('Outlook didn’t allow the change. The person who shared Daybook needs to add the Mail.ReadWrite permission to the Microsoft app');
+    if (res.status === 403) throw new Error(`Outlook didn’t allow the change. The person who shared Daybook needs to add the ${need} permission to the Microsoft app`);
     throw new Error(j.error?.message || `Outlook returned ${res.status}`);
   }
   return j;

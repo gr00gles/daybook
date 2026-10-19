@@ -71,12 +71,13 @@ const localDate = (ymd) => {
 // The Google calendars on this account, with the names and colors Google Calendar shows.
 export async function listGoogleCalendars(force = false) {
   const stored = await local.get('cache:gcal-list');
-  if (stored && !force && Date.now() - stored.at < 60 * 60e3) return stored.data;
+  // v2 added whether each calendar takes new events.
+  if (stored?.v === 2 && !force && Date.now() - stored.at < 60 * 60e3) return stored.data;
   const me = await googleAccount();
   const items = [];
   let pageToken = '';
   do {
-    const q = new URLSearchParams({ minAccessRole: 'reader', maxResults: '250', fields: 'nextPageToken,items(id,summary,summaryOverride,backgroundColor,selected,primary)' });
+    const q = new URLSearchParams({ minAccessRole: 'reader', maxResults: '250', fields: 'nextPageToken,items(id,summary,summaryOverride,backgroundColor,selected,primary,accessRole)' });
     if (pageToken) q.set('pageToken', pageToken);
     const page = await gapi(`/calendar/v3/users/me/calendarList?${q}`);
     items.push(...(page.items || []));
@@ -89,9 +90,10 @@ export async function listGoogleCalendars(force = false) {
       color: c.backgroundColor || '#4285f4',
       primary: Boolean(c.primary),
       selected: Boolean(c.selected || c.primary),
+      writable: ['owner', 'writer', 'writerWithoutPrivateAccess'].includes(c.accessRole),
     }))
     .sort((a, b) => b.primary - a.primary || b.selected - a.selected || a.name.localeCompare(b.name));
-  await local.set('cache:gcal-list', { at: Date.now(), data });
+  await local.set('cache:gcal-list', { v: 2, at: Date.now(), data });
   return data;
 }
 
@@ -255,8 +257,20 @@ const dedupe = (list) => {
     });
 };
 
+// Events just added here, shown until the calendar's next refresh brings them in.
+let justAdded = [];
+
+export function addPendingEvent(e) {
+  justAdded = [...justAdded.filter((p) => p.id !== e.id), { ...e, until: Date.now() + 5 * 60e3 }];
+}
+
+export function removePendingEvent(id) {
+  justAdded = justAdded.filter((p) => p.id !== id);
+}
+
 export function allEvents() {
-  return dedupe([...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))));
+  justAdded = justAdded.filter((p) => p.until > Date.now());
+  return dedupe([...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))).concat(justAdded));
 }
 
 // ---- Months outside the regular window (loaded when the month view flips to them) ----
@@ -307,6 +321,31 @@ export function ensureMonth(year, month, onLoaded) {
   return false;
 }
 
+// Calendars a new event can go on: Google calendars you can edit (the ones shown here first)
+// and Outlook's main calendar, which is the one Daybook shows.
+export async function writableCalendars(S) {
+  const list = [];
+  let error = null;
+  if (googleConfigured() && (await googleAccount())) {
+    try {
+      const all = await listGoogleCalendars();
+      const shown = new Set(shownGoogleCalendars(S, all).map((c) => c.id));
+      for (const c of all.filter((c) => c.writable).sort((a, b) => shown.has(b.id) - shown.has(a.id)))
+        list.push({ kind: 'google', id: c.id, name: c.name, color: c.color, primary: c.primary, shown: shown.has(c.id) });
+    } catch (err) {
+      error = err;
+    }
+  }
+  const auth = msClientId(S) && S.outlook.calendar ? await local.get('ms:auth') : null;
+  if (auth) list.push({ kind: 'outlook', id: 'outlook', name: 'Outlook', detail: auth.account || '', color: S.outlook.color, shown: true });
+  return { list, error };
+}
+
+// After adding or removing an event: months outside the regular window load again.
+export function calendarsChanged() {
+  extraMonths.clear();
+}
+
 export function eventsBetween(from, to) {
   const extra = [...extraMonths.values()].flatMap((m) => m.events);
   return dedupe([...allEvents(), ...extra]).filter((e) => e.end > from && e.start < to);
@@ -316,10 +355,11 @@ export function nextUp() {
   const now = Date.now();
   const timed = allEvents().filter((e) => !e.allDay && e.end > now && e.start < now + 18 * 3600e3);
   const current = timed.filter((e) => e.start <= now).sort((a, b) => b.start - a.start)[0];
-  const next = timed.find((e) => e.start > now);
+  // Next is whatever needs you first: the next to start, or one you have to leave for earlier.
+  const due = (e) => Math.min(e.start, tripInfo(e)?.leave?.at || Infinity);
+  const next = timed.filter((e) => e.start > now).sort((a, b) => due(a) - due(b))[0];
   // Mid-meeting, the next event takes over 15 minutes before it starts, or before you need to leave.
-  const leaveAt = next && tripInfo(next)?.leave?.at;
-  if (next && (!current || Math.min(next.start, leaveAt || Infinity) - now < 15 * 60e3)) return { event: next, mode: 'next' };
+  if (next && (!current || due(next) - now < 15 * 60e3)) return { event: next, mode: 'next' };
   if (current) return { event: current, mode: 'now' };
   return null;
 }
@@ -383,7 +423,7 @@ function tripLine(e, state, h24) {
   }
   if (t.leave && !state) {
     const { text, level } = leaveText(t.leave, (ms) => fmtTime(ms, h24));
-    const how = t.leave.traffic ? 'with current traffic' : 'without traffic';
+    const how = !t.leave.traffic ? 'without traffic' : t.leave.live ? 'with current traffic' : 'with typical traffic for then';
     bits.push(`<span class="ev-leave${level ? ` ${level}` : ''}" title="${esc(`About ${t.leave.mins} min drive ${how}`)}">${icon('car')}${esc(text)}<span class="ev-drive"> · ${t.leave.mins} min</span></span>`);
   }
   return bits.length ? `<span class="ev-extra">${bits.join('')}</span>` : '';
@@ -480,10 +520,14 @@ export function renderAgenda(S) {
     );
   }
   const trips = tripSources();
-  const credit = [
-    trips.osrm && 'Drive times by <a href="https://routing.openstreetmap.de/">FOSSGIS OSRM</a>, map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    trips.tomtom && 'Traffic by <a href="https://www.tomtom.com/">TomTom</a>',
-  ].filter(Boolean);
+  const credit = trips.places
+    ? [
+        'Places © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        trips.osrm && 'drive times by <a href="https://routing.openstreetmap.de/">FOSSGIS OSRM</a>',
+        trips.tomtom && 'traffic by <a href="https://www.tomtom.com/">TomTom</a>',
+        trips.weather && !S.show.weather && 'weather by <a href="https://open-meteo.com/">Open-Meteo.com</a>',
+      ].filter(Boolean)
+    : [];
   body.innerHTML = parts.join('') + notices.join('') + (configured && credit.length ? `<p class="credit">${credit.join(' · ')}</p>` : '');
   const upcoming = body.querySelector('.upcoming');
   if (upcoming) upcoming.classList.toggle('scrolls', upcoming.scrollHeight > upcoming.clientHeight + 4);

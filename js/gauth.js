@@ -8,6 +8,8 @@ const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 // Asked when someone turns on the YouTube card.
 const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
+// Asked the first time someone adds an event to a Google calendar.
+const EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 
 export class NeedsGoogle extends Error {
   constructor(message = 'Google is not connected') {
@@ -71,7 +73,7 @@ export async function disconnectGoogle() {
     await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
   }
   // YouTube's terms require deleting its data once access is removed.
-  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'yt:subs', 'yt:feed']);
+  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'cache:pkg:gmail', 'event:lastCal', 'yt:subs', 'yt:feed']);
 }
 
 export async function gapi(path) {
@@ -109,24 +111,22 @@ async function scopedToken(scope, interactive, what) {
   return t;
 }
 
-const gmailToken = (interactive) => scopedToken(GMAIL_SCOPE, interactive, 'manage your Gmail');
-
-// Gmail API calls for the Google account connected in Daybook. The first call opens Google's
-// consent window for the gmail.modify permission; with quiet it never does and fails instead.
-export async function gmailApi(path, { method = 'POST', body, quiet = false } = {}) {
+// Calls a Google API with one extra permission. The first call opens Google's consent window
+// for it; with quiet it never does and fails instead.
+async function scopedApi({ scope, what, api }, url, { method = 'POST', body, quiet = false } = {}) {
   let t;
   try {
-    t = await gmailToken(false);
+    t = await scopedToken(scope, false, what);
   } catch {
-    if (quiet) throw new NeedsGoogle('Gmail permission not granted');
+    if (quiet) throw new NeedsGoogle(`${api} permission not granted`);
     try {
-      t = await gmailToken(true);
+      t = await scopedToken(scope, true, what);
     } catch (err) {
       throw new Error(explain(err));
     }
   }
   const call = (tok) =>
-    fetch(`https://gmail.googleapis.com/gmail/v1/users/me${path}`, {
+    fetch(url, {
       method,
       headers: { Authorization: `Bearer ${tok}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
@@ -134,17 +134,27 @@ export async function gmailApi(path, { method = 'POST', body, quiet = false } = 
   let res = await call(t);
   if (res.status === 401) {
     await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
-    t = await gmailToken(false);
+    t = await scopedToken(scope, false, what);
     res = await call(t);
   }
   const j = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (/accessNotConfigured|SERVICE_DISABLED/i.test(JSON.stringify(j)))
-      throw new Error('The Gmail API is turned off for this copy of Daybook. The person who shared it needs to enable it in Google Cloud');
-    throw new Error(j.error?.message || `Gmail returned ${res.status}`);
+      throw new Error(`The ${api} API is turned off for this copy of Daybook. The person who shared it needs to enable it in Google Cloud`);
+    throw Object.assign(new Error(j.error?.message || `${api} returned ${res.status}`), { status: res.status });
   }
   return j;
 }
+
+const GMAIL = { scope: GMAIL_SCOPE, what: 'manage your Gmail', api: 'Gmail' };
+const EVENTS = { scope: EVENTS_SCOPE, what: 'add events to your calendar', api: 'Google Calendar' };
+
+// Gmail API calls for the Google account connected in Daybook (mark as read, delete, and the
+// deliveries search once that permission exists).
+export const gmailApi = (path, opts) => scopedApi(GMAIL, `https://gmail.googleapis.com/gmail/v1/users/me${path}`, opts);
+
+// Adding and removing calendar events.
+export const calendarWrite = (path, opts) => scopedApi(EVENTS, `https://www.googleapis.com/calendar/v3${path}`, opts);
 
 // YouTube Data API calls. Background refreshes never pop up a window: they report
 // NeedsGoogle and the card offers a button, whose click passes interactive: true.

@@ -161,13 +161,18 @@ function usHolidays(y) {
   ].map(([at, name]) => ({ at, name }));
 }
 
-// Days the clocks change in this computer's time zone.
+// Days the clocks change in this computer's time zone. Offsets are compared at noon, since
+// some places change at midnight and that midnight doesn't exist.
 function clockChanges(y) {
   const out = [];
-  let prev = new Date(y, 0, 1).getTimezoneOffset();
-  for (let t = new Date(y, 0, 2).getTime(); new Date(t).getFullYear() === y; t = addDays(t, 1)) {
-    const off = new Date(t).getTimezoneOffset();
-    if (off !== prev) out.push({ at: addDays(t, -1), name: off > prev ? 'Clocks go back an hour' : 'Clocks go forward an hour', clock: true });
+  let prev = new Date(y - 1, 11, 31, 12).getTimezoneOffset();
+  for (let d = new Date(y, 0, 1, 12); d.getFullYear() === y; d.setDate(d.getDate() + 1)) {
+    const off = d.getTimezoneOffset();
+    if (off !== prev) {
+      const mins = Math.abs(off - prev);
+      const amount = mins === 60 ? 'an hour' : mins === 30 ? 'half an hour' : `${mins} minutes`;
+      out.push({ at: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), name: `Clocks go ${off > prev ? 'back' : 'forward'} ${amount}`, clock: true });
+    }
     prev = off;
   }
   return out;
@@ -187,7 +192,9 @@ async function publicHolidays(country, y) {
   if (stored && Date.now() - stored.at < 30 * 86400e3) return stored.list;
   try {
     const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${y}/${country}`);
-    // 204/404: Nager.Date doesn't cover this country.
+    // 204/404 (or 400 for an odd code): Nager.Date doesn't cover this country. Anything else
+    // is a hiccup, and the stored list (if any) stands.
+    if (!res.ok && ![400, 404].includes(res.status)) throw new Error(`HTTP ${res.status}`);
     const raw = res.ok && res.status !== 204 ? await res.json() : [];
     const list = raw
       .filter((h) => h.global !== false && /^\d{4}-\d{2}-\d{2}$/.test(h.date))
@@ -203,24 +210,28 @@ async function publicHolidays(country, y) {
 }
 
 const years = new Map(); // year -> list
-const loading = new Set();
+const loading = new Map(); // year -> promise
 
-async function loadYear(y) {
-  const country = region();
-  const list = [...(country === 'US' ? usHolidays(y) : await publicHolidays(country, y)), ...clockChanges(y)];
-  years.set(y, list.sort((a, b) => a.at - b.at));
+function loadYear(y) {
+  if (!loading.has(y))
+    loading.set(
+      y,
+      (async () => {
+        const country = region();
+        const list = [...(country === 'US' ? usHolidays(y) : await publicHolidays(country, y)), ...clockChanges(y)];
+        years.set(y, list.sort((a, b) => a.at - b.at));
+      })(),
+    );
+  return loading.get(y);
 }
 
-// Loads this year and next (and any years the month view flips to), then calls back.
+// Loads this year and next (and any years the month view flips to), then calls back once
+// they are all in, unless they already were.
 export function loadHolidays(onReady, ...extraYears) {
   const y = new Date().getFullYear();
-  const want = [y, y + 1, ...extraYears].filter((v, i, a) => v && a.indexOf(v) === i && !years.has(v) && !loading.has(v));
-  if (!want.length) return;
-  want.forEach((v) => loading.add(v));
-  Promise.all(want.map(loadYear)).then(() => {
-    want.forEach((v) => loading.delete(v));
-    onReady?.();
-  });
+  const want = [y, y + 1, ...extraYears].filter((v, i, a) => v && a.indexOf(v) === i);
+  if (want.every((v) => years.has(v))) return;
+  Promise.all(want.map(loadYear)).then(() => onReady?.());
 }
 
 // Holidays on one day, from the years already loaded.
@@ -248,10 +259,20 @@ export function renderHoliday() {
 }
 
 // Calendar names a holiday too ("Halloween", "Thanksgiving Day"): don't say it twice.
-const norm = (s) => s.toLowerCase().replace(/[^a-z]/g, '').replace(/day$/, '');
+const norm = (s) =>
+  s
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/\p{M}/gu, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .replace(/day$/, '');
+const CLOCK_EVENT = /daylight sav|summer ?time|winter ?time|standard time|clocks? (?:go|change|spring|fall)|\bdst\b/i;
 export const coveredBy = (holiday, titles) => titles.some((t) => {
+  if (holiday.clock) return CLOCK_EVENT.test(t);
   const a = norm(holiday.name);
   const b = norm(t);
   const [short, long] = a.length < b.length ? [a, b] : [b, a];
-  return short.length >= 5 && short.length >= long.length * 0.6 && long.includes(short);
+  // Five letters, or two characters in scripts that write a word in one or two.
+  const enough = /^[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}\d]+$/u.test(short) ? 5 : 2;
+  return [...short].length >= enough && short.length >= long.length * 0.6 && long.includes(short);
 });

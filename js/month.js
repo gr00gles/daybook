@@ -4,6 +4,7 @@ import { $, esc, colorVar, startOfDay, addDays } from './util.js';
 import { monthGrid, eventsBetween, ensureMonth, FIRST_DAY, timedRow, allDayChips } from './calendar.js';
 import { icon } from './icons.js';
 import { holidaysOn, loadHolidays, coveredBy } from './sky.js';
+import { openEventEditor } from './events.js';
 
 const SHOWN_PER_DAY = 3;
 let settingsRef;
@@ -40,7 +41,7 @@ function cell(d0, events, now) {
   const hols = holidays(d0, list);
   const shown = list.slice(0, SHOWN_PER_DAY);
   const label = `${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${hols.map((h) => `, ${h.name}`).join('')}: ${list.length ? `${list.length} event${list.length === 1 ? '' : 's'}` : 'nothing scheduled'}`;
-  const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected === d0 && 'sel', hols.length && 'hol'].filter(Boolean).join(' ');
+  const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected === d0 && 'sel', hols.some((h) => !h.clock) && 'hol'].filter(Boolean).join(' ');
   return `<button type="button" class="${cls}" data-day="${d0}" aria-label="${esc(label)}"${selected === d0 ? ' aria-pressed="true"' : ''}${hols.length ? ` title="${esc(hols.map((h) => h.name).join(', '))}"` : ''}>
     <span class="mnum">${d.getDate()}</span>
     ${hols.map((h) => `<span class="mhol${h.clock ? ' clock' : ''}">${esc(h.name)}</span>`).join('')}
@@ -58,7 +59,7 @@ function detail(events, now) {
   const title = new Date(selected).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const hols = holidays(selected, list);
   return `<section class="mdetail" aria-live="polite">
-    <header class="mdetail-head"><h3>${esc(title)}</h3><button class="icon-btn small" type="button" data-month="close" aria-label="Close day">${icon('close')}</button></header>
+    <header class="mdetail-head"><h3>${esc(title)}</h3><button class="btn small" type="button" data-month="add">${icon('plus')}Add event</button><button class="icon-btn small" type="button" data-month="close" aria-label="Close day">${icon('close')}</button></header>
     ${hols.length ? `<p class="mdetail-hol">${hols.map((h) => esc(h.name)).join(' · ')}</p>` : ''}
     ${allDayChips(allDay)}
     ${timed.length ? `<ol class="ev-list">${timed.map((e) => timedRow(e, now, settingsRef.clock24)).join('')}</ol>` : ''}
@@ -110,9 +111,17 @@ export function initMonth(S) {
       selected = null;
     } else if (b.dataset.month === 'close') {
       selected = null;
+    } else if (b.dataset.month === 'add') {
+      openEventEditor({ day: selected });
+      return;
     }
     renderMonth();
     if (b.dataset.day) $(`[data-day="${b.dataset.day}"]`)?.focus();
+  });
+  // Double-click a day to add an event on it.
+  $('#card-month').addEventListener('dblclick', (e) => {
+    const b = e.target.closest('[data-day]');
+    if (b) openEventEditor({ day: Number(b.dataset.day) });
   });
   renderMonth();
 }

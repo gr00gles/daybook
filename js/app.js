@@ -7,6 +7,7 @@ import { initAlerts, refreshAlerts } from './alerts.js';
 import { renderMoon, loadHolidays, renderHoliday } from './sky.js';
 import { planTrips, tripInfo, leaveText } from './trip.js';
 import { refreshStocks } from './stocks.js';
+import { initEvents } from './events.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { initYouTube, refreshYouTube } from './youtube.js';
@@ -295,7 +296,18 @@ $('#refresh-btn').addEventListener('click', (e) => {
 initSearch();
 initMail();
 initAlerts();
-if (S.show.calendar) initMonth(S);
+if (S.show.calendar) {
+  initMonth(S);
+  initEvents(S, {
+    onChange: () => {
+      renderCalendars();
+      refreshCalendars(S, true, () => {
+        renderCalendars();
+        scheduleTrips();
+      });
+    },
+  });
+}
 if (S.show.sky) loadHolidays(() => {
   renderHoliday();
   if (S.show.calendar) renderMonth();

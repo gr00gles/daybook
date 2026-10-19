@@ -19,12 +19,21 @@ export const tripInfo = (e) => info.get(eventKey(e));
 
 // Video calls, phone calls and rooms aren't places you drive to.
 const VIRTUAL =
-  /^(https?:|www\.)|zoom|teams|google meet|meet\.google|webex|skype|whereby|gotomeeting|bluejeans|facetime|discord|slack|hangout|\b(online|virtual|remote|phone|call|dial[- ]?in|tbd|tba|n\/a|none|home)\b/i;
-const ROOM = /^(room|rm\.?|conf\b|conference|meeting room|board ?room|office|desk|floor|building|bldg)\b/i;
+  /^(https?:|www\.)|\b(zoom|(microsoft )?teams( meeting)?|google meet|meet\.google\.com|webex|skype|whereby|gotomeeting|bluejeans|facetime|discord|slack( huddle)?|hangouts?)\b/i;
+const NOT_A_PLACE = /^(online|virtual|remote|phone|call|phone call|conference call|video call|dial[- ]?in|tbd|tba|n\/a|none|home|my place|my house|office|work)$/i;
+const ROOM = /^(room|rm\.?|conf(erence)? room|meeting room|board ?room|suite|ste\.?|floor|fl\.?|desk|building|bldg\.?)\b/i;
 
+// The drivable part of a location: "Conference Room B, 100 Main St" → "100 Main St".
 export function placeOf(location) {
-  const parts = String(location || '').split(/;|\n/).map((s) => s.trim());
-  return parts.find((p) => p.length >= 4 && !VIRTUAL.test(p) && !ROOM.test(p)) || '';
+  for (const part of String(location || '').split(/;|\n/)) {
+    const p = part.trim();
+    if (!p || VIRTUAL.test(p) || NOT_A_PLACE.test(p)) continue;
+    const rest = p.split(',').map((x) => x.trim()).filter(Boolean);
+    while (rest.length && ROOM.test(rest[0])) rest.shift();
+    const place = rest.join(', ');
+    if (place.length >= 4 && !NOT_A_PLACE.test(place)) return place;
+  }
+  return '';
 }
 
 function km(a, b) {
@@ -47,38 +56,51 @@ async function store(key) {
   };
 }
 
-// Where you'd leave from: Chrome's location fix if there is a recent one, else the weather's place.
-async function origin() {
+// Where you'd leave from: a recent location fix from Chrome (the weather card's, or our own
+// when the weather is turned off), else the weather's place or the city picked in Settings.
+async function origin(S) {
   const geo = await local.get('geo');
-  if (geo?.lat != null && Date.now() - geo.at < 24 * 3600e3) return { lat: +geo.lat, lon: +geo.lon };
+  if (geo?.lat != null && Date.now() - geo.at < 3 * 3600e3) return { lat: +geo.lat, lon: +geo.lon };
+  if (S.location.mode !== 'manual') {
+    const fix = await new Promise((resolve) =>
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3) }),
+        () => resolve(null),
+        { timeout: 8000, maximumAge: 30 * 60e3 },
+      ),
+    );
+    if (fix) return fix;
+  }
   const w = lastWeather();
-  return w && Number.isFinite(w.lat) ? { lat: w.lat, lon: w.lon } : null;
+  if (w && Number.isFinite(w.lat)) return { lat: w.lat, lon: w.lon };
+  if (S.location.lat != null) return { lat: +S.location.lat, lon: +S.location.lon };
+  return geo?.lat != null ? { lat: +geo.lat, lon: +geo.lon } : null;
 }
 
 // Areas, not addresses: fine for weather, useless for a drive time.
 const AREA = new Set(['city', 'county', 'state', 'country', 'district', 'locality']);
 
+// Where a place is, looked up near where you are. Without a location, "Joe's Coffee" could be
+// anywhere, so nothing is looked up. The answer is remembered per area you're in.
 async function geocode(geo, place, from) {
-  const hit = geo.get(place);
-  if (hit && Date.now() - hit.at < (hit.miss ? 7 : 60) * 86400e3) return hit.miss ? null : hit;
-  const q = new URLSearchParams({ q: place, limit: '5', lang: 'en' });
-  if (from) {
-    q.set('lat', from.lat);
-    q.set('lon', from.lon);
-    q.set('location_bias_scale', '0.8');
-  }
+  if (!from) return null;
+  const k = `${place}|${from.lat.toFixed(1)},${from.lon.toFixed(1)}`;
+  const hit = geo.get(k);
+  if (hit && Date.now() - hit.at < (hit.miss ? 7 : 60) * 86400e3) return hit.miss || km(from, hit) > MAX_KM ? null : hit;
+  // A low scale lets distance from you count for more than how well known a place is.
+  const q = new URLSearchParams({ q: place, limit: '5', lang: 'en', lat: from.lat, lon: from.lon, location_bias_scale: '0.1' });
   const res = await getJSON(`https://photon.komoot.io/api/?${q}`);
+  // Photon's own order, best match first; the first one near enough to be the place.
   const found = (res.features || [])
     .map((f) => ({ lon: f.geometry?.coordinates?.[0], lat: f.geometry?.coordinates?.[1], type: f.properties?.type || '' }))
     .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon))
-    .map((p) => ({ ...p, km: from ? km(from, p) : 0 }))
-    .sort((a, b) => a.km - b.km)[0];
-  if (!found || found.km > MAX_KM) {
-    geo.set(place, { miss: true });
+    .find((p) => km(from, p) <= MAX_KM);
+  if (!found) {
+    geo.set(k, { miss: true });
     return null;
   }
   const entry = { lat: +found.lat.toFixed(5), lon: +found.lon.toFixed(5), area: AREA.has(found.type) };
-  geo.set(place, entry);
+  geo.set(k, entry);
   return entry;
 }
 
@@ -90,10 +112,10 @@ async function tomtom(key, from, to, start) {
   if (start - Date.now() > 3 * 3600e3) q.set('arriveAt', new Date(start).toISOString().replace(/\.\d{3}Z$/, 'Z'));
   else q.set('departAt', 'now');
   const res = await fetch(`https://api.tomtom.com/routing/1/calculateRoute/${ll(from, 5)}:${ll(to, 5)}/json?${q}`);
-  if (!res.ok) throw new Error(`TomTom ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`TomTom ${res.status}`), { status: res.status });
   const s = (await res.json()).routes?.[0]?.summary;
   if (!s) throw new Error('TomTom found no route');
-  return { secs: s.travelTimeInSeconds, meters: s.lengthInMeters, traffic: true };
+  return { secs: s.travelTimeInSeconds, meters: s.lengthInMeters, traffic: true, live: !q.has('arriveAt') };
 }
 
 async function osrm(from, to) {
@@ -105,7 +127,7 @@ async function osrm(from, to) {
   return { secs: r.duration, meters: r.distance, traffic: false };
 }
 
-let tomtomDown = 0; // after a TomTom failure (bad key, limit), skip it for a while
+let tomtomDown = 0; // after TomTom refuses the key or the day's limit is used up, skip it for a while
 
 async function route(routes, S, from, to, start) {
   const key = S.travel.tomtomKey.trim();
@@ -113,29 +135,40 @@ async function route(routes, S, from, to, start) {
   if (key && Date.now() - tomtomDown > 30 * 60e3) {
     const k = `tt|${ll(from)}|${ll(to)}|${soon ? 'now' : Math.round(start / 3600e3)}`;
     const hit = routes.get(k);
-    if (hit && Date.now() - hit.at < (soon ? 10 : 60) * 60e3) return hit;
-    try {
-      const r = await tomtom(key, from, to, start);
-      routes.set(k, r);
-      return r;
-    } catch (err) {
-      tomtomDown = Date.now();
-      console.warn('[daybook] TomTom:', err);
+    if (hit && !hit.fail && Date.now() - hit.at < (soon ? 10 : 60) * 60e3) return hit;
+    if (!hit?.fail || Date.now() - hit.at > 3600e3) {
+      try {
+        const r = await tomtom(key, from, to, start);
+        routes.set(k, r);
+        return r;
+      } catch (err) {
+        if ([401, 403, 429].includes(err.status)) tomtomDown = Date.now();
+        // One place TomTom can't route to (an island, say): try OSRM for it, and not TomTom again for an hour.
+        else routes.set(k, { fail: true });
+        console.warn('[daybook] TomTom:', err);
+      }
     }
   }
   // Without traffic the drive time only changes when the roads do.
   const k = `osrm|${ll(from)}|${ll(to)}`;
   const hit = routes.get(k);
-  if (hit && Date.now() - hit.at < 24 * 3600e3) return hit;
-  const r = await osrm(from, to);
-  routes.set(k, r);
-  return r;
+  // A recent failure: no drive time for this place for now (and no new warning).
+  if (hit && Date.now() - hit.at < (hit.fail ? 1 : 24) * 3600e3) return hit.fail ? null : hit;
+  try {
+    const r = await osrm(from, to);
+    routes.set(k, r);
+    return r;
+  } catch (err) {
+    routes.set(k, { fail: true });
+    throw err;
+  }
 }
 
-// The hourly forecast for a place: the weather card's own when it's nearby, else its own.
-async function forecast(wx, S, place, home) {
+// The hourly forecast for a place: the weather card's own when the place is near where that
+// forecast is for, else its own.
+async function forecast(wx, S, place) {
   const w = lastWeather();
-  if (w && home && km(home, place) < 8) return w.hourly;
+  if (w && Number.isFinite(w.lat) && km({ lat: w.lat, lon: w.lon }, place) < 8) return w.hourly;
   const k = `${ll(place, 2)}|${S.units}`;
   const hit = wx.get(k);
   if (hit && Date.now() - hit.at < 3600e3) return hit.hourly;
@@ -182,7 +215,7 @@ export async function planTrips(S, events, onUpdate) {
     const list = events
       .filter((e) => !e.allDay && e.end > now && e.start < now + WEATHER_DAYS * 86400e3 && placeOf(e.location))
       .slice(0, 30);
-    const from = await origin();
+    const from = await origin(S);
     const [geo, routes, wx] = await Promise.all([store(GEO_KEY), store(ROUTE_KEY), store(WX_KEY)]);
     const next = new Map();
     for (const e of list) {
@@ -197,7 +230,7 @@ export async function planTrips(S, events, onUpdate) {
       if (!to) continue;
       const out = {};
       try {
-        const hour = hourAt(await forecast(wx, S, to, from), e.start);
+        const hour = hourAt(await forecast(wx, S, to), e.start);
         if (hour) out.wx = hour;
       } catch (err) {
         console.warn('[daybook] event weather:', err);
@@ -206,8 +239,8 @@ export async function planTrips(S, events, onUpdate) {
         try {
           const r = await route(routes, S, from, to, e.start);
           // A walk around the block doesn't need a leave-by time.
-          if (r.meters > 1200) {
-            out.leave = { at: e.start - r.secs * 1000 - S.travel.buffer * 60e3, mins: Math.max(1, Math.round(r.secs / 60)), traffic: r.traffic };
+          if (r && r.meters > 1200) {
+            out.leave = { at: e.start - r.secs * 1000 - S.travel.buffer * 60e3, mins: Math.max(1, Math.round(r.secs / 60)), traffic: r.traffic, live: Boolean(r.live) };
           }
         } catch (err) {
           console.warn('[daybook] drive time:', err);
@@ -241,8 +274,13 @@ export function leaveText(leave, fmt) {
   return { text: `Leave by ${fmt(leave.at)}`, level: '' };
 }
 
-// Whether any leave-by on screen came from each source, for the credit line.
+// What the travel info on screen came from, for the credit line.
 export const tripSources = () => {
-  const all = [...info.values()].filter((v) => v.leave);
-  return { osrm: all.some((v) => !v.leave.traffic), tomtom: all.some((v) => v.leave.traffic) };
+  const all = [...info.values()];
+  return {
+    places: all.length > 0,
+    osrm: all.some((v) => v.leave && !v.leave.traffic),
+    tomtom: all.some((v) => v.leave?.traffic),
+    weather: all.some((v) => v.wx),
+  };
 };
