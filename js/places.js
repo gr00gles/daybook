@@ -191,7 +191,7 @@ function render(state) {
   const item = items[active];
   const actions = panel.querySelector('.pm-actions');
   actions.innerHTML = item
-    ? `<a class="btn small primary" href="${esc(gmapsDirections(item.label))}">Directions</a><a class="btn small" href="${esc(gmapsSearch(item.label))}">${icon('external')}Open in Google Maps</a>`
+    ? `<a class="btn small primary" href="${esc(gmapsDirections(item.label))}">Directions</a>`
     : '';
 }
 
