@@ -153,6 +153,11 @@ export async function disconnect() {
   await local.remove([KEY, 'cache:outlook-mail', 'cache:cal:outlook']);
 }
 
+// Whether the stored sign-in already carries a permission (so using it opens no window).
+export async function msHas(need) {
+  return hasScope((await local.get(KEY))?.scope, need);
+}
+
 export async function msAccount() {
   return (await local.get(KEY))?.account || null;
 }

@@ -7,6 +7,7 @@ import { holidaysOn, loadHolidays, coveredBy } from './sky.js';
 import { openEventEditor } from './events.js';
 
 const SHOWN_PER_DAY = 3;
+const MAX_LANES = 3; // rows of multi-day bars per week
 let settingsRef;
 let view;
 let selected = null;
@@ -24,6 +25,36 @@ function dayEvents(events, d0) {
   return events.filter((e) => (e.allDay ? e.start < d1 && e.end > d0 : e.start >= d0 && e.start < d1));
 }
 
+// Events that cover more than one day (all-day ones, or timed ones a day or longer) are drawn
+// as bars across the days; the rest sit inside their day.
+const lastDay = (e) => startOfDay(e.end - 1);
+const spansDays = (e) => (e.allDay ? lastDay(e) > startOfDay(e.start) : e.end - e.start >= 86400e3 && lastDay(e) > startOfDay(e.start));
+
+// Lays a week's multi-day events out in rows: each gets the first row free on all its days.
+function weekBars(events, weekStart) {
+  const weekEnd = addDays(weekStart, 7);
+  const col = (t) => Math.round((startOfDay(t) - weekStart) / 86400e3);
+  const rows = [];
+  const bars = [];
+  const hidden = new Array(7).fill(0);
+  const list = events
+    .filter((e) => spansDays(e) && e.start < weekEnd && lastDay(e) >= weekStart)
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  for (const e of list) {
+    const c0 = Math.max(0, col(e.start));
+    const c1 = Math.min(6, col(lastDay(e)));
+    let lane = rows.findIndex((used) => used.slice(c0, c1 + 1).every((x) => !x));
+    if (lane < 0 && rows.length < MAX_LANES) lane = rows.push(new Array(7).fill(false)) - 1;
+    if (lane < 0) {
+      for (let c = c0; c <= c1; c++) hidden[c]++;
+      continue;
+    }
+    for (let c = c0; c <= c1; c++) rows[lane][c] = true;
+    bars.push({ e, c0, span: c1 - c0 + 1, lane, before: startOfDay(e.start) < weekStart, after: lastDay(e) >= weekEnd });
+  }
+  return { bars, lanes: rows.length, hidden, rows };
+}
+
 function weekdayLabels() {
   // 1 January 2023 was a Sunday.
   return Array.from({ length: 7 }, (_, i) => {
@@ -32,23 +63,33 @@ function weekdayLabels() {
   }).join('');
 }
 
-function cell(d0, events, now) {
+function cell(d0, events, now, week, c) {
   const d = new Date(d0);
   const outside = d.getMonth() !== view.m;
   const today = sameDay(d0, now);
   const past = d0 < startOfDay(now);
   const list = dayEvents(events, d0);
   const hols = holidays(d0, list);
-  const shown = list.slice(0, SHOWN_PER_DAY);
+  // Bars over this day take some of its room; the rest go to its own events.
+  const singles = list.filter((e) => !spansDays(e));
+  const room = Math.max(1, SHOWN_PER_DAY - week.lanes);
+  const shown = singles.slice(0, room);
+  const more = singles.length - shown.length + week.hidden[c];
   const label = `${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${hols.map((h) => `, ${h.name}`).join('')}: ${list.length ? `${list.length} event${list.length === 1 ? '' : 's'}` : 'nothing scheduled'}`;
   const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected === d0 && 'sel', hols.some((h) => !h.clock) && 'hol'].filter(Boolean).join(' ');
   return `<button type="button" class="${cls}" data-day="${d0}" aria-label="${esc(label)}"${selected === d0 ? ' aria-pressed="true"' : ''}${hols.length ? ` title="${esc(hols.map((h) => h.name).join(', '))}"` : ''}>
     <span class="mnum">${d.getDate()}</span>
+    ${week.lanes ? '<span class="mlanes" aria-hidden="true"></span>' : ''}
     ${hols.map((h) => `<span class="mhol${h.clock ? ' clock' : ''}">${esc(h.name)}</span>`).join('')}
     <span class="mevs">${shown
       .map((e) => `<span class="mev${e.allDay ? ' all' : ''}" style="--c: ${colorVar(e.color)}">${esc(e.title)}</span>`)
-      .join('')}${list.length > shown.length ? `<span class="mmore">+${list.length - shown.length}</span>` : ''}</span>
+      .join('')}${more > 0 ? `<span class="mmore">+${more}</span>` : ''}</span>
   </button>`;
+}
+
+function bar({ e, c0, span, lane, before, after }) {
+  const cls = ['mbar', !e.allDay && 'timed', before && 'cont-l', after && 'cont-r'].filter(Boolean).join(' ');
+  return `<span class="${cls}" style="--c: ${colorVar(e.color)}; --col: ${c0}; --span: ${span}; --lane: ${lane}" aria-hidden="true">${esc(e.title)}</span>`;
 }
 
 function detail(events, now) {
@@ -82,9 +123,15 @@ export function renderMonth() {
   $('#month-today').hidden = isThisMonth;
   $('#month-status').textContent = ready ? '' : 'Loading…';
 
-  const cells = [];
-  for (let i = 0; i < weeks * 7; i++) cells.push(cell(addDays(start, i), events, now));
-  body.innerHTML = `<div class="mgrid" role="group" aria-label="${esc($('#month-title').textContent)}">${weekdayLabels()}${cells.join('')}</div>${detail(events, now)}`;
+  const rows = [];
+  for (let w = 0; w < weeks; w++) {
+    const ws = addDays(start, w * 7);
+    const week = weekBars(events, ws);
+    const cells = [];
+    for (let c = 0; c < 7; c++) cells.push(cell(addDays(ws, c), events, now, week, c));
+    rows.push(`<div class="mweek" style="--lanes: ${week.lanes}">${cells.join('')}${week.bars.map(bar).join('')}</div>`);
+  }
+  body.innerHTML = `<div class="mgrid" role="group" aria-label="${esc($('#month-title').textContent)}"><div class="mweek mhead">${weekdayLabels()}</div>${rows.join('')}</div>${detail(events, now)}`;
 }
 
 export function initMonth(S) {
@@ -98,6 +145,13 @@ export function initMonth(S) {
     if (!b) return;
     if (b.dataset.day) {
       const d0 = Number(b.dataset.day);
+      // The second click of a double-click: keep the day open and add an event on it.
+      if (e.detail === 2) {
+        selected = d0;
+        renderMonth();
+        openEventEditor({ day: d0 });
+        return;
+      }
       selected = selected === d0 ? null : d0;
       // A day from the neighboring month flips the view to that month.
       const d = new Date(d0);
@@ -117,11 +171,6 @@ export function initMonth(S) {
     }
     renderMonth();
     if (b.dataset.day) $(`[data-day="${b.dataset.day}"]`)?.focus();
-  });
-  // Double-click a day to add an event on it.
-  $('#card-month').addEventListener('dblclick', (e) => {
-    const b = e.target.closest('[data-day]');
-    if (b) openEventEditor({ day: Number(b.dataset.day) });
   });
   renderMonth();
 }

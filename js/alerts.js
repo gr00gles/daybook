@@ -47,11 +47,11 @@ async function fetchAlerts(lat, lon) {
       // A storm warning drawn as a polygon lists every county it touches; the point query
       // already tells whether the polygon covers you. From the zone query, keep only alerts
       // issued for whole zones, like Red Flag Warnings.
+      const p = f.properties || {};
+      // An update names the alerts it replaces (noted even for alerts skipped below).
+      for (const ref of p.references || []) if (ref.identifier) replaced.add(ref.identifier);
       // (If the point query failed, the zone query's polygons are the best there is.)
       if (k > 0 && f.geometry && results[0].status === 'fulfilled') continue;
-      const p = f.properties || {};
-      // An update names the alerts it replaces.
-      for (const ref of p.references || []) if (ref.identifier) replaced.add(ref.identifier);
       if ((p.status && p.status !== 'Actual') || p.messageType === 'Cancel') continue;
       // `ends` is when the hazard is over; `expires` only when this message lapses, and
       // "until further notice" alerts have no end at all.
@@ -66,6 +66,7 @@ async function fetchAlerts(lat, lon) {
         headline: p.headline || '',
         severity: p.severity || 'Unknown',
         ends,
+        expires,
         sent,
         description: unwrap(p.description || ''),
         instruction: unwrap(p.instruction || ''),
@@ -145,7 +146,7 @@ export function refreshAlerts(S, weather, force = false) {
       // An answer for a place we've since moved away from.
       if (sig !== wanted) return;
       // Keep showing the last alerts we had if a refresh fails.
-      if (data) current = { sig, list: data.list.filter((a) => !a.ends || a.ends > Date.now()), lat: lat.toFixed(4), lon: lon.toFixed(4) };
+      if (data) current = { sig, list: data.list.filter((a) => (a.ends || a.expires || Infinity) > Date.now()), lat: lat.toFixed(4), lon: lon.toFixed(4) };
       render();
     },
   });

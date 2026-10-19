@@ -72,8 +72,10 @@ export async function disconnectGoogle() {
     await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(t)}`, { method: 'POST' }).catch(() => {});
     await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
   }
+  // Tokens Chrome kept for the extra permissions (Gmail, YouTube, adding events) were revoked too.
+  await chrome.identity.clearAllCachedAuthTokens?.().catch(() => {});
   // YouTube's terms require deleting its data once access is removed.
-  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'cache:pkg:gmail', 'event:lastCal', 'yt:subs', 'yt:feed']);
+  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'cache:pkg:gmail', 'event:lastCal', 'yt:subs', 'yt:feed', 'yt:watched']);
 }
 
 export async function gapi(path) {
@@ -114,17 +116,19 @@ async function scopedToken(scope, interactive, what) {
 // Calls a Google API with one extra permission. The first call opens Google's consent window
 // for it; with quiet it never does and fails instead.
 async function scopedApi({ scope, what, api }, url, { method = 'POST', body, quiet = false } = {}) {
-  let t;
-  try {
-    t = await scopedToken(scope, false, what);
-  } catch {
-    if (quiet) throw new NeedsGoogle(`${api} permission not granted`);
+  const getToken = async () => {
     try {
-      t = await scopedToken(scope, true, what);
-    } catch (err) {
-      throw new Error(explain(err));
+      return await scopedToken(scope, false, what);
+    } catch {
+      if (quiet) throw new NeedsGoogle(`${api} permission not granted`);
+      try {
+        return await scopedToken(scope, true, what);
+      } catch (err) {
+        throw new Error(explain(err));
+      }
     }
-  }
+  };
+  let t = await getToken();
   const call = (tok) =>
     fetch(url, {
       method,
@@ -133,8 +137,10 @@ async function scopedApi({ scope, what, api }, url, { method = 'POST', body, qui
     });
   let res = await call(t);
   if (res.status === 401) {
+    // A stale or revoked token (after Disconnect, say): drop it and ask again, with Google's
+    // window if the permission has to be given again.
     await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
-    t = await scopedToken(scope, false, what);
+    t = await getToken();
     res = await call(t);
   }
   const j = await res.json().catch(() => ({}));
@@ -170,7 +176,12 @@ export async function youtubeApi(path, { interactive = false } = {}) {
   let res = await get(t);
   if (res.status === 401) {
     await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
-    t = await scopedToken(YOUTUBE_SCOPE, false, 'see your YouTube subscriptions');
+    try {
+      t = await scopedToken(YOUTUBE_SCOPE, interactive, 'see your YouTube subscriptions');
+    } catch (err) {
+      if (interactive) throw new Error(explain(err));
+      throw new NeedsGoogle('YouTube isn’t connected yet');
+    }
     res = await get(t);
   }
   const j = await res.json().catch(() => ({}));

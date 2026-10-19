@@ -2,7 +2,7 @@
 // Google calendars get it through the Calendar API and Outlook through Microsoft Graph; the
 // first time, each asks for permission to add events. Undo deletes it again.
 import { $, esc, local, colorVar, showToast, errorText, startOfDay, addDays } from './util.js';
-import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent } from './calendar.js';
+import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent } from './calendar.js';
 import { calendarWrite } from './gauth.js';
 import { graph, graphWrite } from './msauth.js';
 import { msClientId } from './settings.js';
@@ -41,6 +41,8 @@ function rfc3339(t) {
 }
 
 const calKey = (c) => `${c.kind}:${c.id}`;
+// An error as the end of a sentence we write ("Couldn’t add the event: …."), without "..".
+const reason = (err) => errorText(err).replace(/[.\s]+$/, '');
 
 // Today: the next half hour. Another day: 9 to 10 in the morning.
 function startFor(day) {
@@ -104,7 +106,7 @@ function noCalendars(error) {
       <button class="icon-btn" type="button" data-ev="cancel" aria-label="Close">${icon('close')}</button>
     </header>
     <div class="notice setup">
-      <p>${error ? `Your Google calendars didn’t load: ${esc(errorText(error))}.` : 'Connect Google or Outlook to add events from here. Calendars added by iCal link can only be read.'}</p>
+      <p>${error ? `Your Google calendars didn’t load: ${esc(reason(error))}.` : 'Connect Google or Outlook to add events from here. Calendars added by iCal link can only be read.'}</p>
       <button class="btn small primary" type="button" data-ev="settings">Open Settings</button>
     </div>
   </div>`;
@@ -139,13 +141,18 @@ function read() {
   const allDay = field('ev-allday').checked;
   const sd = field('ev-start-date').value;
   const ed = field('ev-end-date').value || sd;
+  const st = field('ev-start-time').value;
+  const et = field('ev-end-time').value;
   return {
+    startTime: st,
+    endTime: et,
     title: field('ev-title').value.trim(),
     allDay,
     startDate: sd,
     endDate: ed,
-    start: sd ? at(sd, allDay ? '00:00' : field('ev-start-time').value || '00:00') : NaN,
-    end: ed ? at(ed, allDay ? '00:00' : field('ev-end-time').value || '00:00') : NaN,
+    // An empty or half-typed time reads as ''; that's a missing time, not midnight.
+    start: sd && (allDay || st) ? at(sd, allDay ? '00:00' : st) : NaN,
+    end: ed && (allDay || et) ? at(ed, allDay ? '00:00' : et) : NaN,
     location: field('ev-location').value.trim(),
     notes: field('ev-notes').value.trim(),
     meet: !field('ev-meet-row').hidden && field('ev-meet').checked,
@@ -247,8 +254,11 @@ async function addOutlook(d) {
 function problem(d, cal) {
   if (!d.title) return 'Give the event a title.';
   if (!cal) return 'Pick a calendar.';
-  if (!d.startDate || !Number.isFinite(d.start)) return 'Pick a start date.';
-  if (!Number.isFinite(d.end)) return 'Pick an end date.';
+  if (!d.startDate) return 'Pick a start date.';
+  if (!d.allDay && !d.startTime) return 'Pick a start time.';
+  if (!d.endDate) return 'Pick an end date.';
+  if (!d.allDay && !d.endTime) return 'Pick an end time.';
+  if (!Number.isFinite(d.start) || !Number.isFinite(d.end)) return 'Check the dates and times.';
   if (d.allDay ? d.end < d.start : d.end <= d.start) return 'The event has to end after it starts.';
   return '';
 }
@@ -280,19 +290,20 @@ async function save(dlg) {
       try {
         await made.remove();
         removePendingEvent(`new:${made.id}`);
+        forgetEvent(made.id);
         calendarsChanged();
         onChange();
         showToast('Event removed');
       } catch (err) {
-        showToast(`Couldn’t remove it: ${errorText(err)}.`);
+        showToast(`Couldn’t remove it: ${reason(err)}.`);
       }
     });
   } catch (err) {
     if (err.code === 'needs-admin')
-      showError(`<p>${esc(err.message)}</p><p><a href="${esc(err.adminUrl)}" target="_blank" rel="noopener">Approval link to send to your IT team</a></p>`);
+      showError(`<p>Your organization needs to approve Daybook adding events to your calendar.</p><p><a href="${esc(err.adminUrl)}" target="_blank" rel="noopener">Approval link to send to your IT team</a></p>`);
     else if (err.code === 'needs-google' || err.code === 'needs-connect')
-      showError(`<p>${esc(err.message)}. Reconnect in Settings → Accounts, then try again.</p>`);
-    else showError(`<p>Couldn’t add the event: ${esc(errorText(err))}.</p>`);
+      showError(`<p>${esc(reason(err))}. Reconnect in Settings → Accounts, then try again.</p>`);
+    else showError(`<p>Couldn’t add the event: ${esc(reason(err))}.</p>`);
   } finally {
     busy = false;
     if (dlg.open) {
@@ -305,7 +316,8 @@ async function save(dlg) {
 // Opens the form. `day` (a local midnight) prefills the date, e.g. from the month calendar.
 export async function openEventEditor({ day } = {}) {
   const dlg = $('#event-dialog');
-  if (!dlg || dlg.open) return;
+  // While a save is waiting (on a permission window, say), the form stays as it is.
+  if (!dlg || dlg.open || busy) return;
   let error = null;
   try {
     ({ list: cals, error } = await writableCalendars(settingsRef));
@@ -326,7 +338,7 @@ export async function openEventEditor({ day } = {}) {
   paintCal();
   paintAllDay();
   keepLength(false);
-  if (error) showError(`<p>Only some calendars are listed: ${esc(errorText(error))}.</p>`);
+  if (error) showError(`<p>Only some calendars are listed: ${esc(reason(error))}.</p>`);
   dlg.showModal();
   field('ev-title').focus();
 }
@@ -343,7 +355,7 @@ export function initEvents(S, { onChange: changed }) {
   dlg.addEventListener('click', (e) => {
     const b = e.target.closest('[data-ev]');
     if (!b) return;
-    if (b.dataset.ev === 'cancel') dlg.close();
+    if (b.dataset.ev === 'cancel' && !busy) dlg.close();
     else if (b.dataset.ev === 'settings') {
       dlg.close();
       openSettings(settingsRef, 'accounts');
@@ -360,6 +372,10 @@ export function initEvents(S, { onChange: changed }) {
   });
   dlg.addEventListener('input', () => {
     if (!busy && !field('ev-error')?.hidden) showError('');
+  });
+  // Escape can't close the form mid-save either: the save would then act on whatever is open next.
+  dlg.addEventListener('cancel', (e) => {
+    if (busy) e.preventDefault();
   });
   dlg.addEventListener('submit', (e) => {
     e.preventDefault();

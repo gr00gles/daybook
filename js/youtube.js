@@ -2,12 +2,15 @@
 // Data API (once a day); new videos come from each channel's public feed, which costs no API
 // quota. With Shorts hidden, the feed used is the channel's long-form uploads list (UULF…),
 // which leaves out Shorts and live streams.
-import { $, esc, local, relTime, errorText } from './util.js';
+import { $, esc, local, relTime, errorText, showToast } from './util.js';
 import { youtubeApi, googleAccount, googleConfigured } from './gauth.js';
 import { icon } from './icons.js';
 
 const SUBS_KEY = 'yt:subs';
 const FEED_KEY = 'yt:feed';
+// Videos you've watched (opened from here, or marked with the eye button), on this computer.
+// YouTube doesn't let apps read your watch history, so this is Daybook's own list.
+const WATCHED_KEY = 'yt:watched';
 const SUBS_MAX_AGE = 24 * 3600e3;
 const FEED_MAX_AGE = 15 * 60e3;
 // Each refresh checks the channels checked longest ago, at most this many, so a long
@@ -28,6 +31,17 @@ let current = 0;
 let flipTimer = null;
 let paused = false;
 let refreshing = null;
+let watched = new Map(); // video id -> when
+
+const unwatched = () => state.videos.filter((v) => !watched.has(v.id));
+
+async function setWatched(id, on) {
+  if (on) watched.set(id, Date.now());
+  else watched.delete(id);
+  // Uploads leave the list after a week, so a month of history is plenty.
+  for (const [k, at] of watched) if (Date.now() - at > 30 * 86400e3) watched.delete(k);
+  await local.set(WATCHED_KEY, Object.fromEntries(watched));
+}
 
 async function listSubscriptions({ interactive = false, force = false } = {}) {
   const stored = await local.get(SUBS_KEY);
@@ -242,13 +256,16 @@ const isNew = (v) => Date.now() - v.at < NEW_FOR;
 // ---- Rolodex ---------------------------------------------------------------------------
 
 function cardHtml(v, i) {
-  return `<a class="rolo-card" data-i="${i}" href="https://www.youtube.com/watch?v=${esc(encodeURIComponent(v.id))}">
-    <span class="rolo-thumb"><img src="https://i.ytimg.com/vi/${esc(encodeURIComponent(v.id))}/hqdefault.jpg" alt="" ${i < 3 ? '' : 'loading="lazy"'}>${isNew(v) ? '<span class="rolo-new">New</span>' : ''}</span>
-    <span class="rolo-text">
-      <span class="rolo-title">${esc(v.title)}</span>
-      <span class="rolo-meta">${esc(v.channel)} · ${relTime(v.at)}</span>
-    </span>
-  </a>`;
+  return `<div class="rolo-card" data-i="${i}" data-id="${esc(v.id)}">
+    <a class="rolo-link" href="https://www.youtube.com/watch?v=${esc(encodeURIComponent(v.id))}" data-yt-open="${esc(v.id)}">
+      <span class="rolo-thumb"><img src="https://i.ytimg.com/vi/${esc(encodeURIComponent(v.id))}/hqdefault.jpg" alt="" ${i < 3 ? '' : 'loading="lazy"'}>${isNew(v) ? '<span class="rolo-new">New</span>' : ''}</span>
+      <span class="rolo-text">
+        <span class="rolo-title">${esc(v.title)}</span>
+        <span class="rolo-meta">${esc(v.channel)} · ${relTime(v.at)}</span>
+      </span>
+    </a>
+    <button class="rolo-watched" type="button" data-yt="watched" data-id="${esc(v.id)}" title="Mark as watched" aria-label="Mark as watched: ${esc(v.title)}">${icon('eye')}</button>
+  </div>`;
 }
 
 // Each card's place in the stack: 0 is in front, 1 and 2 peek out behind, the card just
@@ -260,14 +277,14 @@ function placeCards() {
     const pos = (i - current + n) % n;
     card.dataset.pos = pos === n - 1 && n > 3 ? 'gone' : pos <= 2 ? String(pos) : 'wait';
     card.setAttribute('aria-hidden', String(pos !== 0));
-    card.tabIndex = pos === 0 ? 0 : -1;
+    for (const el of card.querySelectorAll('a, button')) el.tabIndex = pos === 0 ? 0 : -1;
   });
   const posEl = $('#yt-pos');
   if (posEl) posEl.textContent = n ? `${current + 1} of ${n}` : '';
 }
 
 function flip(step) {
-  const n = Math.min(ROLODEX, state.videos.length);
+  const n = Math.min(ROLODEX, unwatched().length);
   if (n < 2) return;
   current = (current + step + n) % n;
   placeCards();
@@ -284,7 +301,7 @@ function startFlipping() {
 function render() {
   const body = $('#yt-body');
   if (!body) return;
-  const today = state.videos.filter(isNew).length;
+  const today = unwatched().filter(isNew).length;
   $('#yt-count').textContent = today ? `${today} new` : '';
   $('#yt-updated').textContent = state.at ? `checked ${relTime(state.at) === 'now' ? 'just now' : `${relTime(state.at)} ago`}` : '';
   const foot = $('#yt-foot');
@@ -310,7 +327,7 @@ function render() {
     return;
   }
 
-  const list = state.videos.slice(0, ROLODEX);
+  const list = unwatched().slice(0, ROLODEX);
   if (current >= list.length) current = 0;
   body.innerHTML = list.length
     ? `<div class="rolo" tabindex="0" role="group" aria-roledescription="carousel" aria-label="Latest uploads from your subscriptions">
@@ -323,7 +340,9 @@ function render() {
       </div>`
     : state.failed && state.failed >= state.channels
       ? `<p class="notice warn">YouTube didn’t send videos for any of your ${state.channels} channels (${esc(whyText())}). Daybook keeps trying every few minutes.</p>`
-      : '<p class="quiet">No uploads from your subscriptions this week.</p>';
+      : state.videos.length
+        ? '<p class="quiet">You’re all caught up: every upload from this week is marked as watched.</p>'
+        : '<p class="quiet">No uploads from your subscriptions this week.</p>';
   if (state.error) body.insertAdjacentHTML('beforeend', `<p class="notice warn">Couldn’t refresh: ${esc(errorText(state.error))}.</p>`);
   placeCards();
   foot.innerHTML = `<a class="foot-link" href="https://www.youtube.com/feed/subscriptions">${icon('external')}Subscriptions</a>${
@@ -340,11 +359,29 @@ export async function initYouTube(S) {
   const card = $('#card-youtube');
   if (!card) return;
   local.remove(['yt:seen', 'yt:shorts']); // left over from earlier versions
+  watched = new Map(Object.entries((await local.get(WATCHED_KEY)) || {}));
+  // Opening a video counts as watching it (it leaves the stack the next time it's drawn).
+  card.addEventListener('click', (e) => {
+    const link = e.target.closest('[data-yt-open]');
+    if (link) setWatched(link.dataset.ytOpen, true);
+  });
+  card.addEventListener('auxclick', (e) => {
+    const link = e.target.closest('[data-yt-open]');
+    if (link && e.button === 1) setWatched(link.dataset.ytOpen, true).then(render);
+  });
   card.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-yt]');
     if (!b) return;
     const action = b.dataset.yt;
-    if (action === 'prev' || action === 'next') {
+    if (action === 'watched') {
+      const id = b.dataset.id;
+      await setWatched(id, true);
+      render();
+      showToast('Marked as watched', async () => {
+        await setWatched(id, false);
+        render();
+      });
+    } else if (action === 'prev' || action === 'next') {
       flip(action === 'next' ? 1 : -1);
       startFlipping(); // a manual flip restarts the timer
     } else if (action === 'connect' || action === 'retry') {
@@ -379,7 +416,7 @@ export async function initYouTube(S) {
     if (!e.target.closest('.rolo') || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     e.preventDefault();
     flip(e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1);
-    card.querySelector('.rolo-card[data-pos="0"]')?.focus();
+    card.querySelector('.rolo-card[data-pos="0"] .rolo-link')?.focus();
   });
   render();
   startFlipping();

@@ -268,9 +268,20 @@ export function removePendingEvent(id) {
   justAdded = justAdded.filter((p) => p.id !== id);
 }
 
+// Events just deleted here (Undo), kept off screen even if a refresh that started before the
+// delete still brings them back.
+const justRemoved = new Map(); // event id -> until
+
+export function forgetEvent(id) {
+  justRemoved.set(id, Date.now() + 5 * 60e3);
+}
+
 export function allEvents() {
-  justAdded = justAdded.filter((p) => p.until > Date.now());
-  return dedupe([...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))).concat(justAdded));
+  const now = Date.now();
+  justAdded = justAdded.filter((p) => p.until > now);
+  for (const [id, until] of justRemoved) if (until < now) justRemoved.delete(id);
+  const all = [...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))).concat(justAdded);
+  return dedupe(justRemoved.size ? all.filter((e) => !justRemoved.has(e.id)) : all);
 }
 
 // ---- Months outside the regular window (loaded when the month view flips to them) ----
@@ -532,13 +543,6 @@ export function renderAgenda(S) {
   const upcoming = body.querySelector('.upcoming');
   if (upcoming) upcoming.classList.toggle('scrolls', upcoming.scrollHeight > upcoming.clientHeight + 4);
 
-  const legend = $('#today-legend');
-  const shown = [
-    ...[...sources.entries()].filter(([id]) => id.startsWith('g:')).map(([, s]) => s.cal),
-    ...S.calendars.filter((c) => c.enabled && c.url),
-    ...(outlookOn ? [{ name: 'Outlook', color: S.outlook.color }] : []),
-  ];
-  legend.innerHTML = shown.map((c) => `<span class="legend-item">${dot(c.color)}${esc(c.name)}</span>`).join('');
   const ats = [...sources.values()].map((s) => s.at).filter(Boolean);
   $('#today-updated').textContent = ats.length ? updatedText(Math.min(...ats)) : '';
 }

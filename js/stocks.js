@@ -8,7 +8,9 @@ class KeyRejected extends Error {}
 
 async function finnhub(key, path) {
   const res = await fetch(`${API}${path}`, { headers: { 'X-Finnhub-Token': key } });
-  if (res.status === 401 || res.status === 403) throw new KeyRejected('Finnhub didn’t accept the key');
+  if (res.status === 401) throw new KeyRejected('Finnhub didn’t accept the key');
+  // 403: this symbol isn't on the key's plan (some exchanges are paid).
+  if (res.status === 403) throw Object.assign(new Error('Not on your Finnhub plan'), { status: 403 });
   if (res.status === 429) throw new Error('Finnhub says too many requests; trying again soon');
   if (!res.ok) throw new Error(`Finnhub returned ${res.status}`);
   return res.json();
@@ -41,7 +43,9 @@ async function fetchQuotes(key, symbols) {
   return {
     market: status.status === 'fulfilled' ? { isOpen: status.value.isOpen, session: status.value.session, holiday: status.value.holiday } : guessMarket(),
     quotes: quotes.map((q, i) => {
-      const v = q.status === 'fulfilled' ? q.value : null;
+      if (q.status === 'rejected')
+        return q.reason?.status === 403 ? { symbol: symbols[i], missing: true, note: q.reason.message } : { symbol: symbols[i], failed: true };
+      const v = q.value;
       // Unknown symbols come back as all zeros.
       if (!v || (!v.c && v.d == null)) return { symbol: symbols[i], missing: true };
       return { symbol: symbols[i], price: v.c, change: v.d, pct: v.dp, high: v.h, low: v.l, open: v.o, prev: v.pc, t: v.t * 1000 };
@@ -61,8 +65,10 @@ function marketText(m) {
 
 function row(q) {
   const href = `https://finance.yahoo.com/quote/${encodeURIComponent(q.symbol)}`;
-  if (q.missing)
-    return `<li><a class="tk missing" href="${esc(href)}"><span class="tk-sym">${esc(q.symbol)}</span><span class="tk-none">No quote for this symbol</span></a></li>`;
+  if (q.missing || q.failed) {
+    const why = q.failed ? 'Couldn’t load right now' : q.note || 'No quote for this symbol';
+    return `<li><a class="tk missing" href="${esc(href)}"><span class="tk-sym">${esc(q.symbol)}</span><span class="tk-none">${esc(why)}</span></a></li>`;
+  }
   const dir = q.change > 0 ? 'up' : q.change < 0 ? 'down' : 'flat';
   const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '';
   const span = q.high - q.low;
@@ -77,11 +83,15 @@ function row(q) {
 
 function render(data, meta) {
   const body = $('#stocks-body');
+  partial = Boolean(data?.quotes.some((q) => q.failed));
+  // A key that stopped working: say so even when older quotes are stored.
+  if (meta.error instanceof KeyRejected) {
+    $('#stocks-state').textContent = '';
+    body.innerHTML = `<div class="notice warn"><p>${esc(meta.error.message)}. Check it in Settings.</p><button class="btn small" type="button" data-open-settings="stocks">Open Settings</button></div>`;
+    return;
+  }
   if (!data) {
-    body.innerHTML =
-      meta.error instanceof KeyRejected
-        ? `<div class="notice warn"><p>${esc(meta.error.message)}. Check it in Settings.</p><button class="btn small" type="button" data-open-settings="stocks">Open Settings</button></div>`
-        : `<p class="notice warn">Quotes aren’t loading: ${esc(errorText(meta.error))}.</p>`;
+    body.innerHTML = `<p class="notice warn">Quotes aren’t loading: ${esc(errorText(meta.error).replace(/\.$/, ''))}.</p>`;
     return;
   }
   $('#stocks-state').textContent = marketText(data.market);
@@ -93,6 +103,8 @@ function render(data, meta) {
 export const stockSymbols = (S) =>
   [...new Set((S.stocks.symbols || []).map((s) => String(s).trim().toUpperCase()).filter((s) => /^[A-Z0-9.:^=-]{1,20}$/.test(s)))].slice(0, 15);
 
+let partial = false; // some quotes failed last time: try again sooner
+
 export function refreshStocks(S, force = false) {
   const card = $('#card-stocks');
   const key = (S.stocks.key || '').trim();
@@ -102,7 +114,9 @@ export function refreshStocks(S, force = false) {
   return cached({
     key: 'stocks',
     sig: hash([key, symbols]),
-    maxAge: (guessMarket().isOpen ? 5 : 60) * 60e3,
+    // Every 5 minutes while the market is open and for an hour after it closes (so the
+    // closing prices replace the last ones from the day), else hourly.
+    maxAge: (partial ? 1 : guessMarket().isOpen || guessMarket(Date.now() - 3600e3).isOpen ? 5 : 60) * 60e3,
     force,
     fetch: () => fetchQuotes(key, symbols),
     render,

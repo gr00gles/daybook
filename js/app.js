@@ -1,5 +1,5 @@
 import { loadSettings, ENGINES, outlookWebUrl } from './settings.js';
-import { $, esc, colorVar, safeUrl, fmtTime } from './util.js';
+import { $, $$, esc, colorVar, safeUrl, fmtTime } from './util.js';
 import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp, allEvents } from './calendar.js';
@@ -21,8 +21,10 @@ const S = await loadSettings();
 
 if (S.theme !== 'system') document.documentElement.dataset.theme = S.theme;
 for (const [section, on] of Object.entries(S.show)) {
-  $(`[data-section="${section}"]`)?.toggleAttribute('hidden', !on);
+  for (const el of $$(`[data-section="${section}"]`)) el.toggleAttribute('hidden', !on);
 }
+// The moon sits under the current weather but has its own switch.
+if (S.show.sky && !S.show.weather) $('.now-weather').hidden = false;
 $('#refresh-btn').innerHTML = icon('refresh');
 $('#settings-btn').innerHTML = icon('gear');
 

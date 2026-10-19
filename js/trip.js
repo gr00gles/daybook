@@ -20,14 +20,16 @@ export const tripInfo = (e) => info.get(eventKey(e));
 // Video calls, phone calls and rooms aren't places you drive to.
 const VIRTUAL =
   /^(https?:|www\.)|\b(zoom|(microsoft )?teams( meeting)?|google meet|meet\.google\.com|webex|skype|whereby|gotomeeting|bluejeans|facetime|discord|slack( huddle)?|hangouts?)\b/i;
-const NOT_A_PLACE = /^(online|virtual|remote|phone|call|phone call|conference call|video call|dial[- ]?in|tbd|tba|n\/a|none|home|my place|my house|office|work)$/i;
+// Dial-in details ("Phone: +1 555…, PIN 1234") must never be sent to a place lookup.
+const CALL = /\b(online|virtual|remote|phone|call|dial[- ]?in|tbd|tba|pin|passcode|meeting id)\b/i;
+const NOT_A_PLACE = /^(n\/a|none|home|my place|my house|office|work)$/i;
 const ROOM = /^(room|rm\.?|conf(erence)? room|meeting room|board ?room|suite|ste\.?|floor|fl\.?|desk|building|bldg\.?)\b/i;
 
 // The drivable part of a location: "Conference Room B, 100 Main St" → "100 Main St".
 export function placeOf(location) {
   for (const part of String(location || '').split(/;|\n/)) {
     const p = part.trim();
-    if (!p || VIRTUAL.test(p) || NOT_A_PLACE.test(p)) continue;
+    if (!p || VIRTUAL.test(p) || CALL.test(p) || NOT_A_PLACE.test(p)) continue;
     const rest = p.split(',').map((x) => x.trim()).filter(Boolean);
     while (rest.length && ROOM.test(rest[0])) rest.shift();
     const place = rest.join(', ');
@@ -144,7 +146,7 @@ async function route(routes, S, from, to, start) {
       } catch (err) {
         if ([401, 403, 429].includes(err.status)) tomtomDown = Date.now();
         // One place TomTom can't route to (an island, say): try OSRM for it, and not TomTom again for an hour.
-        else routes.set(k, { fail: true });
+        else if (err.status === 400 || err.message === 'TomTom found no route') routes.set(k, { fail: true });
         console.warn('[daybook] TomTom:', err);
       }
     }
@@ -159,7 +161,8 @@ async function route(routes, S, from, to, start) {
     routes.set(k, r);
     return r;
   } catch (err) {
-    routes.set(k, { fail: true });
+    // Only a definite "no route" is remembered; a network hiccup is tried again next time.
+    if (err.message === 'No route' || err.status === 400) routes.set(k, { fail: true });
     throw err;
   }
 }

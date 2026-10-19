@@ -44,12 +44,12 @@ const BOUNCE_SUBJECT = /delivery status notification|undeliver(?:able|ed)|return
 // What an email says about a package. Words like "today" and "Friday" are about the day the
 // email was sent; `day` keeps that (0 = that day, 1 = the next, or a weekday or date).
 function statusOf(text) {
-  if (/delivery (?:attempt|exception)|attempted delivery|missed (?:your )?delivery|unable to deliver|could(?:n[’']?t| not) (?:be )?deliver|was(?:n[’']t| not) delivered|\bdelay(?:ed)?\b|held at|return(?:ed|ing) to sender|action required/i.test(text))
+  if (/delivery (?:attempt|exception)|attempted delivery|missed (?:your )?delivery|unable to deliver|undeliverable|delivery (?:has )?failed|could(?:n[’']?t| not) (?:be )?deliver|was(?:n[’']t| not) delivered|\bdelay(?:ed)?\b|held at|return(?:ed|ing) to sender|action required/i.test(text))
     return { state: 'problem' };
   if (/out for delivery|on the truck/i.test(text)) return { state: 'out', day: 0, label: 'Out for delivery' };
   if (/\bdelivered\b/i.test(text) && !NOT_DELIVERED.test(text)) return { state: 'delivered' };
-  if (/arriving today|arrives today|(?:delivery|deliver) today|scheduled for delivery today/i.test(text)) return { state: 'out', day: 0 };
-  if (/(?:arriving|arrives|delivery|deliver(?:ed)?) tomorrow/i.test(text)) return { state: 'soon', day: 1 };
+  if (/arriv(?:ing|es) today|deliver(?:y|ed)?:? (?:by |on )?today|scheduled for delivery today/i.test(text)) return { state: 'out', day: 0 };
+  if (/(?:arriving|arrives|deliver(?:y|ed)?):? (?:by |on )?tomorrow/i.test(text)) return { state: 'soon', day: 1 };
   const day = text.match(new RegExp(`(?:arriving|arrives|(?:expected|estimated|scheduled) delivery|expected)(?: on| by| date)?:?,? (${DAY.source})`, 'i'));
   if (day) return { state: 'transit', day: day[1] };
   if (/\bshipped\b|on (?:its|the) way|in transit|dispatched|label created|ready (?:to|for) ship|shipment|tracking (?:number|info)/i.test(text)) return { state: 'transit' };
@@ -107,7 +107,8 @@ function readMail(m) {
   if (!m) return null;
   const subject = m.subject || '';
   const from = m.from || '';
-  if (BOUNCE_FROM.test(from) || BOUNCE_SUBJECT.test(subject)) return null;
+  // Bounced email, but not a carrier's own "undeliverable" notice about a package.
+  if (BOUNCE_FROM.test(from) || (BOUNCE_SUBJECT.test(subject) && !SENDERS.some(([, re]) => re.test(from)))) return null;
   const context = `${from} ${subject} ${m.snippet || ''}`;
   const found = numberIn(`${subject} ${m.snippet || ''}`.toUpperCase(), context);
   const fromSubject = statusOf(subject);

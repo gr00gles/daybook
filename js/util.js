@@ -32,7 +32,13 @@ export async function cached({ key, sig = '', maxAge, force = false, fetch: fetc
   const hit = stored && stored.sig === sig ? stored : null;
   if (hit) render(hit.data, { at: hit.at });
   if (hit && !force && Date.now() - hit.at < maxAge) return;
-  if (inflight.has(key)) return inflight.get(key);
+  // One fetch at a time per key and settings. A forced refresh (after a change you made) waits
+  // for one already running, which may have started before the change, and then fetches again.
+  const flight = `${key}|${sig}`;
+  if (inflight.has(flight)) {
+    if (!force) return inflight.get(flight);
+    await inflight.get(flight).catch(() => {});
+  }
   const job = (async () => {
     try {
       const data = await fetcher();
@@ -43,14 +49,14 @@ export async function cached({ key, sig = '', maxAge, force = false, fetch: fetc
       console.warn(`[daybook] ${key}:`, error);
       render(hit?.data ?? null, { at: hit?.at, error });
     }
-  })().finally(() => inflight.delete(key));
-  inflight.set(key, job);
+  })().finally(() => inflight.get(flight) === job && inflight.delete(flight));
+  inflight.set(flight, job);
   return job;
 }
 
 export async function getJSON(url, init) {
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
   return res.json();
 }
 

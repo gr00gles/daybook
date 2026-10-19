@@ -1,9 +1,10 @@
 import { $, esc, cached, hash, local, relTime, updatedText, errorText, safeUrl, showToast } from './util.js';
-import { graph, graphWrite, msAccount } from './msauth.js';
+import { graph, graphWrite, msAccount, msHas } from './msauth.js';
 import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
 import { GMAIL_FEEDS, outlookWebUrl, msClientId } from './settings.js';
 import { icon } from './icons.js';
 import { deliveriesFrom, deliveriesHtml, deliveryOf, deliveryTag, refreshShippingMail } from './packages.js';
+import { openReader, initReader } from './reader.js';
 
 const sources = new Map(); // key -> { kind, label, ... , data, at, error }
 let filter = 'all';
@@ -234,7 +235,7 @@ function render() {
   const rows = items.length
     ? `<ol class="mail-list">${items
         .map(
-          (m) => `<li><a class="mail" href="${esc(safeUrl(m.url))}">
+          (m) => `<li><a class="mail" href="${esc(safeUrl(m.url))}" data-open-key="${esc(m.key)}" data-open-id="${esc(m.id)}">
             <span class="src" title="${esc(m.account)}">${m.letter}</span>
             <span class="mail-from">${esc(m.from)}</span>
             <time class="mail-time" datetime="${new Date(m.at).toISOString()}">${relTime(m.at)}</time>
@@ -331,38 +332,80 @@ async function outlookChange(action, item) {
   return () => graphWrite(clientId, `/me/messages/${encodeURIComponent(moved.id)}/move`, { body: { destinationId: 'inbox' } });
 }
 
-async function change(action, key, id) {
+// Resolves to a function that undoes the change, or null if it didn't happen.
+// `opts.item` lets the reader delete a message it already marked read (no longer listed).
+async function change(action, key, id, { toast = true, item: known = null } = {}) {
   const src = sources.get(key);
-  const item = removeItem(key, id);
-  if (!item) return;
+  const listed = removeItem(key, id);
+  const item = listed || known;
+  if (!item || !src) return null;
+  // Only messages that were in the Unread list go back into it.
+  const putBack = () => {
+    if (!listed) return;
+    restoreItem(key, item);
+    render();
+    saveSource(key);
+  };
   render();
   saveSource(key);
   try {
     const undo = await (src.kind === 'outlook' ? outlookChange(action, item) : gmailChange(action, item));
+    const restore = async () => {
+      await undo();
+      putBack();
+    };
     const done = action === 'read' ? 'Marked as read' : src.kind === 'outlook' ? 'Moved to Deleted Items' : 'Moved to Trash';
-    showToast(done, async () => {
-      try {
-        await undo();
-        restoreItem(key, item);
-        render();
-        saveSource(key);
-      } catch (err) {
-        showToast(`Couldn’t undo: ${errorText(err)}.`);
-      }
-    });
+    if (toast)
+      showToast(done, async () => {
+        try {
+          await restore();
+        } catch (err) {
+          showToast(`Couldn’t undo: ${errorText(err).replace(/[.\s]+$/, '')}.`);
+        }
+      });
+    return restore;
   } catch (err) {
-    restoreItem(key, item);
-    render();
-    saveSource(key);
-    showToast(`Couldn’t ${action === 'read' ? 'mark that as read' : 'delete that'}: ${errorText(err)}.`);
+    putBack();
+    showToast(`Couldn’t ${action === 'read' ? 'mark that as read' : 'delete that'}: ${errorText(err).replace(/[.\s]+$/, '')}.`);
+    return null;
   }
 }
 
+// Clicking a message opens it here. Ctrl/⌘-click or the middle button still opens it in
+// Gmail or Outlook, as does the button in the reader.
+async function openMessage(key, id) {
+  const src = sources.get(key);
+  const item = src?.data?.items.find((m) => m.id === id);
+  if (!item) return;
+  const outlook = src.kind === 'outlook';
+  const editable = canChange(src);
+  openReader({
+    item,
+    how: outlook ? 'outlook' : editable && item.msgId ? 'gmail' : null,
+    clientId: msClientId(settingsRef),
+    providerUrl: safeUrl(item.url),
+    providerName: outlook ? 'Outlook' : 'Gmail',
+    account: sourceLabel(src),
+    letter: src.letter,
+    actions: editable ? { change: (action, opts) => change(action, key, id, { ...opts, item }) } : null,
+    // Reading Gmail here already uses the permission that marks it read; Outlook needs one
+    // more, so it's only marked read on its own once that was given.
+    autoRead: outlook ? await msHas('Mail.ReadWrite') : true,
+  });
+}
+
 export function initMail() {
+  initReader();
   $('#mail-body').addEventListener('click', (e) => {
     const act = e.target.closest('[data-mail-act]');
     if (act) {
       change(act.dataset.mailAct, act.dataset.key, act.dataset.id);
+      return;
+    }
+    const open = e.target.closest('a[data-open-key]');
+    if (open && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+      e.preventDefault();
+      openMessage(open.dataset.openKey, open.dataset.openId);
       return;
     }
     const chip = e.target.closest('[data-mail-filter]');
