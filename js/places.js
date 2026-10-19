@@ -4,7 +4,7 @@
 import { $, esc, local } from './util.js';
 import { icon } from './icons.js';
 
-const ZOOM_FOR = { house: 17, street: 16, locality: 15, district: 14, city: 12, county: 10, state: 7, country: 5 };
+const ZOOM_FOR = { house: 15, street: 14, locality: 13, district: 13, city: 11, county: 9, state: 6, country: 4 };
 // Countries that write the house number before the street.
 const NUMBER_FIRST = new Set(['US', 'CA', 'GB', 'IE', 'AU', 'NZ', 'ZA', 'IN', 'PH', 'SG', 'MY']);
 
@@ -21,6 +21,29 @@ let bias = null;
 // Your own country is left out of suggestions; others are spelled out.
 const homeCountry = (navigator.language.split('-')[1] || '').toUpperCase();
 const results = new Map();
+
+// ---- Recent places (kept on this computer) ---------------------------------------------
+
+const HISTORY_KEY = 'places:recent';
+let history = [];
+let listMode = 'search'; // 'recent' while nothing is typed
+
+function remember(item) {
+  if (!item) return;
+  const { title, detail, label, lat, lon, zoom, cc } = item;
+  history = [{ title, detail, label, lat, lon, zoom, cc, at: Date.now() }, ...history.filter((h) => h.label !== label)].slice(0, 15);
+  local.set(HISTORY_KEY, history);
+}
+
+function forget(label) {
+  history = history.filter((h) => h.label !== label);
+  local.set(HISTORY_KEY, history);
+}
+
+const recentMatching = (q) => {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  return history.filter((h) => words.every((w) => h.label.toLowerCase().includes(w)));
+};
 
 const gmapsSearch = (label) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(label)}`;
 const gmapsDirections = (label) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(label)}`;
@@ -52,37 +75,54 @@ function distance(a, b) {
   return Math.hypot(x, y) * 6371;
 }
 
-// The place the weather is for: a chosen city, or the last location Chrome reported.
+// Where you are right now, from Chrome; if Chrome can't say, the place the weather is for.
+let here = null;
+
+function locateHere() {
+  if (here && Date.now() - here.at < 10 * 60e3) return Promise.resolve(here);
+  return new Promise((resolve) =>
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve((here = { lat: pos.coords.latitude, lon: pos.coords.longitude, at: Date.now() })),
+      () => resolve(null),
+      { timeout: 6000, maximumAge: 10 * 60e3 },
+    ),
+  );
+}
+
 async function loadBias() {
+  // Don't hold up suggestions for long waiting on a location fix.
+  const fix = await Promise.race([locateHere(), new Promise((r) => setTimeout(() => r(null), 1200))]);
+  if (fix) return (bias = { lat: fix.lat, lon: fix.lon });
   if (bias) return bias;
   try {
     const { settings } = await chrome.storage.sync.get('settings');
     const manual = settings?.location?.mode === 'manual' && settings.location.lat != null ? settings.location : null;
-    const geo = manual || (await local.get('geo'));
+    const geo = (await local.get('geo')) || manual;
     if (geo?.lat != null) bias = { lat: geo.lat, lon: geo.lon };
   } catch {}
   return bias;
 }
 
-// Your own country first, then nearest first.
+// Nearest to you first. Without a location, your own country first.
 function rank(list) {
   return list
     .map((it, i) => ({ it, i, home: homeCountry && it.cc === homeCountry ? 0 : 1, km: bias ? distance(bias, it) : 0 }))
-    .sort((a, b) => a.home - b.home || a.km - b.km || a.i - b.i)
+    .sort((a, b) => (bias ? a.km - b.km : a.home - b.home) || a.i - b.i)
     .map((x) => x.it);
 }
 
 async function suggest(q) {
-  if (results.has(q)) return results.get(q);
   await loadBias();
+  const key = bias ? `${q}|${bias.lat.toFixed(2)},${bias.lon.toFixed(2)}` : q;
+  if (results.has(key)) return results.get(key);
   pending?.abort();
   pending = new AbortController();
-  const params = new URLSearchParams({ q, limit: '15', lang: 'en' });
+  const params = new URLSearchParams({ q, limit: '20', lang: 'en' });
   if (bias) {
     params.set('lat', bias.lat);
     params.set('lon', bias.lon);
-    params.set('zoom', '10');
-    params.set('location_bias_scale', '0.6');
+    params.set('zoom', '11');
+    params.set('location_bias_scale', '0.8');
   }
   const res = await fetch(`https://photon.komoot.io/api/?${params}`, { signal: pending.signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -90,7 +130,7 @@ async function suggest(q) {
   const list = rank(((await res.json()).features || []).map(describe))
     .filter((it) => !seen.has(it.label) && seen.add(it.label))
     .slice(0, 6);
-  results.set(q, list);
+  results.set(key, list);
   return list;
 }
 
@@ -101,10 +141,11 @@ let mapSrc = '';
 
 function embedUrl() {
   const item = items[active];
+  const near = here || bias;
   const params = item
     ? { q: item.label, z: String(item.zoom), output: 'embed' }
-    : bias
-      ? { q: `${bias.lat},${bias.lon}`, z: '12', output: 'embed' }
+    : near
+      ? { q: `${near.lat},${near.lon}`, z: '13', output: 'embed' }
       : null;
   return params ? `https://www.google.com/maps?${new URLSearchParams(params)}` : '';
 }
@@ -125,18 +166,27 @@ function drawMap({ now = false } = {}) {
 
 // ---- Panel ---------------------------------------------------------------------------
 
+function row(it, i) {
+  return `<li id="place-${i}" role="option" class="place${i === active ? ' on' : ''}${it.recent ? ' recent' : ''}" aria-selected="${i === active}" data-place="${i}">
+    ${icon(it.recent ? 'clock' : 'pin')}<span class="place-text"><span class="place-title">${esc(it.title)}</span>${it.detail ? `<span class="place-detail">${esc(it.detail)}</span>` : ''}</span>
+    ${it.recent ? `<button type="button" class="place-forget" data-forget="${i}" aria-label="Remove ${esc(it.title)} from recent places" title="Remove from recent">${icon('close')}</button>` : ''}
+  </li>`;
+}
+
 function render(state) {
   const list = panel.querySelector('.places-list');
-  if (state === 'error') list.innerHTML = '<li class="places-note">Address suggestions aren’t available right now. Press Enter to search Google Maps.</li>';
+  const recentOnly = listMode === 'recent';
+  const nRecent = items.filter((it) => it.recent).length;
+  if (state === 'error' && !items.length) list.innerHTML = '<li class="places-note">Address suggestions aren’t available right now. Press Enter to search Google Maps.</li>';
   else if (!items.length) list.innerHTML = `<li class="places-note">${state === 'loading' ? 'Looking up addresses…' : 'No matching addresses. Press Enter to search Google Maps.'}</li>`;
   else
-    list.innerHTML = items
-      .map(
-        (it, i) => `<li id="place-${i}" role="option" class="place${i === active ? ' on' : ''}" aria-selected="${i === active}" data-place="${i}">
-          ${icon('pin')}<span class="place-text"><span class="place-title">${esc(it.title)}</span>${it.detail ? `<span class="place-detail">${esc(it.detail)}</span>` : ''}</span>
-        </li>`,
-      )
-      .join('');
+    list.innerHTML = [
+      nRecent ? '<li class="places-head" role="presentation">Recent</li>' : '',
+      ...items.slice(0, nRecent).map(row),
+      !recentOnly && items.length > nRecent ? `<li class="places-head" role="presentation">${nRecent ? 'Suggestions' : 'Addresses'}</li>` : '',
+      ...items.slice(nRecent).map((it, j) => row(it, j + nRecent)),
+      recentOnly ? '<li class="places-note" role="presentation"><button type="button" class="linklike" data-clear-recent>Clear recent places</button></li>' : '',
+    ].join('');
   input.setAttribute('aria-activedescendant', active >= 0 ? `place-${active}` : '');
   const item = items[active];
   const actions = panel.querySelector('.pm-actions');
@@ -171,25 +221,40 @@ const queryText = () => input.value.replace(/^!m\s+/i, '').trim();
 export function updatePlaces() {
   if (!panel) return;
   const q = queryText();
-  if (!isActive() || q.length < 3) {
-    closePlaces();
+  if (!isActive()) return closePlaces();
+  if (q.length < 3) {
+    // Nothing typed yet: offer recent places while the search box has focus.
+    lastQuery = '';
+    clearTimeout(timer);
+    if (!history.length || document.activeElement !== input) return closePlaces();
+    items = history.slice(0, 8).map((h) => ({ ...h, recent: true }));
+    listMode = 'recent';
+    active = -1;
+    open();
+    render('recent');
+    drawMap();
     return;
   }
   open();
   if (q === lastQuery) return;
   lastQuery = q;
+  listMode = 'search';
   clearTimeout(timer);
+  const recent = recentMatching(q).slice(0, 3).map((h) => ({ ...h, recent: true }));
+  items = recent;
+  active = recent.length ? 0 : -1;
+  render('loading');
+  drawMap();
   timer = setTimeout(async () => {
-    if (!items.length) render('loading');
     try {
       const list = await suggest(q);
       if (q !== lastQuery) return;
-      items = list;
+      items = [...recent, ...list.filter((it) => !recent.some((r) => r.label === it.label))].slice(0, 8);
       highlight(items.length ? 0 : -1);
     } catch (err) {
       if (err.name === 'AbortError') return;
-      items = [];
-      active = -1;
+      items = recent;
+      active = recent.length ? 0 : -1;
       render('error');
     }
   }, 220);
@@ -198,6 +263,7 @@ export function updatePlaces() {
 // Enter in Maps mode opens the highlighted address. Returns false when there's nothing to open.
 export function openActivePlace(newTab) {
   if (panel?.hidden !== false || active < 0 || !items[active]) return false;
+  remember(items[active]);
   navigate(gmapsSearch(items[active].label), newTab);
   return true;
 }
@@ -238,7 +304,26 @@ export async function initPlaces(opts) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !panel.hidden && document.activeElement !== input) closePlaces();
   });
+  panel.addEventListener('click', (e) => {
+    const forgetBtn = e.target.closest('[data-forget]');
+    if (forgetBtn) {
+      forget(items[Number(forgetBtn.dataset.forget)]?.label);
+      lastQuery = null;
+      updatePlaces();
+      input.focus();
+      return;
+    }
+    if (e.target.closest('[data-clear-recent]')) {
+      history = [];
+      local.set(HISTORY_KEY, history);
+      closePlaces();
+      input.focus();
+      return;
+    }
+    if (e.target.closest('.pm-actions a')) remember(items[active]);
+  });
   panel.querySelector('.places-list').addEventListener('mousedown', (e) => {
+    if (e.target.closest('[data-forget], [data-clear-recent]')) return;
     const li = e.target.closest('[data-place]');
     if (!li) return;
     e.preventDefault(); // keep focus in the search box
@@ -250,5 +335,6 @@ export async function initPlaces(opts) {
   document.addEventListener('pointerdown', (e) => {
     if (!e.target.closest('#places, .search-box, #engines')) closePlaces();
   });
-  loadBias();
+  history = (await local.get(HISTORY_KEY)) || [];
+  locateHere().then(() => !panel.hidden && active < 0 && drawMap({ now: true }));
 }
