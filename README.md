@@ -48,13 +48,13 @@ Zip the `daybook` folder (or reuse `daybook.zip`) and send it. Each person insta
 - **Unread** mail: hover over a message to **mark it as read** or **delete** it (it goes to Trash or Deleted Items). A bar at the bottom offers **Undo**. The first time, Google or Microsoft asks you to allow it. For Gmail this works on the Google account connected in Settings; other signed-in Gmail accounts can only be opened.
 - **Today** lists today's events, with a timeline and Join buttons for video calls, plus the next six days. Under it, the **month calendar** shows every event for the month; use the arrows to flip months and click a day to see its full schedule.
 - Chrome puts the cursor in the address bar on a new tab; press `/` to jump to Daybook's search box.
-- Pick **Maps** under the search box (or start with `!m`) and type an address: suggestions appear with a map. Use ↑ ↓ to move between them, Enter to open the highlighted one in Google Maps, or click **Directions**. Address suggestions come from Photon (OpenStreetMap data) and the map from CARTO.
+- Pick **Maps** under the search box (or start with `!m`) and type an address: suggestions appear with a map. Use ↑ ↓ to move between them, Enter to open the highlighted one in Google Maps, or click **Directions**. Address suggestions come from Photon (OpenStreetMap data); the map is an embedded Google Map.
 - In the search box, start with `!y` (YouTube), `!m` (Maps), `!c` (Claude), `!w` (Wikipedia), `!a` (Amazon) or `!e` (search your Gmail). Ctrl+Enter or ⌘+Enter opens results in a new tab.
 - Cards show saved data instantly and refresh in the background: Gmail every minute, Outlook every 2, calendars every 5–10, weather every 15, headlines every 20. ↻ refreshes everything now.
 
 ## Privacy
 
-Daybook never sends email and only changes mail when you click **Mark as read** or **Delete** (deleted mail goes to Trash or Deleted Items, so it can be recovered). Settings sync through your Chrome profile; sign-ins and cached mail, calendar and weather data stay on your computer. The page talks only to Google, Microsoft, Open-Meteo (weather), BigDataCloud (city name from coordinates), and, when you search in Maps mode, Photon (address suggestions) and CARTO (map images). Full policy: https://gr00gles.github.io/privacy.html
+Daybook never sends email and only changes mail when you click **Mark as read** or **Delete** (deleted mail goes to Trash or Deleted Items, so it can be recovered). Settings sync through your Chrome profile; sign-ins and cached mail, calendar and weather data stay on your computer. The page talks only to Google, Microsoft, Open-Meteo (weather), BigDataCloud (city name from coordinates), and, when you search in Maps mode, Photon (address suggestions) and Google Maps (the map preview). Full policy: https://gr00gles.github.io/privacy.html
 
 ## Updating
 

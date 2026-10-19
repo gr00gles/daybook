@@ -1,10 +1,9 @@
 // Address suggestions and a map preview for the search bar's Maps mode.
-// Suggestions come from Photon (photon.komoot.io, OpenStreetMap data, no key), ranked by
-// distance from your weather location. The map is drawn from CARTO's OpenStreetMap tiles.
+// Suggestions come from Photon (photon.komoot.io, OpenStreetMap data, no key) and are ranked
+// by distance from your weather location. The preview is an embedded Google Map.
 import { $, esc, local } from './util.js';
 import { icon } from './icons.js';
 
-const TILE = 256;
 const ZOOM_FOR = { house: 17, street: 16, locality: 15, district: 14, city: 12, county: 10, state: 7, country: 5 };
 // Countries that write the house number before the street.
 const NUMBER_FIRST = new Set(['US', 'CA', 'GB', 'IE', 'AU', 'NZ', 'ZA', 'IN', 'PH', 'SG', 'MY']);
@@ -22,13 +21,17 @@ let bias = null;
 // Your own country is left out of suggestions; others are spelled out.
 const homeCountry = (navigator.language.split('-')[1] || '').toUpperCase();
 const results = new Map();
-const view = { lat: 0, lon: 0, z: 12 };
 
 const gmapsSearch = (label) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(label)}`;
 const gmapsDirections = (label) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(label)}`;
 
 function describe(f) {
-  const p = f.properties || {};
+  const p = { ...(f.properties || {}) };
+  // Photon sometimes puts the house number in `name` for address points.
+  if (p.name && !p.housenumber && p.street && /^\d+[a-z]?(?:[-/]\d+[a-z]?)?$/i.test(p.name.trim())) {
+    p.housenumber = p.name.trim();
+    delete p.name;
+  }
   const cc = (p.countrycode || '').toUpperCase();
   const street = p.street ? (p.housenumber ? (NUMBER_FIRST.has(cc) ? `${p.housenumber} ${p.street}` : `${p.street} ${p.housenumber}`) : p.street) : '';
   const place = p.city || p.district || p.locality || p.county || '';
@@ -38,116 +41,86 @@ function describe(f) {
   const title = named ? p.name : street || place || p.state || p.country || 'Unnamed place';
   const detail = [named ? street : '', title === place ? '' : place, region, country].filter(Boolean).join(', ');
   const [lon, lat] = f.geometry?.coordinates || [0, 0];
-  return { title, detail, label: [title, detail].filter(Boolean).join(', '), lat, lon, zoom: ZOOM_FOR[p.type] ?? 15 };
+  return { title, detail, label: [title, detail].filter(Boolean).join(', '), lat, lon, zoom: ZOOM_FOR[p.type] ?? 15, cc };
+}
+
+// Kilometers between two points; good enough for ranking.
+function distance(a, b) {
+  const rad = Math.PI / 180;
+  const x = (b.lon - a.lon) * rad * Math.cos(((a.lat + b.lat) / 2) * rad);
+  const y = (b.lat - a.lat) * rad;
+  return Math.hypot(x, y) * 6371;
+}
+
+// The place the weather is for: a chosen city, or the last location Chrome reported.
+async function loadBias() {
+  if (bias) return bias;
+  try {
+    const { settings } = await chrome.storage.sync.get('settings');
+    const manual = settings?.location?.mode === 'manual' && settings.location.lat != null ? settings.location : null;
+    const geo = manual || (await local.get('geo'));
+    if (geo?.lat != null) bias = { lat: geo.lat, lon: geo.lon };
+  } catch {}
+  return bias;
+}
+
+// Your own country first, then nearest first.
+function rank(list) {
+  return list
+    .map((it, i) => ({ it, i, home: homeCountry && it.cc === homeCountry ? 0 : 1, km: bias ? distance(bias, it) : 0 }))
+    .sort((a, b) => a.home - b.home || a.km - b.km || a.i - b.i)
+    .map((x) => x.it);
 }
 
 async function suggest(q) {
   if (results.has(q)) return results.get(q);
+  await loadBias();
   pending?.abort();
   pending = new AbortController();
-  const params = new URLSearchParams({ q, limit: '6', lang: 'en' });
+  const params = new URLSearchParams({ q, limit: '15', lang: 'en' });
   if (bias) {
     params.set('lat', bias.lat);
     params.set('lon', bias.lon);
+    params.set('zoom', '10');
+    params.set('location_bias_scale', '0.6');
   }
   const res = await fetch(`https://photon.komoot.io/api/?${params}`, { signal: pending.signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const list = ((await res.json()).features || []).map(describe);
+  const seen = new Set();
+  const list = rank(((await res.json()).features || []).map(describe))
+    .filter((it) => !seen.has(it.label) && seen.add(it.label))
+    .slice(0, 6);
   results.set(q, list);
   return list;
 }
 
 // ---- Map -----------------------------------------------------------------------------
 
-const isDark = () => {
-  const t = document.documentElement.dataset.theme;
-  return t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-};
+let mapTimer;
+let mapSrc = '';
 
-const project = (lat, lon, z) => {
-  const n = 2 ** z;
-  const r = (Math.max(-85, Math.min(85, lat)) * Math.PI) / 180;
-  return { x: ((lon + 180) / 360) * n * TILE, y: ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n * TILE };
-};
-
-const unproject = (x, y, z) => {
-  const n = 2 ** z * TILE;
-  return { lon: (x / n) * 360 - 180, lat: (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n))) * 180) / Math.PI };
-};
-
-function drawMap(offsetX = 0, offsetY = 0) {
-  const box = panel.querySelector('.pm-tiles');
-  const W = box.clientWidth;
-  const H = box.clientHeight;
-  if (!W || !H) return;
-  const c = project(view.lat, view.lon, view.z);
-  const left = c.x - W / 2 - offsetX;
-  const top = c.y - H / 2 - offsetY;
-  const n = 2 ** view.z;
-  const style = isDark() ? 'dark_all' : 'rastertiles/voyager';
-  const tiles = [];
-  for (let ty = Math.floor(top / TILE); ty <= Math.floor((top + H) / TILE); ty++) {
-    if (ty < 0 || ty >= n) continue;
-    for (let tx = Math.floor(left / TILE); tx <= Math.floor((left + W) / TILE); tx++) {
-      const wx = ((tx % n) + n) % n;
-      const sub = 'abcd'[(wx + ty) % 4];
-      tiles.push(
-        `<img alt="" draggable="false" src="https://${sub}.basemaps.cartocdn.com/${style}/${view.z}/${wx}/${ty}@2x.png" style="left:${Math.round(tx * TILE - left)}px;top:${Math.round(ty * TILE - top)}px">`,
-      );
-    }
-  }
-  box.innerHTML = tiles.join('');
-  const pin = panel.querySelector('.pm-pin');
+function embedUrl() {
   const item = items[active];
-  if (item) {
-    const p = project(item.lat, item.lon, view.z);
-    pin.style.left = `${p.x - left}px`;
-    pin.style.top = `${p.y - top}px`;
-  }
-  // An <svg> has no .hidden property; toggle the attribute itself.
-  pin.toggleAttribute('hidden', !item);
+  const params = item
+    ? { q: item.label, z: String(item.zoom), output: 'embed' }
+    : bias
+      ? { q: `${bias.lat},${bias.lon}`, z: '12', output: 'embed' }
+      : null;
+  return params ? `https://www.google.com/maps?${new URLSearchParams(params)}` : '';
 }
 
-function wireMap() {
-  const surface = panel.querySelector('.pm-surface');
-  let drag = null;
-  surface.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button, a')) return;
-    drag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0 };
-    surface.setPointerCapture(e.pointerId);
-    surface.classList.add('dragging');
-  });
-  surface.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    drag.dx = e.clientX - drag.x;
-    drag.dy = e.clientY - drag.y;
-    drawMap(drag.dx, drag.dy);
-  });
-  const end = () => {
-    if (!drag) return;
-    const c = project(view.lat, view.lon, view.z);
-    Object.assign(view, unproject(c.x - drag.dx, c.y - drag.dy, view.z));
-    drag = null;
-    surface.classList.remove('dragging');
-    drawMap();
+// Arrow keys move quickly through suggestions; only reload the map once they settle.
+function drawMap({ now = false } = {}) {
+  clearTimeout(mapTimer);
+  const apply = () => {
+    const src = embedUrl();
+    const frame = panel.querySelector('.pm-frame');
+    if (!src || src === mapSrc) return;
+    mapSrc = src;
+    frame.src = src;
   };
-  surface.addEventListener('pointerup', end);
-  surface.addEventListener('pointercancel', end);
-  surface.addEventListener(
-    'wheel',
-    (e) => {
-      e.preventDefault();
-      zoom(e.deltaY < 0 ? 1 : -1);
-    },
-    { passive: false },
-  );
-  panel.querySelector('[data-zoom="in"]').addEventListener('click', () => zoom(1));
-  panel.querySelector('[data-zoom="out"]').addEventListener('click', () => zoom(-1));
-}
-
-function zoom(step) {
-  view.z = Math.max(3, Math.min(18, view.z + step));
-  drawMap();
+  if (now) apply();
+  else mapTimer = setTimeout(apply, 300);
 }
 
 // ---- Panel ---------------------------------------------------------------------------
@@ -172,10 +145,8 @@ function render(state) {
     : '';
 }
 
-function highlight(i, { move = true } = {}) {
+function highlight(i) {
   active = i;
-  const item = items[i];
-  if (item && move) Object.assign(view, { lat: item.lat, lon: item.lon, z: item.zoom });
   render();
   drawMap();
 }
@@ -184,8 +155,7 @@ function open() {
   if (!panel.hidden) return;
   panel.hidden = false;
   input.setAttribute('aria-expanded', 'true');
-  if (!items.length && bias) Object.assign(view, { lat: bias.lat, lon: bias.lon, z: 12 });
-  drawMap();
+  drawMap({ now: true });
 }
 
 export function closePlaces() {
@@ -238,19 +208,14 @@ export async function initPlaces(opts) {
   panel.innerHTML = `
     <ul class="places-list" id="places-list" role="listbox" aria-label="Address suggestions"></ul>
     <div class="places-map">
-      <div class="pm-surface">
-        <div class="pm-tiles"></div>
-        <svg class="pm-pin" viewBox="0 0 24 32" aria-hidden="true" hidden><path d="M12 31s10-10.2 10-18A10 10 0 0 0 2 13c0 7.8 10 18 10 18z"/><circle cx="12" cy="12.5" r="3.6"/></svg>
-        <div class="pm-zoom"><button type="button" data-zoom="in" aria-label="Zoom in">+</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button></div>
-        <div class="pm-attrib">© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a></div>
-      </div>
+      <iframe class="pm-frame" title="Map of the highlighted address" referrerpolicy="no-referrer-when-downgrade" loading="lazy"></iframe>
       <div class="pm-actions"></div>
-    </div>`;
+    </div>
+    <p class="places-credit">Address suggestions © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, via Photon</p>`;
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-controls', 'places-list');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-expanded', 'false');
-  wireMap();
 
   input.addEventListener('input', updatePlaces);
   input.addEventListener('focus', updatePlaces);
@@ -285,13 +250,5 @@ export async function initPlaces(opts) {
   document.addEventListener('pointerdown', (e) => {
     if (!e.target.closest('#places, .search-box, #engines')) closePlaces();
   });
-  new ResizeObserver(() => !panel.hidden && drawMap()).observe(panel);
-
-  // Rank suggestions around the place the weather is for.
-  try {
-    const { settings } = await chrome.storage.sync.get('settings');
-    const manual = settings?.location?.mode === 'manual' && settings.location.lat != null ? settings.location : null;
-    const geo = manual || (await local.get('geo'));
-    if (geo?.lat != null) bias = { lat: geo.lat, lon: geo.lon };
-  } catch {}
+  loadBias();
 }
