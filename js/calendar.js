@@ -2,7 +2,9 @@ import { $, esc, cached, hash, local, startOfDay, addDays, fmtTime, updatedText,
 import { graph } from './msauth.js';
 import { gapi, googleAccount, googleConfigured } from './gauth.js';
 import { BUILT_IN_HOSTS, msClientId } from './settings.js';
-import { icon } from './icons.js';
+import { icon, weatherIcon } from './icons.js';
+import { describe } from './weather.js';
+import { tripInfo, leaveText, tripSources } from './trip.js';
 
 const DAYS_AHEAD = 7;
 
@@ -253,7 +255,7 @@ const dedupe = (list) => {
     });
 };
 
-function allEvents() {
+export function allEvents() {
   return dedupe([...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))));
 }
 
@@ -315,7 +317,9 @@ export function nextUp() {
   const timed = allEvents().filter((e) => !e.allDay && e.end > now && e.start < now + 18 * 3600e3);
   const current = timed.filter((e) => e.start <= now).sort((a, b) => b.start - a.start)[0];
   const next = timed.find((e) => e.start > now);
-  if (next && (!current || next.start - now < 15 * 60e3)) return { event: next, mode: 'next' };
+  // Mid-meeting, the next event takes over 15 minutes before it starts, or before you need to leave.
+  const leaveAt = next && tripInfo(next)?.leave?.at;
+  if (next && (!current || Math.min(next.start, leaveAt || Infinity) - now < 15 * 60e3)) return { event: next, mode: 'next' };
   if (current) return { event: current, mode: 'now' };
   return null;
 }
@@ -365,6 +369,26 @@ function ruler(timed, today, now, h24) {
   </div>`;
 }
 
+// The forecast at the event's place and time, and when to leave to get there.
+function tripLine(e, state, h24) {
+  const t = state === 'past' ? null : tripInfo(e);
+  if (!t) return '';
+  const bits = [];
+  if (t.wx) {
+    const { label, glyph } = describe(t.wx.code, t.wx.isDay);
+    const temp = Math.round(t.wx.temp);
+    bits.push(
+      `<span class="ev-wx" title="${esc(`${label}, ${temp}° at ${fmtTime(e.start, h24)}${t.wx.pop >= 20 ? `, ${t.wx.pop}% chance of rain` : ''}`)}">${weatherIcon(glyph)}${temp}°${t.wx.pop >= 20 ? `<span class="ev-pop">${icon('drop', 'drop')}${t.wx.pop}%</span>` : ''}</span>`,
+    );
+  }
+  if (t.leave && !state) {
+    const { text, level } = leaveText(t.leave, (ms) => fmtTime(ms, h24));
+    const how = t.leave.traffic ? 'with current traffic' : 'without traffic';
+    bits.push(`<span class="ev-leave${level ? ` ${level}` : ''}" title="${esc(`About ${t.leave.mins} min drive ${how}`)}">${icon('car')}${esc(text)}<span class="ev-drive"> · ${t.leave.mins} min</span></span>`);
+  }
+  return bits.length ? `<span class="ev-extra">${bits.join('')}</span>` : '';
+}
+
 export function timedRow(e, now, h24, { compact = false } = {}) {
   const state = e.end <= now ? 'past' : e.start <= now ? 'current' : '';
   const range = compact ? fmtTime(e.start, h24) : `${fmtTime(e.start, h24)}<span class="to">${fmtTime(e.end, h24)}</span>`;
@@ -373,6 +397,7 @@ export function timedRow(e, now, h24, { compact = false } = {}) {
     <div class="ev-main">
       <a class="ev-title" href="${esc(eventHref(e))}">${dot(e.color)}<span>${esc(e.title)}</span></a>
       ${!compact && e.location && !/^https?:/.test(e.location) ? `<span class="ev-where">${esc(e.location)}</span>` : ''}
+      ${tripLine(e, state, h24)}
     </div>
     ${state === 'current' ? '<span class="pill now-pill">Now</span>' : ''}
     ${!compact || state === 'current' ? joinButton(e) : ''}
@@ -454,7 +479,12 @@ export function renderAgenda(S) {
         : `<div class="notice setup"><p>Connect Google or Outlook to see your day here.</p><button class="btn small primary" type="button" data-open-settings="accounts">Connect a calendar</button></div>`,
     );
   }
-  body.innerHTML = parts.join('') + notices.join('');
+  const trips = tripSources();
+  const credit = [
+    trips.osrm && 'Drive times by <a href="https://routing.openstreetmap.de/">FOSSGIS OSRM</a>, map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    trips.tomtom && 'Traffic by <a href="https://www.tomtom.com/">TomTom</a>',
+  ].filter(Boolean);
+  body.innerHTML = parts.join('') + notices.join('') + (configured && credit.length ? `<p class="credit">${credit.join(' · ')}</p>` : '');
   const upcoming = body.querySelector('.upcoming');
   if (upcoming) upcoming.classList.toggle('scrolls', upcoming.scrollHeight > upcoming.clientHeight + 4);
 

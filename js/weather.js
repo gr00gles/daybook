@@ -111,6 +111,8 @@ async function fetchWeather(loc, units) {
   const w = wx.value;
   return {
     place: loc.name || 'Your location',
+    lat: +loc.lat,
+    lon: +loc.lon,
     wind: imperial ? 'mph' : 'km/h',
     current: w.current,
     hourly: w.hourly,

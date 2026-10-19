@@ -1,8 +1,12 @@
 import { loadSettings, ENGINES, outlookWebUrl } from './settings.js';
-import { $, esc, colorVar, safeUrl } from './util.js';
+import { $, esc, colorVar, safeUrl, fmtTime } from './util.js';
 import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
-import { refreshCalendars, renderAgenda, nextUp } from './calendar.js';
+import { refreshCalendars, renderAgenda, nextUp, allEvents } from './calendar.js';
+import { initAlerts, refreshAlerts } from './alerts.js';
+import { renderMoon, loadHolidays, renderHoliday } from './sky.js';
+import { planTrips, tripInfo, leaveText } from './trip.js';
+import { refreshStocks } from './stocks.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { initYouTube, refreshYouTube } from './youtube.js';
@@ -61,12 +65,15 @@ function renderNextUp() {
   const until = new Date(e.end).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: !S.clock24 });
   const mins = Math.round((e.start - Date.now()) / 60000);
   const when = mode === 'now' ? `until ${until}` : mins < 60 ? `in ${Math.max(1, mins)} min` : `at ${time}`;
+  const trip = mode === 'next' ? tripInfo(e)?.leave : null;
+  const leave = trip && trip.at - Date.now() < 90 * 60e3 ? leaveText(trip, (ms) => fmtTime(ms, S.clock24)) : null;
   el.hidden = false;
-  el.className = `next-up${mode === 'now' || mins <= 15 ? ' soon' : ''}`;
+  el.className = `next-up${mode === 'now' || mins <= 15 || leave?.level ? ' soon' : ''}`;
   el.innerHTML = `<span class="nu-label">${mode === 'now' ? 'Now' : 'Next'}</span>
     <span class="cal-dot" style="--c: ${colorVar(e.color)}"></span>
     <span class="nu-title">${esc(e.title)}</span>
     <span class="nu-when">${when}</span>
+    ${leave ? `<span class="nu-leave${leave.level ? ` ${leave.level}` : ''}" title="About ${trip.mins} min drive">${icon('car')}${esc(leave.text)}</span>` : ''}
     ${e.join ? `<a class="join" href="${esc(safeUrl(e.join))}">${icon('video')}<span>Join</span></a>` : ''}`;
 }
 
@@ -87,6 +94,10 @@ function tick(force = false) {
   $('#date-meta').textContent = `Week ${isoWeek(new Date())} · Day ${dayOfYear}`;
   document.documentElement.dataset.phase = skyPhase();
   renderSun();
+  if (S.show.sky) {
+    renderMoon(lastWeather()?.lat);
+    renderHoliday();
+  }
   renderNextUp();
   if (S.show.calendar) {
     renderAgenda(S);
@@ -236,15 +247,35 @@ async function checkForUpdate() {
 
 // ---- Refresh loop ------------------------------------------------------------------
 
+function renderCalendars() {
+  renderAgenda(S);
+  renderMonth();
+  renderNextUp();
+}
+
+// Weather and leave-by times for events with a place, once the calendars settle.
+let tripTimer;
+function scheduleTrips() {
+  if (!S.show.calendar || !S.show.travel) return;
+  clearTimeout(tripTimer);
+  tripTimer = setTimeout(() => planTrips(S, allEvents(), renderCalendars), 800);
+}
+
 function refreshAll(force = false) {
-  if (S.show.weather) refreshWeather(S, force, () => (document.documentElement.dataset.phase = skyPhase()));
+  if (S.show.weather)
+    refreshWeather(S, force, (data) => {
+      document.documentElement.dataset.phase = skyPhase();
+      if (S.show.sky) renderMoon(data.lat);
+      if (S.show.alerts) refreshAlerts(S, data, force);
+      scheduleTrips();
+    });
   if (S.show.mail) refreshMail(S, force);
   if (S.show.calendar)
     refreshCalendars(S, force, () => {
-      renderAgenda(S);
-      renderMonth();
-      renderNextUp();
+      renderCalendars();
+      scheduleTrips();
     });
+  if (S.show.stocks) refreshStocks(S, force);
   if (S.show.news) refreshNews(S, force);
   if (S.show.youtube) refreshYouTube(S, force);
 }
@@ -263,7 +294,13 @@ $('#refresh-btn').addEventListener('click', (e) => {
 
 initSearch();
 initMail();
+initAlerts();
 if (S.show.calendar) initMonth(S);
+if (S.show.sky) loadHolidays(() => {
+  renderHoliday();
+  if (S.show.calendar) renderMonth();
+});
+$('#moon').hidden = !S.show.sky;
 if (S.show.youtube) await initYouTube(S);
 initNews();
 tick(true);

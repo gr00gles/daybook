@@ -61,7 +61,12 @@ export const DEFAULTS = {
   outlook: { clientId: '', mail: true, calendar: true, color: 5 }, // clientId overrides config.js
   news: { topics: ['top', 'us', 'technology'], custom: [] },
   youtube: { hideShorts: true },
-  show: { weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true, youtube: true },
+  travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
+  stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
+  show: {
+    weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true, youtube: true,
+    alerts: true, sky: true, travel: true, packages: true, stocks: true,
+  },
 };
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);

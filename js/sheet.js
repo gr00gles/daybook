@@ -105,13 +105,37 @@ function build() {
     ${check('youtube.hideShorts', 'Hide Shorts', d.youtube.hideShorts)}
   </section>
 
+  <section id="set-travel">
+    <h3>Travel time</h3>
+    <p class="hint">For events with an address, Daybook shows the weather there and, for the next 24 hours, when to leave from where you are. Addresses are looked up with Photon (OpenStreetMap), and drive times come from OSRM, which doesn’t know about traffic.</p>
+    <div class="grid2">
+      <label class="field"><span>Extra time before leaving</span><select id="s-buffer" data-path="travel.buffer" data-type="number">${[0, 5, 10, 15, 20, 30].map((m) => opt(m, m ? `${m} minutes` : 'None', d.travel.buffer)).join('')}</select></label>
+      <label class="field"><span>TomTom key for live traffic (optional)</span><input id="s-tomtom" type="text" data-path="travel.tomtomKey" value="${esc(d.travel.tomtomKey)}" placeholder="Paste your TomTom API key" spellcheck="false" autocomplete="off"></label>
+    </div>
+    <p class="hint">To get a TomTom key, sign up free at <a href="https://developer.tomtom.com/" target="_blank" rel="noopener">developer.tomtom.com</a> and copy the key from your dashboard.</p>
+  </section>
+
+  <section id="set-stocks">
+    <h3>Stocks</h3>
+    <p class="hint">A watchlist card under the weather. It needs a free key from Finnhub: sign up at <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io</a> and copy the API key from your dashboard.</p>
+    <div class="grid2">
+      <label class="field"><span>Finnhub API key</span><input id="s-finnhub" type="text" data-path="stocks.key" value="${esc(d.stocks.key)}" placeholder="Paste your Finnhub API key" spellcheck="false" autocomplete="off"></label>
+      <label class="field"><span>Symbols, separated by commas</span><input id="s-symbols" type="text" data-path="stocks.symbols" data-type="list" value="${esc(d.stocks.symbols.join(', '))}" placeholder="SPY, AAPL, MSFT" spellcheck="false" autocomplete="off"></label>
+    </div>
+  </section>
+
   <section id="set-sections">
     <h3>Sections</h3>
     <div class="topics">
       ${check('show.weather', 'Weather', d.show.weather)}
+      ${check('show.alerts', 'Weather alerts', d.show.alerts)}
+      ${check('show.sky', 'Moon and holidays', d.show.sky)}
       ${check('show.calendar', 'Calendar', d.show.calendar)}
+      ${check('show.travel', 'Travel time and event weather', d.show.travel)}
       ${check('show.mail', 'Mail', d.show.mail)}
+      ${check('show.packages', 'Deliveries', d.show.packages)}
       ${check('show.news', 'Headlines', d.show.news)}
+      ${check('show.stocks', 'Stocks', d.show.stocks)}
       ${check('show.notes', 'Notes', d.show.notes)}
       ${check('show.youtube', 'YouTube', d.show.youtube)}
       ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}
@@ -145,6 +169,7 @@ function readValue(el) {
   if (el.type === 'checkbox') return el.checked;
   if (el.dataset.type === 'number') return Number(el.value);
   if (el.dataset.type === 'bool') return el.value === 'true';
+  if (el.dataset.type === 'list') return [...new Set(el.value.split(/[\s,]+/).map((s) => s.trim().toUpperCase()).filter(Boolean))];
   return el.value;
 }
 

@@ -1,6 +1,6 @@
 # Daybook
 
-A Chrome new tab page that shows the time, the weather, your Google and Outlook calendars, unread Gmail and Outlook mail, headlines, a search bar, your most-visited sites and a notes pad.
+A Chrome new tab page that shows the time, the weather (with severe weather alerts), your Google and Outlook calendars with when to leave for each event, unread Gmail and Outlook mail with your deliveries, the latest YouTube uploads, stocks, headlines, a search bar, your most-visited sites and a notes pad.
 
 It is a small Chrome extension. Everything runs in the browser; there is no server.
 
@@ -49,14 +49,19 @@ Zip the `daybook` folder (or reuse `daybook.zip`) and send it. Each person insta
 - **Unread** mail: hover over a message to **mark it as read** or **delete** it (it goes to Trash or Deleted Items). A bar at the bottom offers **Undo**. The first time, Google or Microsoft asks you to allow it. For Gmail this works on the Google account connected in Settings; other signed-in Gmail accounts can only be opened.
 - **YouTube** flips through the latest uploads from the channels you subscribe to, one at a time, every few seconds (hover to hold it still; use the arrows, scroll wheel or arrow keys to flip). Videos from the last 24 hours are tagged **New**. Click **Show my subscriptions** once to allow it. Shorts are hidden unless you turn that off in Settings → YouTube.
 - **Today** lists today's events, with a timeline and Join buttons for video calls, plus the next six days. Under it, the **month calendar** shows every event for the month; use the arrows to flip months and click a day to see its full schedule.
+- **Travel time:** events with an address show the forecast there at that hour and, for the next 24 hours, a **Leave by** time from where you are (drive time plus 5 minutes, which you can change in Settings → Travel time). The **Next** bubble under the clock counts down to leaving. Drive times come from OSRM, which doesn't know about traffic; paste a free TomTom key in Settings → Travel time to use live traffic instead. Video calls, rooms and places more than 250 km away are skipped.
+- **Weather alerts** from the US National Weather Service show as a chip above the current conditions and as banners on the Weather card (click one for the full text). Outside the US there are none.
+- **Moon and holidays:** the moon's phase sits under the sunrise arc. The next holiday within a month shows under the date, and holidays (plus the days the clocks change) are marked on the month calendar. US holidays are built in; elsewhere they come from Nager.Date for the country your browser's language names.
+- **Deliveries** at the top of Unread: shipping emails with their latest status. When the email has a UPS, USPS, FedEx, DHL or Amazon tracking number, the link goes to the carrier's tracking page; otherwise it opens the email. Read emails count too for the Google account connected in Settings once you've used **Mark as read** or **Delete** there.
+- **Markets** (optional): add a free Finnhub key and your symbols in Settings → Stocks. Quotes refresh every 5 minutes while the US market is open; click a row to open it on Yahoo Finance.
 - Chrome puts the cursor in the address bar on a new tab; press `/` to jump to Daybook's search box.
 - Pick **Maps** under the search box (or start with `!m`) and type an address: suggestions appear with a map. Nearest places to where you are come first. Use ↑ ↓ to move between them, Enter to open the highlighted one in Google Maps, or click **Directions**. Places you open are kept as **Recent** places (on this computer only): they show when you click into the search box in Maps mode and at the top while you type. Remove one with its **×**, or use **Clear recent places**. Address suggestions come from Photon (OpenStreetMap data); the map is an embedded Google Map.
 - In the search box, start with `!y` (YouTube), `!m` (Maps), `!c` (Claude), `!w` (Wikipedia), `!a` (Amazon) or `!e` (search your Gmail). Ctrl+Enter or ⌘+Enter opens results in a new tab.
-- Cards show saved data instantly and refresh in the background: Gmail every minute, Outlook every 2, calendars every 5–10, weather every 15, headlines every 20. ↻ refreshes everything now.
+- Cards show saved data instantly and refresh in the background: Gmail every minute, Outlook every 2, calendars every 5–10, weather alerts every 5, weather every 15, headlines every 20, stocks every 5 while the market is open. ↻ refreshes everything now. Each feature can be turned off in Settings → Sections.
 
 ## Privacy
 
-Daybook never sends email and only changes mail when you click **Mark as read** or **Delete** (deleted mail goes to Trash or Deleted Items, so it can be recovered). Settings sync through your Chrome profile; sign-ins and cached mail, calendar and weather data stay on your computer. The page talks only to Google, Microsoft, Open-Meteo (weather), BigDataCloud (city name from coordinates), and, when you search in Maps mode, Photon (address suggestions) and Google Maps (the map preview). Full policy: https://gr00gles.github.io/privacy.html
+Daybook never sends email and only changes mail when you click **Mark as read** or **Delete** (deleted mail goes to Trash or Deleted Items, so it can be recovered). Settings sync through your Chrome profile; sign-ins and cached mail, calendar and weather data stay on your computer. The page talks only to Google, Microsoft, Open-Meteo (weather), BigDataCloud (city name from coordinates), the US National Weather Service (alerts for your weather location), Photon (address suggestions in Maps mode, and looking up the addresses of upcoming events), the FOSSGIS OSRM server (drive times between your location and those addresses), Google Maps (the map preview), Nager.Date (holidays, outside the US), and, only if you add your own keys, TomTom (traffic) and Finnhub (stock quotes). Full policy: https://gr00gles.github.io/privacy.html
 
 ## Updating
 

@@ -112,12 +112,13 @@ async function scopedToken(scope, interactive, what) {
 const gmailToken = (interactive) => scopedToken(GMAIL_SCOPE, interactive, 'manage your Gmail');
 
 // Gmail API calls for the Google account connected in Daybook. The first call opens Google's
-// consent window for the gmail.modify permission.
-export async function gmailApi(path, { method = 'POST', body } = {}) {
+// consent window for the gmail.modify permission; with quiet it never does and fails instead.
+export async function gmailApi(path, { method = 'POST', body, quiet = false } = {}) {
   let t;
   try {
     t = await gmailToken(false);
   } catch {
+    if (quiet) throw new NeedsGoogle('Gmail permission not granted');
     try {
       t = await gmailToken(true);
     } catch (err) {

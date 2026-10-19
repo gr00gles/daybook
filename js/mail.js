@@ -3,10 +3,12 @@ import { graph, graphWrite, msAccount } from './msauth.js';
 import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
 import { GMAIL_FEEDS, outlookWebUrl, msClientId } from './settings.js';
 import { icon } from './icons.js';
+import { deliveriesFrom, deliveriesHtml, deliveryOf, deliveryTag, refreshShippingMail } from './packages.js';
 
 const sources = new Map(); // key -> { kind, label, ... , data, at, error }
 let filter = 'all';
 let settingsRef;
+let shipping = []; // recent shipping emails from the Gmail API, read or not
 
 // Asks the background worker to fetch the feed (see background.js for why).
 async function feedRequest(url) {
@@ -124,6 +126,12 @@ export async function refreshMail(S, force) {
   googleEmail = googleConfigured() ? (await googleAccount())?.email?.toLowerCase() || '' : '';
   gmailBlocked = noGmail && !(await gmailAllowed());
   const hidden = new Set(S.gmail.hidden || []);
+  if (S.show.packages && googleEmail && accounts.some((a) => a.email === googleEmail) && !hidden.has(googleEmail)) {
+    refreshShippingMail(googleEmail, force, (list) => {
+      shipping = list;
+      render();
+    });
+  } else shipping = [];
   accounts
     .filter((a) => !hidden.has(a.email))
     .forEach((acct, i) => {
@@ -215,6 +223,10 @@ function render() {
     .flatMap(([key, s]) => s.data.items.map((m) => ({ ...m, key, letter: s.letter, account: sourceLabel(s) })))
     .sort((a, b) => b.at - a.at)
     .slice(0, 40);
+  const packages = settingsRef.show.packages;
+  const deliveries = packages
+    ? deliveriesFrom([...live.flatMap(([, s]) => s.data.items.map((m) => ({ ...m, account: sourceLabel(s) }))), ...shipping])
+    : [];
 
   const rows = items.length
     ? `<ol class="mail-list">${items
@@ -223,7 +235,7 @@ function render() {
             <span class="src" title="${esc(m.account)}">${m.letter}</span>
             <span class="mail-from">${esc(m.from)}</span>
             <time class="mail-time" datetime="${new Date(m.at).toISOString()}">${relTime(m.at)}</time>
-            <span class="mail-subject">${esc(m.subject)}</span>
+            <span class="mail-subject">${packages ? deliveryTag(deliveryOf(m)) : ''}${esc(m.subject)}</span>
             <span class="mail-snippet">${esc(m.snippet)}</span>
           </a>${
             canChange(sources.get(m.key))
@@ -253,7 +265,7 @@ function render() {
     settingsRef.outlook.mail && !outlookConnected && msClientId(settingsRef)
       ? `<button class="foot-link" type="button" data-open-settings="accounts">${icon('plus')}Connect Outlook</button>`
       : '';
-  body.innerHTML = `${live.length > 1 ? `<div class="filters" role="group" aria-label="Show mail from">${chips.join('')}</div>` : ''}${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
+  body.innerHTML = `${deliveriesHtml(deliveries)}${live.length > 1 ? `<div class="filters" role="group" aria-label="Show mail from">${chips.join('')}</div>` : ''}${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
   $('#mail-links').innerHTML = openLinks + connectOutlook;
   const ats = list.map(([, s]) => s.at).filter(Boolean);
   $('#mail-updated').textContent = ats.length ? updatedText(Math.min(...ats)) : '';

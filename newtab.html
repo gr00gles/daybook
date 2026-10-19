@@ -15,6 +15,7 @@
       <p class="greeting" id="greeting">Hello</p>
       <p class="clock"><span id="clock-time"></span><span class="ampm" id="clock-ampm"></span></p>
       <p class="date-line"><span id="date-long"></span><span class="date-meta" id="date-meta"></span></p>
+      <p class="holiday-line" id="holiday-line" hidden></p>
       <div class="next-up" id="next-up" hidden></div>
     </section>
 
@@ -31,7 +32,11 @@
       <nav class="shortcuts" id="shortcuts" aria-label="Shortcuts" data-section="shortcuts"></nav>
     </section>
 
-    <section class="now-weather" id="now-weather" aria-label="Weather now" data-section="weather"></section>
+    <section class="now-weather" aria-label="Weather now" data-section="weather">
+      <div id="now-weather"></div>
+      <button class="nw-alert" id="nw-alert" type="button" hidden></button>
+      <div class="moon" id="moon"></div>
+    </section>
   </div>
   <div class="toolbar">
     <button class="icon-btn" id="refresh-btn" type="button" title="Refresh everything" aria-label="Refresh everything"></button>
@@ -102,7 +107,18 @@
         <span class="head-meta" id="weather-place"></span>
         <span class="stamp" id="weather-updated"></span>
       </header>
+      <div class="wx-alerts" id="wx-alerts" data-section="alerts"></div>
       <div class="card-body" id="weather-body"><p class="quiet">Getting the forecast…</p></div>
+    </section>
+
+    <section class="card" id="card-stocks" data-section="stocks" aria-labelledby="stocks-h" hidden>
+      <header class="card-head">
+        <h2 id="stocks-h">Markets</h2>
+        <span class="head-meta" id="stocks-state"></span>
+        <span class="stamp" id="stocks-updated"></span>
+      </header>
+      <div class="card-body" id="stocks-body"><p class="quiet">Getting quotes…</p></div>
+      <p class="credit">Quotes by <a href="https://finnhub.io/">Finnhub</a></p>
     </section>
 
     <section class="card" id="card-news" data-section="news" aria-labelledby="news-h">
