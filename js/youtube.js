@@ -1,6 +1,7 @@
 // New uploads from your YouTube subscriptions. The subscription list comes from the YouTube
-// Data API (once a day); new videos come from each channel's public feed, which costs no
-// API quota.
+// Data API (once a day); new videos come from each channel's public feed, which costs no API
+// quota. With Shorts hidden, the feed used is the channel's long-form uploads list (UULF…),
+// which leaves out Shorts and live streams.
 import { $, esc, local, relTime, errorText } from './util.js';
 import { youtubeApi, googleAccount, googleConfigured } from './gauth.js';
 import { icon } from './icons.js';
@@ -8,16 +9,18 @@ import { icon } from './icons.js';
 const SUBS_KEY = 'yt:subs';
 const FEED_KEY = 'yt:feed';
 const SEEN_KEY = 'yt:seen';
-const SHORTS_KEY = 'yt:shorts';
 const SUBS_MAX_AGE = 24 * 3600e3;
-const FEED_MAX_AGE = 30 * 60e3;
+const FEED_MAX_AGE = 15 * 60e3;
+// Each refresh checks the channels checked longest ago, at most this many, so a long
+// subscription list is spread out instead of hitting YouTube all at once.
+const BATCH = 40;
+const BACKOFF = 60 * 60e3;
 const WINDOW = 7 * 86400e3; // uploads older than a week aren't news
 const SHOWN = 8;
 
 let settingsRef;
 let state = { status: 'loading', videos: [], error: null, at: 0, failed: 0 };
 let seen = { at: 0, opened: [] };
-let shorts = {};
 let expanded = false;
 let refreshing = null;
 
@@ -41,10 +44,22 @@ async function listSubscriptions({ interactive = false, force = false } = {}) {
   return list;
 }
 
+class Throttled extends Error {}
+
+function feedUrl(ch) {
+  if (settingsRef.youtube.hideShorts && ch.id.startsWith('UC'))
+    return `https://www.youtube.com/feeds/videos.xml?playlist_id=UULF${encodeURIComponent(ch.id.slice(2))}`;
+  return `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(ch.id)}`;
+}
+
 async function channelUploads(ch) {
-  const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(ch.id)}`, { credentials: 'omit', cache: 'no-store' });
+  const res = await fetch(feedUrl(ch), { credentials: 'omit', cache: 'no-store' });
+  if (res.status === 403 || res.status === 429) throw new Throttled(`HTTP ${res.status}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const xml = new DOMParser().parseFromString(await res.text(), 'text/xml');
+  const text = await res.text();
+  // A "we've detected unusual traffic" page comes back as HTML instead of a feed.
+  if (!/<feed[\s>]/.test(text)) throw new Throttled('not a feed');
+  const xml = new DOMParser().parseFromString(text, 'text/xml');
   const cutoff = Date.now() - WINDOW;
   return [...xml.getElementsByTagName('entry')]
     .map((e) => {
@@ -57,77 +72,78 @@ async function channelUploads(ch) {
         at: Date.parse(e.getElementsByTagName('published')[0]?.textContent || ''),
       };
     })
-    .filter((v) => v.id && v.at > cutoff)
+    // Scheduled premieres show up with a future time before they air.
+    .filter((v) => v.id && v.at > cutoff && v.at <= Date.now())
     .slice(0, 5);
 }
 
-// Runs fn over items, a few at a time, so a long subscription list doesn't flood YouTube.
+// Runs fn over items, a few at a time. If YouTube starts refusing requests, the rest are
+// skipped and the caller backs off.
 async function pool(items, size, fn) {
-  const out = new Array(items.length);
+  const out = new Array(items.length).fill(undefined);
   let next = 0;
+  let throttled = false;
   await Promise.all(
     Array.from({ length: Math.min(size, items.length) }, async () => {
-      while (next < items.length) {
+      while (next < items.length && !throttled) {
         const i = next++;
         try {
           out[i] = await fn(items[i]);
-        } catch {
+        } catch (err) {
           out[i] = null;
+          if (err instanceof Throttled) throttled = true;
         }
       }
     }),
   );
-  return out;
+  return { out, throttled };
 }
 
-async function refreshFeed(subs) {
-  const prev = (await local.get(FEED_KEY))?.byChannel || {};
-  const results = await pool(subs, 6, channelUploads);
-  const byChannel = {};
-  // A channel whose feed failed this time keeps what it had.
-  subs.forEach((ch, i) => (byChannel[ch.id] = results[i] ?? (prev[ch.id] || []).filter((v) => v.at > Date.now() - WINDOW)));
-  const entry = { at: Date.now(), byChannel, failed: results.filter((r) => r === null).length, channels: subs.length };
+async function refreshFeed(subs, { all = false } = {}) {
+  const prev = (await local.get(FEED_KEY)) || {};
+  const mode = settingsRef.youtube.hideShorts ? 'long' : 'all';
+  const fresh = prev.mode === mode;
+  const byChannel = fresh ? { ...prev.byChannel } : {};
+  const checked = fresh ? { ...prev.checked } : {};
+  if (!all && prev.pausedUntil > Date.now()) return { ...prev, byChannel, checked };
+  const due = [...subs].sort((a, b) => (checked[a.id] || 0) - (checked[b.id] || 0)).slice(0, all ? subs.length : BATCH);
+  const { out, throttled } = await pool(due, 4, channelUploads);
+  let failed = 0;
+  due.forEach((ch, i) => {
+    if (out[i] === undefined) return; // skipped after YouTube pushed back
+    if (out[i] === null) failed++;
+    else byChannel[ch.id] = out[i];
+    checked[ch.id] = Date.now();
+  });
+  // Drop channels you've unsubscribed from, and uploads that have aged out.
+  const ids = new Set(subs.map((c) => c.id));
+  for (const id of Object.keys(byChannel)) {
+    if (!ids.has(id)) delete byChannel[id];
+    else byChannel[id] = byChannel[id].filter((v) => v.at > Date.now() - WINDOW);
+  }
+  const entry = { at: Date.now(), mode, byChannel, checked, failed, channels: subs.length, pausedUntil: throttled ? Date.now() + BACKOFF : 0 };
   await local.set(FEED_KEY, entry);
   return entry;
 }
 
-// Shorts answer at youtube.com/shorts/<id>; regular videos redirect from there to /watch.
-async function isShort(id) {
-  if (id in shorts) return shorts[id];
-  try {
-    const res = await fetch(`https://www.youtube.com/shorts/${encodeURIComponent(id)}`, { method: 'HEAD', redirect: 'manual', credentials: 'omit' });
-    shorts[id] = res.type !== 'opaqueredirect' && res.status === 200;
-  } catch {
-    shorts[id] = false;
-  }
-  return shorts[id];
-}
-
-async function applyFeed(entry) {
-  let videos = Object.values(entry.byChannel || {})
+function applyFeed(entry) {
+  const videos = Object.values(entry.byChannel || {})
     .flat()
     .sort((a, b) => b.at - a.at);
-  if (settingsRef.youtube.hideShorts) {
-    const top = videos.slice(0, 40);
-    const flags = await pool(top, 6, (v) => isShort(v.id));
-    local.set(SHORTS_KEY, Object.fromEntries(Object.entries(shorts).slice(-500)));
-    videos = top.filter((_, i) => !flags[i]);
-  }
-  state = { status: 'ready', videos, error: null, at: entry.at, failed: entry.failed, channels: entry.channels };
+  state = { status: 'ready', videos, error: null, at: entry.at, failed: entry.failed, channels: entry.channels, paused: entry.pausedUntil > Date.now() };
 }
 
 async function load({ interactive = false, force = false } = {}) {
   const stored = await local.get(FEED_KEY);
-  if (stored && !force && Date.now() - stored.at < FEED_MAX_AGE) {
-    await applyFeed(stored);
-    return;
-  }
-  if (stored) {
-    await applyFeed(stored);
+  const mode = settingsRef.youtube.hideShorts ? 'long' : 'all';
+  if (stored?.mode === mode) {
+    applyFeed(stored);
+    if (!force && Date.now() - stored.at < FEED_MAX_AGE) return;
     render();
   }
   const subs = await listSubscriptions({ interactive, force: force && interactive });
-  await applyFeed(await refreshFeed(subs));
+  // The very first look (or after switching Shorts on/off) checks every channel.
+  applyFeed(await refreshFeed(subs, { all: stored?.mode !== mode || interactive }));
 }
 
 export async function refreshYouTube(S, force = false) {
@@ -203,7 +219,11 @@ function render() {
     : '<p class="quiet">No new videos from your subscriptions this week.</p>';
   if (state.error) body.insertAdjacentHTML('beforeend', `<p class="notice warn">Couldn’t refresh: ${esc(errorText(state.error))}.</p>`);
   foot.innerHTML = `${fresh.length ? `<button class="foot-link" type="button" data-yt="seen">${icon('mail-open')}Mark all as seen</button>` : ''}<a class="foot-link" href="https://www.youtube.com/feed/subscriptions">${icon('external')}Subscriptions</a>${
-    state.failed ? `<span class="stamp">${state.failed} of ${state.channels} channels didn’t answer</span>` : ''
+    state.paused
+      ? '<span class="stamp">YouTube asked Daybook to slow down; checking again within the hour</span>'
+      : state.failed
+        ? `<span class="stamp">${state.failed} channel${state.failed === 1 ? '' : 's'} didn’t answer</span>`
+        : ''
   }`;
 }
 
@@ -212,7 +232,6 @@ export async function initYouTube(S) {
   const card = $('#card-youtube');
   if (!card) return;
   seen = (await local.get(SEEN_KEY)) || { at: Date.now() - 86400e3, opened: [] };
-  shorts = (await local.get(SHORTS_KEY)) || {};
   card.addEventListener('click', async (e) => {
     const open = e.target.closest('[data-yt-open]');
     if (open) {

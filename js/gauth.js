@@ -70,7 +70,8 @@ export async function disconnectGoogle() {
     await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(t)}`, { method: 'POST' }).catch(() => {});
     await chrome.identity.removeCachedAuthToken({ token: t }).catch(() => {});
   }
-  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list']);
+  // YouTube's terms require deleting its data once access is removed.
+  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'yt:subs', 'yt:feed', 'yt:seen', 'yt:shorts']);
 }
 
 export async function gapi(path) {
@@ -167,7 +168,7 @@ export async function youtubeApi(path, { interactive = false } = {}) {
     if (/accessNotConfigured|SERVICE_DISABLED/i.test(text))
       throw new Error('The YouTube API is turned off for this copy of Daybook. The person who shared it needs to enable “YouTube Data API v3” in Google Cloud');
     if (/quotaExceeded|dailyLimitExceeded/i.test(text)) throw new Error('YouTube’s daily limit for this copy of Daybook is used up. It resets at midnight Pacific time');
-    if (/subscriptionForbidden/i.test(text)) throw new Error('This YouTube account keeps its subscriptions private');
+    if (/youtubeSignupRequired|channelNotFound/i.test(text)) throw new Error('This Google account doesn’t have a YouTube channel, so it has no subscriptions to show');
     throw new Error(j.error?.message || `YouTube returned ${res.status}`);
   }
   return j;
