@@ -2,13 +2,15 @@ import { loadSettings, ENGINES, outlookWebUrl } from './settings.js';
 import { $, $$, esc, colorVar, safeUrl, fmtTime, local } from './util.js';
 import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
-import { refreshCalendars, renderAgenda, nextUp, allEvents } from './calendar.js';
+import { refreshCalendars, renderAgenda, nextUp, allEvents, setGames } from './calendar.js';
 import { initAlerts, refreshAlerts } from './alerts.js';
-import { renderMoon, loadHolidays, renderHoliday } from './sky.js';
+import { renderMoon, loadHolidays, renderHoliday, setHolidayChoices } from './sky.js';
 import { planTrips, tripInfo, leaveText } from './trip.js';
 import { refreshStocks } from './stocks.js';
+import { refreshTeams } from './teams.js';
 import { initArea, refreshArea } from './area.js';
 import { initEvents } from './events.js';
+import { initDetails } from './details.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { initYouTube, refreshYouTube } from './youtube.js';
@@ -17,6 +19,9 @@ import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
 import { msAccount } from './msauth.js';
 import { icon } from './icons.js';
+import { groupTiles } from './sites.js';
+import { initDeliveries } from './packages.js';
+import { initAsk, ask, hasKey } from './ask.js';
 
 const S = await loadSettings();
 
@@ -119,7 +124,7 @@ function initSearch() {
   const input = $('#search-input');
   const chips = $('#engines');
   const paint = () => {
-    input.placeholder = `Search ${ENGINES[engine].label}`;
+    input.placeholder = `${ENGINES[engine].ask ? 'Ask' : 'Search'} ${ENGINES[engine].label}`;
     chips.innerHTML = Object.entries(ENGINES)
       .map(
         ([k, e]) =>
@@ -138,6 +143,7 @@ function initSearch() {
   });
   const navigate = (url, newTab) => (newTab ? window.open(url, '_blank') : (location.href = url));
   initPlaces({ input, isActive: () => engine === 'maps' || /^!m\s/i.test(input.value), navigate });
+  initAsk(input);
   const go = (newTab) => {
     if (openActivePlace(newTab)) return;
     let q = input.value.trim();
@@ -152,6 +158,13 @@ function initSearch() {
       }
     }
     const looksLikeUrl = !/\s/.test(q) && /^(https?:\/\/)?(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?(\/\S*)?$/i.test(q) && !bang;
+    // Claude and ChatGPT answer on the page when there's an API key; otherwise (or with
+    // Ctrl/Cmd+Enter) the question opens on their site, where you're signed in.
+    if (ENGINES[use].ask && !looksLikeUrl && !newTab && hasKey(use)) {
+      ask(use, q);
+      input.value = '';
+      return;
+    }
     const url = looksLikeUrl ? (/^https?:\/\//i.test(q) ? q : `https://${q}`) : ENGINES[use].url.replace('%s', encodeURIComponent(q));
     navigate(url, newTab);
   };
@@ -209,9 +222,12 @@ async function initShortcuts() {
     list.push({ title: siteName(s.title, host), url: s.url });
     if (list.length >= 10) break;
   }
-  $('#shortcuts').innerHTML = list
+  const sites = list
     .map((s) => `<a class="shortcut" href="${esc(s.url)}" title="${esc(s.url)}"><img src="${favicon(s.url)}" alt="" width="20" height="20"><span>${esc(s.title)}</span></a>`)
     .join('');
+  // Groups of saved sites come first, so they never fall off the end of the row.
+  const paint = async () => ($('#shortcuts').innerHTML = (await groupTiles({ companies: S.show.companies, changed: paint })) + sites);
+  await paint();
 }
 
 // ---- Notes -------------------------------------------------------------------------
@@ -282,6 +298,11 @@ function refreshAll(force = false) {
       scheduleTrips();
     });
   if (S.show.stocks) refreshStocks(S, force);
+  if (S.show.teams)
+    refreshTeams(S, force, (games) => {
+      setGames(games);
+      if (S.show.calendar) renderCalendars();
+    });
   if (S.show.area) refreshArea(S, force);
   if (S.show.news) refreshNews(S, force);
   if (S.show.youtube) refreshYouTube(S, force);
@@ -300,6 +321,8 @@ $('#refresh-btn').addEventListener('click', (e) => {
 });
 
 initSearch();
+if (S.show.mail && S.show.packages) initDeliveries();
+else $('#card-deliveries').hidden = true;
 initMail();
 initAlerts();
 if (S.show.calendar) {
@@ -313,7 +336,9 @@ if (S.show.calendar) {
       });
     },
   });
+  initDetails(S);
 }
+setHolidayChoices(S.holidays.choices);
 if (S.show.sky) loadHolidays(() => {
   renderHoliday();
   if (S.show.calendar) renderMonth();

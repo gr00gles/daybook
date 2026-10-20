@@ -26,7 +26,8 @@
           <input id="search-input" type="search" placeholder="Search Google" autocomplete="off" spellcheck="false" aria-label="Search">
           <kbd title="Press / to search">/</kbd>
         </label>
-        <div class="places" id="places" hidden></div>
+        <div class="places pop" id="places" hidden></div>
+        <div class="ask pop" id="ask" role="region" aria-label="Answer" hidden></div>
         <div class="engines" id="engines" role="radiogroup" aria-label="Search with"></div>
       </form>
       <nav class="shortcuts" id="shortcuts" aria-label="Shortcuts" data-section="shortcuts"></nav>
@@ -73,6 +74,13 @@
   </div>
 
   <div class="col col-mail">
+    <section class="card" id="card-deliveries" data-section="packages" aria-labelledby="deliveries-h">
+      <header class="card-head">
+        <h2 id="deliveries-h">Deliveries <span class="head-count" id="deliveries-count"></span></h2>
+      </header>
+      <div class="card-body" id="deliveries-body"><p class="quiet">Looking for shipping emails…</p></div>
+    </section>
+
     <section class="card" id="card-mail" data-section="mail" aria-labelledby="mail-h">
       <header class="card-head">
         <h2 id="mail-h">Unread <span class="head-count" id="mail-count"></span></h2>
@@ -121,6 +129,16 @@
       <p class="credit">Quotes by <a href="https://finnhub.io/">Finnhub</a></p>
     </section>
 
+    <section class="card" id="card-teams" data-section="teams" aria-labelledby="teams-h" hidden>
+      <header class="card-head">
+        <h2 id="teams-h">Teams</h2>
+        <span class="stamp" id="teams-updated"></span>
+      </header>
+      <div class="card-body" id="teams-body"><p class="quiet">Getting schedules…</p></div>
+      <div class="tm-news-wrap" id="teams-news"></div>
+      <p class="credit">Schedules by <a href="https://www.espn.com/">ESPN</a></p>
+    </section>
+
     <section class="card" id="card-area" data-section="area" aria-labelledby="area-h">
       <header class="card-head">
         <h2 id="area-h">Around you</h2>
@@ -142,8 +160,8 @@
   </div>
 </main>
 
-<div class="update-bar" id="update-bar" role="status" hidden></div>
-<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="update-bar pop" id="update-bar" role="status" hidden></div>
+<div class="toast pop" id="toast" role="status" aria-live="polite" hidden></div>
 <dialog id="settings" class="sheet" aria-label="Settings"></dialog>
 <dialog id="welcome" class="welcome" aria-label="Set up Daybook"></dialog>
 <dialog id="event-dialog" class="event-dialog" aria-labelledby="ev-h"></dialog>

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" data-phase="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Companies</title>
+<link rel="icon" href="icons/icon32.png">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="js/companies.js"></script>
+</head>
+<body class="co-body">
+<header class="co-top">
+  <a class="co-back" href="newtab.html" id="co-back">Daybook</a>
+  <h1>Companies</h1>
+</header>
+<main class="co-layout">
+  <aside class="co-side" aria-label="Your companies">
+    <div class="co-side-tools">
+      <label class="search-box co-search">
+        <input id="co-filter" type="search" placeholder="Find a company" autocomplete="off" spellcheck="false" aria-label="Find a company">
+      </label>
+      <button class="btn small primary" type="button" id="co-add">Add</button>
+    </div>
+    <ul class="co-list" id="co-list"></ul>
+    <section class="co-suggest" id="co-suggest" hidden aria-labelledby="co-suggest-h">
+      <h2 class="eyebrow" id="co-suggest-h">From your inbox</h2>
+      <div class="co-suggest-list" id="co-suggest-list"></div>
+    </section>
+  </aside>
+  <section class="co-main" id="co-main" aria-live="polite"></section>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

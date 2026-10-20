@@ -21,7 +21,8 @@ export const ENGINES = {
   google: { label: 'Google', bang: 'g', url: 'https://www.google.com/search?q=%s' },
   youtube: { label: 'YouTube', bang: 'y', url: 'https://www.youtube.com/results?search_query=%s' },
   maps: { label: 'Maps', bang: 'm', url: 'https://www.google.com/maps/search/%s' },
-  claude: { label: 'Claude', bang: 'c', url: 'https://claude.ai/new?q=%s' },
+  claude: { label: 'Claude', bang: 'c', url: 'https://claude.ai/new?q=%s', ask: true },
+  chatgpt: { label: 'ChatGPT', bang: 'gpt', url: 'https://chatgpt.com/?q=%s', ask: true },
   wikipedia: { label: 'Wikipedia', bang: 'w', url: 'https://en.wikipedia.org/w/index.php?search=%s' },
   amazon: { label: 'Amazon', bang: 'a', url: 'https://www.amazon.com/s?k=%s' },
   gmail: { label: 'Gmail', bang: 'e', url: 'https://mail.google.com/mail/u/0/#search/%s' },
@@ -64,9 +65,11 @@ export const DEFAULTS = {
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
   area: { key: '', radius: 25, days: 14, kinds: ['music', 'arts', 'other'] }, // Ticketmaster key; radius in miles or km by units
+  holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
+  teams: { list: [], calendar: true, news: true }, // teams you follow; the card stays hidden without one
   show: {
     weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true, youtube: true,
-    alerts: true, sky: true, travel: true, packages: true, stocks: true, area: true,
+    alerts: true, sky: true, travel: true, packages: true, stocks: true, companies: true, teams: true, area: true,
   },
 };
 

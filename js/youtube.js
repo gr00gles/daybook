@@ -343,8 +343,8 @@ function render() {
     : state.failed && state.failed >= state.channels
       ? `<p class="notice warn">YouTube didn’t send videos for any of your ${state.channels} channels (${esc(whyText())}). Daybook keeps trying every few minutes.</p>`
       : state.videos.length
-        ? '<p class="quiet">You’re all caught up: every upload from this week is marked as watched.</p>'
-        : '<p class="quiet">No uploads from your subscriptions this week.</p>';
+        ? '<p class="quiet is-empty">You’re all caught up: every upload from this week is marked as watched.</p>'
+        : '<p class="quiet is-empty">No uploads from your subscriptions this week.</p>';
   if (state.error) body.insertAdjacentHTML('beforeend', `<p class="notice warn">Couldn’t refresh: ${esc(errorText(state.error))}.</p>`);
   placeCards();
   foot.innerHTML = `<a class="foot-link" href="https://www.youtube.com/feed/subscriptions">${icon('external')}Subscriptions</a>${
