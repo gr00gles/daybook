@@ -20,6 +20,7 @@ import { msAccount } from './msauth.js';
 import { icon } from './icons.js';
 import { groupTiles } from './sites.js';
 import { initDeliveries } from './packages.js';
+import { initAsk, ask, hasKey } from './ask.js';
 
 const S = await loadSettings();
 
@@ -122,7 +123,7 @@ function initSearch() {
   const input = $('#search-input');
   const chips = $('#engines');
   const paint = () => {
-    input.placeholder = `Search ${ENGINES[engine].label}`;
+    input.placeholder = `${ENGINES[engine].ask ? 'Ask' : 'Search'} ${ENGINES[engine].label}`;
     chips.innerHTML = Object.entries(ENGINES)
       .map(
         ([k, e]) =>
@@ -141,6 +142,7 @@ function initSearch() {
   });
   const navigate = (url, newTab) => (newTab ? window.open(url, '_blank') : (location.href = url));
   initPlaces({ input, isActive: () => engine === 'maps' || /^!m\s/i.test(input.value), navigate });
+  initAsk(input);
   const go = (newTab) => {
     if (openActivePlace(newTab)) return;
     let q = input.value.trim();
@@ -155,6 +157,13 @@ function initSearch() {
       }
     }
     const looksLikeUrl = !/\s/.test(q) && /^(https?:\/\/)?(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?(\/\S*)?$/i.test(q) && !bang;
+    // Claude and ChatGPT answer on the page when there's an API key; otherwise (or with
+    // Ctrl/Cmd+Enter) the question opens on their site, where you're signed in.
+    if (ENGINES[use].ask && !looksLikeUrl && !newTab && hasKey(use)) {
+      ask(use, q);
+      input.value = '';
+      return;
+    }
     const url = looksLikeUrl ? (/^https?:\/\//i.test(q) ? q : `https://${q}`) : ENGINES[use].url.replace('%s', encodeURIComponent(q));
     navigate(url, newTab);
   };

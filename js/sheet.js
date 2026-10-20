@@ -8,8 +8,10 @@ import { holidayChoices } from './sky.js';
 import { icon, hasIcon } from './icons.js';
 import { groupList, openGroupEditor } from './sites.js';
 import { mountTeams } from './teams.js';
+import { loadAi, saveAi, CLAUDE_MODELS } from './ask.js';
 
 let draft;
+let aiDraft;
 let dirty = false;
 let saveTimer;
 
@@ -59,6 +61,18 @@ function build() {
       <label class="field"><span>Temperature</span><select id="s-units" data-path="units">${opt('F', 'Fahrenheit (°F)', d.units)}${opt('C', 'Celsius (°C)', d.units)}</select></label>
       <label class="field"><span>Default search</span><select id="s-engine" data-path="searchEngine">${Object.entries(ENGINES).map(([k, e]) => opt(k, e.label, d.searchEngine)).join('')}</select></label>
     </div>
+  </section>
+
+  <section id="set-ai">
+    <h3>Claude and ChatGPT</h3>
+    <p class="hint">Pick Claude or ChatGPT under the search box (or start with <code>!c</code> or <code>!gpt</code>) to ask a question. Without a key, it opens claude.ai or chatgpt.com, where you’re already signed in. With an API key, the answer appears right here on the page. Claude Pro and ChatGPT Plus sign-ins can’t be used for this, and API use is billed separately by Anthropic or OpenAI. Keys stay on this computer and don’t sync.</p>
+    <div class="grid2">
+      <label class="field"><span>Anthropic API key</span><input id="s-anthropic" type="password" data-ai="anthropicKey" value="${esc(aiDraft.anthropicKey)}" placeholder="sk-ant-…" spellcheck="false" autocomplete="off"></label>
+      <label class="field"><span>Claude model</span><select id="s-claude-model" data-ai="claudeModel">${Object.entries(CLAUDE_MODELS).map(([k, label]) => opt(k, label, aiDraft.claudeModel)).join('')}</select></label>
+      <label class="field"><span>OpenAI API key</span><input id="s-openai" type="password" data-ai="openaiKey" value="${esc(aiDraft.openaiKey)}" placeholder="sk-…" spellcheck="false" autocomplete="off"></label>
+      <label class="field"><span>ChatGPT model</span><input id="s-openai-model" type="text" data-ai="openaiModel" value="${esc(aiDraft.openaiModel)}" spellcheck="false" autocomplete="off"></label>
+    </div>
+    <p class="hint">Get an Anthropic key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> and an OpenAI key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>.</p>
   </section>
 
   <section id="set-location">
@@ -277,6 +291,12 @@ function wire(dlg) {
   const onEdit = (e) => {
     const el = e.target;
     if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams')) return;
+    if (el.dataset.ai) {
+      // Saved straight to this computer; the search box picks it up without a reload.
+      aiDraft[el.dataset.ai] = el.value.trim();
+      saveAi(aiDraft);
+      return;
+    }
     if (el.dataset.path) {
       setPath(el.dataset.path, readValue(el));
     } else if (el.dataset.list) {
@@ -347,8 +367,9 @@ function wire(dlg) {
   });
 }
 
-export function openSettings(S, section) {
+export async function openSettings(S, section) {
   const dlg = $('#settings');
+  aiDraft = await loadAi();
   draft = structuredClone(S);
   dirty = false;
   wire(dlg);
