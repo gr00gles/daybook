@@ -4,6 +4,7 @@ import { $, $$, esc } from './util.js';
 import { saveSettings, NEWS_TOPICS, ENGINES } from './settings.js';
 import { extraOrigins } from './calendar.js';
 import { mountGoogle, mountGmail, mountOutlook, mountLocation } from './setup-ui.js';
+import { holidayChoices } from './sky.js';
 import { icon } from './icons.js';
 
 let draft;
@@ -80,6 +81,12 @@ function build() {
       )
       .join('')}
     <button class="btn small" type="button" data-action="add-calendar">${icon('plus')}Add a calendar link</button>
+  </section>
+
+  <section id="set-holidays">
+    <h3>Holidays</h3>
+    <p class="hint">Pick the holidays to show under the date and on the month calendar. Each one has its own colors and emblem.${d.show.sky ? '' : ' They show once <em>Moon and holidays</em> is on under Sections.'}</p>
+    <div class="topics hol-choices" id="sheet-holidays"><p class="quiet">Loading holidays…</p></div>
   </section>
 
   <section id="set-news">
@@ -183,7 +190,28 @@ function queueSave() {
   }, 250);
 }
 
+async function mountHolidays() {
+  const box = $('#sheet-holidays');
+  let list;
+  try {
+    list = await holidayChoices();
+  } catch {
+    list = [];
+  }
+  if (!box.isConnected) return;
+  const date = (t) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  box.innerHTML = list.length
+    ? list
+        .map(
+          (h) => `<label class="check hol-choice" style="--hol: ${h.theme.color}"><input type="checkbox" data-holiday="${esc(h.key)}"${draft.holidays.choices[h.key] ?? h.on ? ' checked' : ''}>
+        <span class="hol-glyph" aria-hidden="true">${h.theme.glyph}</span><span class="hol-choice-text"><span>${esc(h.name)}</span><span class="hol-date">${h.key === 'clocks' ? 'Spring and fall' : esc(date(h.at))}</span></span></label>`,
+        )
+        .join('')
+    : '<p class="quiet">The holiday list couldn’t be loaded right now.</p>';
+}
+
 function mountAll() {
+  mountHolidays();
   mountGoogle($('#sheet-google'), draft, queueSave);
   mountGmail($('#sheet-gmail'), draft, queueSave);
   mountOutlook($('#sheet-outlook'), draft, queueSave);
@@ -210,6 +238,8 @@ function wire(dlg) {
       setPath(el.dataset.path, readValue(el));
     } else if (el.dataset.list) {
       listAt(el.dataset.list)[Number(el.dataset.i)][el.dataset.field] = readValue(el);
+    } else if (el.dataset.holiday) {
+      draft.holidays.choices = { ...draft.holidays.choices, [el.dataset.holiday]: el.checked };
     } else if (el.dataset.topic) {
       const set = new Set(draft.news.topics);
       if (el.checked) set.add(el.dataset.topic);
