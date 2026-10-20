@@ -291,6 +291,11 @@ export function forgetEvent(id) {
   justRemoved.set(id, Date.now() + 5 * 60e3);
 }
 
+// Undo of a delete: the event shows again.
+export function unforgetEvent(id) {
+  justRemoved.delete(id);
+}
+
 // Events just changed here, shown with the new details until the calendar has caught up.
 const justEdited = new Map(); // event id -> { changes, until }
 

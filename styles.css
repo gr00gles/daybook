@@ -1545,6 +1545,15 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .evd-foot { padding: 10px 22px 18px; }
 .evd-foot .btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .evd-foot .btn .ui-icon { width: 15px; height: 15px; }
+.evd-delete { margin-right: auto; color: var(--critical); }
+.evd-delete:hover { border-color: var(--critical); }
+.evd-confirm { margin: 4px 22px 18px; padding: 12px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--critical) 35%, var(--line)); background: color-mix(in srgb, var(--critical) 7%, var(--surface)); }
+.evd-confirm p { margin: 0 0 10px; font-size: 14px; color: var(--ink-2); }
+.evd-confirm strong { color: var(--ink); }
+.evd-confirm .ev-error { margin-bottom: 10px; font-size: 13.5px; color: var(--critical); }
+.evd-confirm-btns { display: flex; justify-content: flex-end; gap: 10px; }
+.btn.danger-fill { background: var(--critical); border-color: transparent; color: #fff; }
+.btn.danger-fill:hover { background: color-mix(in srgb, var(--critical) 85%, #000); }
 
 /* Settings: picking holidays. */
 .hol-choices { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
