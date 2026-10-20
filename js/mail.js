@@ -366,6 +366,8 @@ async function change(action, key, id, { toast = true, item: known = null } = {}
     return restore;
   } catch (err) {
     putBack();
+    // Without a toast (the reader asked), the caller reports it where it can be seen.
+    if (!toast) throw err;
     showToast(`Couldn’t ${action === 'read' ? 'mark that as read' : 'delete that'}: ${errorText(err).replace(/[.\s]+$/, '')}.`);
     return null;
   }

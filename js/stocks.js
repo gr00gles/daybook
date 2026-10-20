@@ -81,12 +81,17 @@ function row(q) {
   </a></li>`;
 }
 
-function render(data, meta) {
+let rejected = ''; // the settings whose key Finnhub refused, so stored quotes don't flash back
+
+function render(data, meta, sig) {
   const body = $('#stocks-body');
   partial = Boolean(data?.quotes.some((q) => q.failed));
+  if (meta.error instanceof KeyRejected) rejected = sig;
+  else if (meta.at && !meta.error && data && meta.fresh) rejected = '';
   // A key that stopped working: say so even when older quotes are stored.
-  if (meta.error instanceof KeyRejected) {
+  if (rejected === sig) {
     $('#stocks-state').textContent = '';
+    $('#stocks-updated').textContent = '';
     body.innerHTML = `<div class="notice warn"><p>${esc(meta.error.message)}. Check it in Settings.</p><button class="btn small" type="button" data-open-settings="stocks">Open Settings</button></div>`;
     return;
   }
@@ -111,14 +116,15 @@ export function refreshStocks(S, force = false) {
   const symbols = stockSymbols(S);
   card.hidden = !S.show.stocks || !key || !symbols.length;
   if (card.hidden) return;
+  const sig = hash([key, symbols]);
   return cached({
     key: 'stocks',
-    sig: hash([key, symbols]),
+    sig,
     // Every 5 minutes while the market is open and for an hour after it closes (so the
     // closing prices replace the last ones from the day), else hourly.
     maxAge: (partial ? 1 : guessMarket().isOpen || guessMarket(Date.now() - 3600e3).isOpen ? 5 : 60) * 60e3,
     force,
     fetch: () => fetchQuotes(key, symbols),
-    render,
+    render: (data, meta) => render(data, meta, sig),
   });
 }

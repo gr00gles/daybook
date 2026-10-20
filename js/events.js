@@ -304,6 +304,8 @@ async function save(dlg) {
     else if (err.code === 'needs-google' || err.code === 'needs-connect')
       showError(`<p>${esc(reason(err))}. Reconnect in Settings → Accounts, then try again.</p>`);
     else showError(`<p>Couldn’t add the event: ${esc(reason(err))}.</p>`);
+    // Closed meanwhile (Chrome lets Escape through in the end): say so where it can be seen.
+    if (!dlg.open) showToast(`The event wasn’t added: ${reason(err)}.`);
   } finally {
     busy = false;
     if (dlg.open) {

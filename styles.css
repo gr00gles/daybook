@@ -1159,7 +1159,7 @@ kbd {
 .rd-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; font-size: 14px; }
 .rd-meta strong { font-weight: 650; }
 .rd-date { font: 400 12px var(--font-mono); color: var(--muted); }
-.rd-to { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.rd-to { margin: 3px 0 0; max-height: 3.4em; overflow-y: auto; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
 .rd-to:empty { display: none; }
 .rd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 22px 12px; border-bottom: 1px solid var(--line-2); }
 .rd-bar .btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }

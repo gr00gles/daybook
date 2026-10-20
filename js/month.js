@@ -11,6 +11,7 @@ const MAX_LANES = 3; // rows of multi-day bars per week
 let settingsRef;
 let view;
 let selected = null;
+let firstClick = null; // the day the first click of a possible double-click was on
 
 const sameDay = (a, b) => startOfDay(a) === startOfDay(b);
 
@@ -18,17 +19,17 @@ const sameDay = (a, b) => startOfDay(a) === startOfDay(b);
 const holidays = (d0, list) =>
   settingsRef.show.sky ? holidaysOn(d0).filter((h) => !coveredBy(h, list.filter((e) => e.allDay).map((e) => e.title))) : [];
 
+// Events that cover more than one day (all-day ones, or timed ones a calendar day or longer)
+// are drawn as bars across the days; the rest sit inside their day.
+const lastDay = (e) => startOfDay(e.end - 1);
+const spansDays = (e) => lastDay(e) > startOfDay(e.start) && (e.allDay || e.end >= addDays(e.start, 1));
+
 function dayEvents(events, d0) {
   const d1 = addDays(d0, 1);
-  // All-day and multi-day all-day events fill every day they cover; timed events sit on the
-  // day they start.
-  return events.filter((e) => (e.allDay ? e.start < d1 && e.end > d0 : e.start >= d0 && e.start < d1));
+  // All-day events and anything drawn as a bar belong to every day they cover; other timed
+  // events sit on the day they start.
+  return events.filter((e) => (e.allDay || spansDays(e) ? e.start < d1 && e.end > d0 : e.start >= d0 && e.start < d1));
 }
-
-// Events that cover more than one day (all-day ones, or timed ones a day or longer) are drawn
-// as bars across the days; the rest sit inside their day.
-const lastDay = (e) => startOfDay(e.end - 1);
-const spansDays = (e) => (e.allDay ? lastDay(e) > startOfDay(e.start) : e.end - e.start >= 86400e3 && lastDay(e) > startOfDay(e.start));
 
 // Lays a week's multi-day events out in rows: each gets the first row free on all its days.
 function weekBars(events, weekStart) {
@@ -145,13 +146,18 @@ export function initMonth(S) {
     if (!b) return;
     if (b.dataset.day) {
       const d0 = Number(b.dataset.day);
-      // The second click of a double-click: keep the day open and add an event on it.
+      // The second click of a double-click: keep the day open and add an event on it. If the
+      // first click flipped to the next month, the day under the pointer is a different one,
+      // so use the day first clicked.
       if (e.detail === 2) {
-        selected = d0;
+        const day = firstClick ?? d0;
+        firstClick = null;
+        selected = day;
         renderMonth();
-        openEventEditor({ day: d0 });
+        openEventEditor({ day });
         return;
       }
+      firstClick = d0;
       selected = selected === d0 ? null : d0;
       // A day from the neighboring month flips the view to that month.
       const d = new Date(d0);

@@ -28,18 +28,42 @@ function decodeText(data, contentType) {
   }
 }
 
-// The message's HTML (or text) body and its attachments, from Gmail's part tree.
-function walk(part, out) {
+// The parts you read, in order: the richest version inside each multipart/alternative, every
+// text part of a multipart/mixed (Apple Mail puts text after attachments), and a forwarded
+// message (message/rfc822) only when the email has no text of its own.
+function bodyParts(part) {
   const type = (part.mimeType || '').toLowerCase();
-  if (part.filename) {
-    const cid = headerOf(part, 'content-id').replace(/[<>]/g, '');
-    out.files.push({ name: part.filename, size: part.body?.size || 0, type, id: part.body?.attachmentId, data: part.body?.data, cid });
-    return;
+  if (part.filename || /^\s*attachment/i.test(headerOf(part, 'content-disposition'))) return [];
+  if (type === 'text/html' || type === 'text/plain') return [part];
+  const kids = part.parts || [];
+  if (type === 'multipart/alternative') {
+    for (const want of ['text/html', 'text/plain'])
+      for (const k of [...kids].reverse()) {
+        const got = bodyParts(k);
+        if (got.some((p) => p.mimeType.toLowerCase() === want)) return got;
+      }
+    return [];
   }
-  if (type === 'text/html' && !out.html) out.html = part;
-  else if (type === 'text/plain' && !out.text) out.text = part;
-  for (const p of part.parts || []) walk(p, out);
+  if (type === 'message/rfc822') return kids.flatMap(bodyParts);
+  if (type.startsWith('multipart/')) {
+    const own = kids.filter((k) => (k.mimeType || '').toLowerCase() !== 'message/rfc822').flatMap(bodyParts);
+    return own.length ? own : kids.flatMap(bodyParts);
+  }
+  return [];
 }
+
+// Attachments, and pictures that may be shown inside the message (some have no file name).
+function fileParts(part, out = []) {
+  const type = (part.mimeType || '').toLowerCase();
+  const cid = headerOf(part, 'content-id').replace(/[<>]/g, '').toLowerCase();
+  if (part.filename || (type.startsWith('image/') && (cid || part.body?.attachmentId))) {
+    out.push({ name: part.filename || `picture.${type.split('/')[1] || 'img'}`, size: part.body?.size || 0, type, id: part.body?.attachmentId, data: part.body?.data, cid });
+  } else for (const p of part.parts || []) fileParts(p, out);
+  return out;
+}
+
+// The cid: pictures an HTML body actually shows.
+const cidRefs = (html) => new Set([...(html || '').matchAll(/cid:([^"'\s)>]+)/gi)].map((m) => m[1].replace(/[<>]/g, '').toLowerCase()));
 
 async function partText(msgId, part) {
   let data = part.body?.data;
@@ -50,12 +74,17 @@ async function partText(msgId, part) {
 
 async function gmailMessage(msgId) {
   const m = await gmailApi(`/messages/${encodeURIComponent(msgId)}?format=full`, { method: 'GET' });
-  const out = { files: [] };
-  walk(m.payload || {}, out);
-  const body = out.html ? { html: await partText(msgId, out.html) } : { text: out.text ? await partText(msgId, out.text) : m.snippet || '' };
-  // Pictures that are part of the email itself (logos, signatures): small ones, inline.
+  const payload = m.payload || {};
+  const pieces = await Promise.all(bodyParts(payload).map(async (p) => ({ html: p.mimeType.toLowerCase() === 'text/html', text: await partText(msgId, p) })));
+  const body = pieces.some((p) => p.html)
+    ? { html: pieces.map((p) => (p.html ? p.text : `<pre class="plain">${linkify(p.text)}</pre>`)).join('\n') }
+    : { text: pieces.map((p) => p.text).join('\n\n') || m.snippet || '' };
+  // Pictures the message shows inside itself (logos, signatures): small ones. Everything
+  // else is listed as an attachment, Content-ID or not.
+  const files = fileParts(payload);
+  const refs = cidRefs(body.html);
   const inline = new Map();
-  const pics = out.files.filter((f) => f.cid && f.type.startsWith('image/') && f.size < 1.5e6).slice(0, 10);
+  const pics = files.filter((f) => f.cid && refs.has(f.cid) && f.type.startsWith('image/') && f.size < 1.5e6).slice(0, 10);
   await Promise.all(
     pics.map(async (f) => {
       try {
@@ -64,14 +93,14 @@ async function gmailMessage(msgId) {
       } catch {}
     }),
   );
-  const h = (n) => headerOf(m.payload, n);
+  const h = (n) => headerOf(payload, n);
   return {
     ...body,
     from: h('from'),
     to: h('to'),
     cc: h('cc'),
     date: Number(m.internalDate) || Date.parse(h('date')) || 0,
-    files: out.files.filter((f) => !inline.has(f.cid)).map(({ name, size }) => ({ name, size })),
+    files: files.filter((f) => !(f.cid && refs.has(f.cid))).map(({ name, size }) => ({ name, size })),
     inline,
   };
 }
@@ -87,7 +116,10 @@ async function outlookMessage(clientId, id) {
   });
   let files = [];
   const inline = new Map();
-  if (m.hasAttachments) {
+  const isHtml = m.body?.contentType === 'html';
+  const refs = cidRefs(isHtml ? m.body?.content : '');
+  // hasAttachments leaves out pictures inside the message, so look whenever the body shows one.
+  if (m.hasAttachments || refs.size) {
     try {
       const list = (await graph(clientId, `${base}/attachments?$select=id,name,size,isInline,contentType`)).value || [];
       const pics = list.filter((a) => a.isInline && /^image\//.test(a.contentType || '') && a.size < 1.5e6).slice(0, 10);
@@ -95,17 +127,14 @@ async function outlookMessage(clientId, id) {
         pics.map(async (a) => {
           try {
             const full = await graph(clientId, `${base}/attachments/${encodeURIComponent(a.id)}`);
-            if (full.contentId && full.contentBytes) inline.set(full.contentId.replace(/[<>]/g, ''), `data:${a.contentType};base64,${full.contentBytes}`);
-            else files.push(a);
-          } catch {
-            files.push(a);
-          }
+            const cid = (full.contentId || '').replace(/[<>]/g, '').toLowerCase();
+            if (cid && full.contentBytes && refs.has(cid)) inline.set(cid, `data:${a.contentType};base64,${full.contentBytes}`);
+          } catch {}
         }),
       );
-      files = [...list.filter((a) => !a.isInline), ...files].map(({ name, size }) => ({ name, size }));
+      files = list.filter((a) => !a.isInline).map(({ name, size }) => ({ name, size }));
     } catch {}
   }
-  const isHtml = m.body?.contentType === 'html';
   return {
     [isHtml ? 'html' : 'text']: m.body?.content || '',
     from: person(m.from),
@@ -119,15 +148,21 @@ async function outlookMessage(clientId, id) {
 
 // ---- Showing it --------------------------------------------------------------------------
 
-const DROP = 'script, iframe, frame, frameset, object, embed, applet, form, input, button, select, textarea, link, meta, base, noscript, audio, video, source, track, portal';
+// Elements that never show in a message, and those whose content parses differently the
+// second time round (which is how sanitizers get fooled).
+const DROP =
+  'script, iframe, frame, frameset, object, embed, applet, form, input, button, select, textarea, link, meta, base, noscript, audio, video, source, track, portal, template, math, svg, xmp, noembed, noframes, plaintext, listing, title';
+const ROOT_ATTRS = ['dir', 'lang', 'bgcolor', 'text', 'link', 'vlink', 'alink', 'style', 'background', 'class'];
 
-// Email HTML made safe to show: no scripts or forms, links open in a new tab, and web
-// pictures held back unless `images`. The frame's own policy enforces the same rules.
-function clean(html, msg, images) {
+function cleanOnce(html, msg, images) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   for (const el of doc.querySelectorAll(DROP)) el.remove();
+  const styles = [...doc.querySelectorAll('style')].map((st) => {
+    st.remove();
+    return `<style>${st.textContent}</style>`;
+  });
   let blocked = 0;
-  for (const el of doc.querySelectorAll('*')) {
+  for (const el of [doc.documentElement, ...doc.querySelectorAll('*')]) {
     for (const { name, value } of [...el.attributes]) {
       const n = name.toLowerCase();
       if (n.startsWith('on') || n === 'srcset' || n === 'formaction' || n === 'ping') el.removeAttribute(name);
@@ -137,35 +172,66 @@ function clean(html, msg, images) {
       el.setAttribute('target', '_blank');
       el.setAttribute('rel', 'noopener noreferrer');
     }
-    const src = el.getAttribute('src') || el.getAttribute('background') || '';
-    if (/^cid:/i.test(src)) {
-      const data = msg.inline.get(src.slice(4).replace(/[<>]/g, ''));
-      if (data) el.setAttribute(el.hasAttribute('src') ? 'src' : 'background', data);
-      else el.remove();
-    } else if (/^\s*(https?:)?\/\//i.test(src) && !images) {
-      blocked++;
-      el.removeAttribute('src');
-      el.removeAttribute('background');
-      if (el.tagName === 'IMG') el.setAttribute('alt', el.getAttribute('alt') || '');
+    for (const attr of ['src', 'background']) {
+      const src = el.getAttribute(attr);
+      if (!src) continue;
+      if (/^\s*cid:/i.test(src)) {
+        const data = msg.inline.get(src.trim().slice(4).replace(/[<>]/g, '').toLowerCase());
+        if (data) el.setAttribute(attr, data);
+        // A picture that can't be found goes; a table cell or body with a missing background stays.
+        else if (el.tagName === 'IMG') el.remove();
+        else el.removeAttribute(attr);
+      } else if (/^\s*(https?:)?\/\//i.test(src) && !images) {
+        blocked++;
+        el.removeAttribute(attr);
+      }
     }
   }
   // Pictures set from style sheets count too; the frame's policy blocks those.
-  if (!images && /url\(\s*['"]?\s*(https?:)?\/\//i.test(doc.documentElement.innerHTML)) blocked++;
-  return { body: doc.body?.innerHTML || '', head: [...doc.querySelectorAll('style')].map((s) => s.outerHTML).join(''), blocked };
+  if (!images && /url\(\s*['"]?\s*(https?:)?\/\//i.test(styles.join('') + (doc.documentElement.outerHTML || ''))) blocked++;
+  const attrs = (el) =>
+    el ? [...el.attributes].filter((a) => ROOT_ATTRS.includes(a.name.toLowerCase())).map((a) => ` ${a.name.toLowerCase()}="${esc(a.value)}"`).join('') : '';
+  return { head: styles.join(''), body: doc.body?.innerHTML || '', htmlAttrs: attrs(doc.documentElement), bodyAttrs: attrs(doc.body), blocked };
 }
 
-const linkify = (text) =>
-  esc(text).replace(/\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+const compose = (c) => `<html${c.htmlAttrs}><head>${c.head}</head><body${c.bodyAttrs}>${c.body}</body></html>`;
+
+// Email HTML made safe to show: no scripts, forms or outside links to other resources, links
+// open in a new tab, and web pictures held back unless `images`. The result is cleaned again
+// until parsing it changes nothing, so what the frame parses is exactly what was checked.
+// Null if it never settles.
+function clean(html, msg, images) {
+  let c = cleanOnce(html, msg, images);
+  const { blocked } = c;
+  for (let round = 0; round < 3; round++) {
+    const s = compose(c);
+    const again = cleanOnce(s, msg, images);
+    if (compose(again) === s) return { ...c, blocked };
+    c = again;
+  }
+  return null;
+}
+
+function linkify(text) {
+  const re = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g;
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    out += `${esc(text.slice(last, m.index))}<a href="${esc(m[0])}" target="_blank" rel="noopener noreferrer">${esc(m[0])}</a>`;
+    last = m.index + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
 
 function frameDoc(msg, images) {
   const policy = `default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data:${images ? ' https: http:' : ''}`;
-  const base = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><base target="_blank">
+  const base = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><meta http-equiv="x-dns-prefetch-control" content="off"><meta name="referrer" content="no-referrer"><base target="_blank">
     <style>html{background:#fff;color:#1f2328}body{margin:0;padding:18px 22px;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}pre.plain{margin:0;white-space:pre-wrap;font:inherit}a{color:#1a5fd0}</style>`;
-  if (msg.html != null) {
-    const { body, head, blocked } = clean(msg.html, msg, images);
-    return { doc: `<!doctype html><html><head>${base}${head}</head><body>${body}</body></html>`, blocked };
-  }
-  return { doc: `<!doctype html><html><head>${base}</head><body><pre class="plain">${linkify(msg.text || '')}</pre></body></html>`, blocked: 0 };
+  const c = msg.html != null ? clean(msg.html, msg, images) : null;
+  if (c) return { doc: `<!doctype html><html${c.htmlAttrs}><head>${base}${c.head}</head><body${c.bodyAttrs}>${c.body}</body></html>`, blocked: c.blocked };
+  // Plain text, or HTML too tangled to show safely: show its words.
+  const text = msg.html != null ? new DOMParser().parseFromString(msg.html, 'text/html').body?.innerText || '' : msg.text || '';
+  return { doc: `<!doctype html><html><head>${base}</head><body><pre class="plain">${linkify(text)}</pre></body></html>`, blocked: 0 };
 }
 
 const size = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : n > 1e3 ? `${Math.round(n / 1e3)} KB` : `${n} B`);
@@ -247,12 +313,14 @@ export async function openReader({ item, how, clientId, providerUrl, providerNam
   }
   // Opening an email here counts as reading it, as it would in Gmail or Outlook.
   if (actions && autoRead) {
-    const undo = await actions.change('read', { toast: false });
-    if (current !== mine) return;
-    if (undo) {
+    try {
+      const undo = await actions.change('read', { toast: false });
+      if (current !== mine || !undo) return;
       current.undoRead = undo;
       $('#rd-read').hidden = true;
       $('#rd-state').innerHTML = `Marked as read <button class="linklike" type="button" data-rd="unread">Keep unread</button>`;
+    } catch (err) {
+      if (current === mine) $('#rd-state').textContent = `Couldn’t mark it as read: ${reason(err)}.`;
     }
   }
 }
@@ -275,6 +343,8 @@ export function initReader() {
       $('#rd-state').textContent = 'Kept unread';
       try {
         await undo();
+        const read = $('#rd-read');
+        if (read) read.hidden = false;
       } catch (err) {
         $('#rd-state').textContent = `Couldn’t keep it unread: ${reason(err)}.`;
       }
@@ -287,5 +357,7 @@ export function initReader() {
   dlg.addEventListener('close', () => {
     $('#rd-body', dlg)?.replaceChildren();
     current = null;
+    // The row that opened it may be gone (read messages leave the list): land in the list.
+    if (!document.activeElement || document.activeElement === document.body) ($('#mail-body a.mail') || $('#mail-body'))?.focus?.({ preventScroll: true });
   });
 }

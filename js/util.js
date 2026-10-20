@@ -22,35 +22,42 @@ export function hash(value) {
   return (h >>> 0).toString(36);
 }
 
-const inflight = new Map();
+const inflight = new Map(); // key|sig -> { job, n }
+let calls = 0;
 
 // Cache-first loader shared by every card: paint the stored copy at once, then refetch
 // when it is older than maxAge (or when forced). `sig` names the settings the data was
 // fetched with, so changing a setting makes the stored copy a miss.
 export async function cached({ key, sig = '', maxAge, force = false, fetch: fetcher, render }) {
+  const n = ++calls;
   const stored = await local.get('cache:' + key);
-  const hit = stored && stored.sig === sig ? stored : null;
+  let hit = stored && stored.sig === sig ? stored : null;
   if (hit) render(hit.data, { at: hit.at });
   if (hit && !force && Date.now() - hit.at < maxAge) return;
   // One fetch at a time per key and settings. A forced refresh (after a change you made) waits
-  // for one already running, which may have started before the change, and then fetches again.
+  // for one already running, which may have started before the change, and then fetches again,
+  // unless another fetch began after this call did (that one sees the change too).
   const flight = `${key}|${sig}`;
   if (inflight.has(flight)) {
-    if (!force) return inflight.get(flight);
-    await inflight.get(flight).catch(() => {});
+    if (!force) return inflight.get(flight).job;
+    await inflight.get(flight).job;
+    const now = inflight.get(flight);
+    if (now && now.n > n) return now.job;
+    const fresh = await local.get('cache:' + key);
+    hit = fresh && fresh.sig === sig ? fresh : null;
   }
   const job = (async () => {
     try {
       const data = await fetcher();
       const at = Date.now();
       await local.set('cache:' + key, { sig, at, data });
-      render(data, { at });
+      render(data, { at, fresh: true });
     } catch (error) {
       console.warn(`[daybook] ${key}:`, error);
       render(hit?.data ?? null, { at: hit?.at, error });
     }
-  })().finally(() => inflight.get(flight) === job && inflight.delete(flight));
-  inflight.set(flight, job);
+  })().finally(() => inflight.get(flight)?.job === job && inflight.delete(flight));
+  inflight.set(flight, { job, n });
   return job;
 }
 

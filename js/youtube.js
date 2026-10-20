@@ -36,6 +36,8 @@ let watched = new Map(); // video id -> when
 const unwatched = () => state.videos.filter((v) => !watched.has(v.id));
 
 async function setWatched(id, on) {
+  // Start from what's stored: another tab may have marked videos (or Disconnect cleared them).
+  watched = new Map(Object.entries((await local.get(WATCHED_KEY)) || {}));
   if (on) watched.set(id, Date.now());
   else watched.delete(id);
   // Uploads leave the list after a week, so a month of history is plenty.
@@ -360,10 +362,19 @@ export async function initYouTube(S) {
   if (!card) return;
   local.remove(['yt:seen', 'yt:shorts']); // left over from earlier versions
   watched = new Map(Object.entries((await local.get(WATCHED_KEY)) || {}));
+  // Marks from other tabs, and Disconnect clearing the list.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[WATCHED_KEY]) return;
+    watched = new Map(Object.entries(changes[WATCHED_KEY].newValue || {}));
+    render();
+  });
   // Opening a video counts as watching it (it leaves the stack the next time it's drawn).
   card.addEventListener('click', (e) => {
     const link = e.target.closest('[data-yt-open]');
-    if (link) setWatched(link.dataset.ytOpen, true);
+    if (!link) return;
+    const stays = e.ctrlKey || e.metaKey || e.shiftKey;
+    // Opened in another tab, this page stays: take the card out of the stack now.
+    setWatched(link.dataset.ytOpen, true).then(() => stays && render());
   });
   card.addEventListener('auxclick', (e) => {
     const link = e.target.closest('[data-yt-open]');
@@ -374,9 +385,13 @@ export async function initYouTube(S) {
     if (!b) return;
     const action = b.dataset.yt;
     if (action === 'watched') {
+      // The second click of a double-click would land on the next card's eye.
+      if (e.detail > 1) return;
       const id = b.dataset.id;
+      const hadFocus = document.activeElement === b;
       await setWatched(id, true);
       render();
+      if (hadFocus) (card.querySelector('.rolo-card[data-pos="0"] .rolo-watched') || card.querySelector('.rolo'))?.focus();
       showToast('Marked as watched', async () => {
         await setWatched(id, false);
         render();

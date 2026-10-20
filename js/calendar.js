@@ -325,7 +325,10 @@ export function ensureMonth(year, month, onLoaded) {
   if (have && Date.now() - have.at < 30 * 60e3) return true;
   if (!settingsRef) return true;
   extraMonths.set(key, { loading: true, events: have?.events || [] });
+  const gen = monthsGen;
   fetchAllRange(settingsRef, start, end).then((events) => {
+    // Calendars changed (an event added or undone) while this was loading: it's out of date.
+    if (gen !== monthsGen) return;
     extraMonths.set(key, { events, at: Date.now() });
     onLoaded();
   });
@@ -353,12 +356,14 @@ export async function writableCalendars(S) {
 }
 
 // After adding or removing an event: months outside the regular window load again.
+let monthsGen = 0;
 export function calendarsChanged() {
+  monthsGen++;
   extraMonths.clear();
 }
 
 export function eventsBetween(from, to) {
-  const extra = [...extraMonths.values()].flatMap((m) => m.events);
+  const extra = [...extraMonths.values()].flatMap((m) => m.events).filter((e) => !justRemoved.has(e.id));
   return dedupe([...allEvents(), ...extra]).filter((e) => e.end > from && e.start < to);
 }
 

@@ -21,7 +21,8 @@ export const tripInfo = (e) => info.get(eventKey(e));
 const VIRTUAL =
   /^(https?:|www\.)|\b(zoom|(microsoft )?teams( meeting)?|google meet|meet\.google\.com|webex|skype|whereby|gotomeeting|bluejeans|facetime|discord|slack( huddle)?|hangouts?)\b/i;
 // Dial-in details ("Phone: +1 555…, PIN 1234") must never be sent to a place lookup.
-const CALL = /\b(online|virtual|remote|phone|call|dial[- ]?in|tbd|tba|pin|passcode|meeting id)\b/i;
+// Dial-in details ("Phone: +1 555…", "PIN 1234"), or a location that is just "Online" or "Call".
+const CALL = /\b(phone|pin|passcode|meeting id|dial[- ]?in|conference id)\b\s*[:#]?\s*[+\d(]|^(online|virtual|remote|call|phone|phone call|conference call|video call|dial[- ]?in|tbd|tba)$/i;
 const NOT_A_PLACE = /^(n\/a|none|home|my place|my house|office|work)$/i;
 const ROOM = /^(room|rm\.?|conf(erence)? room|meeting room|board ?room|suite|ste\.?|floor|fl\.?|desk|building|bldg\.?)\b/i;
 
@@ -155,14 +156,15 @@ async function route(routes, S, from, to, start) {
   const k = `osrm|${ll(from)}|${ll(to)}`;
   const hit = routes.get(k);
   // A recent failure: no drive time for this place for now (and no new warning).
-  if (hit && Date.now() - hit.at < (hit.fail ? 1 : 24) * 3600e3) return hit.fail ? null : hit;
+  if (hit && Date.now() - hit.at < (hit.fail ? hit.retry || 3600e3 : 24 * 3600e3)) return hit.fail ? null : hit;
   try {
     const r = await osrm(from, to);
     routes.set(k, r);
     return r;
   } catch (err) {
     // Only a definite "no route" is remembered; a network hiccup is tried again next time.
-    if (err.message === 'No route' || err.status === 400) routes.set(k, { fail: true });
+    // A definite "no route" is remembered for an hour; a busy server or a hiccup for 10 minutes.
+    routes.set(k, err.message === 'No route' || err.status === 400 ? { fail: true } : { fail: true, retry: 10 * 60e3 });
     throw err;
   }
 }

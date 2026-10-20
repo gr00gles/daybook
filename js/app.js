@@ -1,5 +1,5 @@
 import { loadSettings, ENGINES, outlookWebUrl } from './settings.js';
-import { $, $$, esc, colorVar, safeUrl, fmtTime } from './util.js';
+import { $, $$, esc, colorVar, safeUrl, fmtTime, local } from './util.js';
 import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp, allEvents } from './calendar.js';
@@ -23,8 +23,10 @@ if (S.theme !== 'system') document.documentElement.dataset.theme = S.theme;
 for (const [section, on] of Object.entries(S.show)) {
   for (const el of $$(`[data-section="${section}"]`)) el.toggleAttribute('hidden', !on);
 }
-// The moon sits under the current weather but has its own switch.
+// The moon sits under the current weather but has its own switch. Without the weather, the
+// hemisphere (which way the moon is lit) comes from the city in Settings or the last location fix.
 if (S.show.sky && !S.show.weather) $('.now-weather').hidden = false;
+const homeLat = S.location.lat ?? (await local.get('geo'))?.lat;
 $('#refresh-btn').innerHTML = icon('refresh');
 $('#settings-btn').innerHTML = icon('gear');
 
@@ -98,7 +100,7 @@ function tick(force = false) {
   document.documentElement.dataset.phase = skyPhase();
   renderSun();
   if (S.show.sky) {
-    renderMoon(lastWeather()?.lat);
+    renderMoon(lastWeather()?.lat ?? homeLat);
     renderHoliday();
   }
   renderNextUp();
