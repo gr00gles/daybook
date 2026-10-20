@@ -6,7 +6,7 @@ import { shownEvent, eventHref, tripLine } from './calendar.js';
 import { gapi } from './gauth.js';
 import { graph } from './msauth.js';
 import { msClientId } from './settings.js';
-import { openEventEditor } from './events.js';
+import { openEventEditor, deleteEvent } from './events.js';
 import { icon } from './icons.js';
 
 let settingsRef;
@@ -146,8 +146,17 @@ function view(e) {
     </div>
     <footer class="ev-form-foot evd-foot">
       ${e.link || e.src === 'google' ? `<a class="btn" href="${esc(eventHref(e))}" target="_blank" rel="noopener">${icon('external')}Open in ${where || 'calendar'}</a>` : ''}
+      ${canEdit ? `<button class="btn danger evd-delete" type="button" data-evd="delete">${icon('trash')}Delete</button>` : ''}
       ${canEdit ? `<button class="btn primary" type="button" data-evd="edit">Edit</button>` : ''}
     </footer>
+    <div class="evd-confirm" id="evd-confirm" role="alertdialog" aria-labelledby="evd-confirm-q" hidden>
+      <p id="evd-confirm-q"><strong>Delete ${e.recurring ? 'this one event' : 'this event'}?</strong> <span id="evd-confirm-why">${e.recurring ? 'The rest of the series stays.' : ''}</span></p>
+      <p class="ev-error" id="evd-error" role="alert" hidden></p>
+      <div class="evd-confirm-btns">
+        <button class="btn" type="button" data-evd="keep">Cancel</button>
+        <button class="btn danger-fill" type="button" data-evd="confirm-delete">Delete</button>
+      </div>
+    </div>
   </article>`;
 }
 
@@ -192,7 +201,38 @@ export function initDetails(S) {
       return;
     }
     if (b.dataset.evd === 'close') dlg.close();
-    else if (b.dataset.evd === 'edit' && current) {
+    else if (b.dataset.evd === 'delete' && current) {
+      const box = $('#evd-confirm');
+      box.hidden = false;
+      $('.evd-foot').hidden = true;
+      // Guests hear about it from the calendar; say so before it happens.
+      const more = await current.more;
+      const guests = (more?.guests || []).filter((g) => g.name !== 'You').length;
+      const why = $('#evd-confirm-why');
+      if (guests && why && !why.dataset.guests) {
+        why.dataset.guests = '1';
+        why.textContent += ` ${guests === 1 ? 'Your guest' : `All ${guests} guests`} will see it taken off their calendar${guests === 1 ? '' : 's'}.`;
+      }
+      dlg.querySelector('[data-evd="confirm-delete"]')?.focus();
+    } else if (b.dataset.evd === 'keep') {
+      $('#evd-confirm').hidden = true;
+      $('.evd-foot').hidden = false;
+    } else if (b.dataset.evd === 'confirm-delete' && current) {
+      const { event, more } = current;
+      b.disabled = true;
+      b.textContent = 'Deleting…';
+      const loaded = await more;
+      try {
+        await deleteEvent(event, loaded && !loaded.error ? loaded : null);
+        dlg.close();
+      } catch (err) {
+        const box = $('#evd-error');
+        box.textContent = err.code === 'needs-google' || err.code === 'needs-connect' ? `${errorText(err)}. Reconnect in Settings → Accounts, then try again.` : `Couldn’t delete it: ${errorText(err).replace(/[.\s]+$/, '')}.`;
+        box.hidden = false;
+        b.disabled = false;
+        b.textContent = 'Delete';
+      }
+    } else if (b.dataset.evd === 'edit' && current) {
       const { event, more } = current;
       b.disabled = true;
       b.textContent = 'Loading…';

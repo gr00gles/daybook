@@ -3,7 +3,7 @@
 // the first time, each asks for permission to add events. Undo deletes it again, or puts the
 // changes back.
 import { $, esc, local, colorVar, showToast, errorText, startOfDay, addDays } from './util.js';
-import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent, editPendingEvent } from './calendar.js';
+import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent, unforgetEvent, editPendingEvent } from './calendar.js';
 import { calendarWrite } from './gauth.js';
 import { graph, graphWrite } from './msauth.js';
 import { msClientId } from './settings.js';
@@ -428,6 +428,73 @@ async function save(dlg) {
       btn.textContent = 'Add event';
     }
   }
+}
+
+// Deletes an event (just this one of a series), from its details view; `more` is what that
+// loaded. Google keeps deleted events, so Undo brings the same one back. Outlook doesn't, so
+// Undo adds a copy (title, time, place, notes), and only when nobody else was invited, since
+// a copy wouldn't be on their calendars. Throws when the calendar refuses.
+export async function deleteEvent(ev, more) {
+  if (busy) return;
+  busy = true;
+  const id = ev.apiId || ev.id;
+  const cal = ev.src === 'outlook' ? 'Outlook' : ev.calName;
+  try {
+    if (ev.src === 'google') {
+      const path = `/calendars/${encodeURIComponent(ev.calId)}/events/${encodeURIComponent(id)}`;
+      try {
+        await calendarWrite(path, { method: 'DELETE' });
+      } catch (err) {
+        // 410: it was already deleted somewhere else.
+        if (err.status !== 410) throw err;
+      }
+    } else {
+      await graphWrite(msClientId(settingsRef), `/me/events/${encodeURIComponent(id)}`, { method: 'DELETE', need: 'Calendars.ReadWrite' });
+    }
+  } finally {
+    busy = false;
+  }
+  const hide = () => {
+    removePendingEvent(ev.id);
+    forgetEvent(ev.id);
+    calendarsChanged();
+    onChange();
+  };
+  hide();
+  const others = (more?.guests || []).filter((g) => g.name !== 'You').length;
+  let undo = null;
+  if (ev.src === 'google')
+    undo = async () => {
+      await calendarWrite(`/calendars/${encodeURIComponent(ev.calId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: { status: 'confirmed' } });
+      unforgetEvent(ev.id);
+    };
+  else if (!others)
+    undo = async () => {
+      const clientId = msClientId(settingsRef);
+      const body = {
+        subject: ev.title,
+        ...(await outlookWhen(clientId, ev.allDay, ev.start, ev.end)),
+        location: (more?.location ?? ev.location) ? { displayName: more?.location ?? ev.location } : undefined,
+        body: more?.raw ? { contentType: more.type || 'text', content: more.raw } : undefined,
+      };
+      const made = await graphWrite(clientId, '/me/events', { body, need: 'Calendars.ReadWrite' });
+      const { color, calName, src, editable } = ev;
+      addPendingEvent({ id: `new:${made.id}`, apiId: made.id, title: ev.title, start: ev.start, end: ev.end, allDay: ev.allDay, location: body.location?.displayName || '', link: made.webLink, join: '', color, calName, src, editable });
+    };
+  showToast(
+    `Deleted from ${cal}`,
+    undo &&
+      (async () => {
+        try {
+          await undo();
+          calendarsChanged();
+          onChange();
+          showToast('Event restored');
+        } catch (err) {
+          showToast(`Couldn’t restore it: ${reason(err)}.`);
+        }
+      }),
+  );
 }
 
 // Opens the form. `day` (a local midnight) prefills the date, e.g. from the month calendar.
