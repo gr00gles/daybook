@@ -144,7 +144,38 @@ svg { flex: none; }
   font-weight: 600;
 }
 .date-meta { font: 400 12px var(--font-mono); color: var(--muted); letter-spacing: .02em; }
-.holiday-line { margin: 4px 0 0; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.holiday-line { margin: 6px 0 0; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+
+/* Holidays: each wears its own color (--hol) and emblem. */
+.hol-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 11px 3px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--hol) 38%, transparent);
+  background: color-mix(in srgb, var(--hol) 14%, var(--raised));
+  color: color-mix(in srgb, var(--hol) 62%, var(--ink));
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.hol-badge .hol-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hol-glyph { flex: none; font-size: 1.05em; line-height: 1; font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; }
+.hol-badge.today {
+  padding: 5px 14px 5px 9px;
+  font-size: 15px;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--hol) 26%, var(--raised)), color-mix(in srgb, var(--hol) 9%, var(--raised)));
+  box-shadow: 0 6px 18px -10px var(--hol);
+}
+.hol-badge.today .hol-glyph { font-size: 1.3em; }
+.hol-halloween { border-color: color-mix(in srgb, #f07a18 60%, #1b1b1b); }
+.hol-halloween.today { background: linear-gradient(100deg, #f07a18, #ffa94d); color: #1b1208; }
+.hol-christmas.today { background: linear-gradient(100deg, #c62828, #e04848); color: #fff; border-color: #a51f1f; }
+.hol-christmas { padding-left: 16px; margin-top: 8px; margin-left: 4px; }
+.hol-hat { position: absolute; left: -10px; top: -15px; width: 30px; height: 25px; transform: rotate(-22deg); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .25)); pointer-events: none; }
 
 .next-up {
   margin-top: 14px;
@@ -502,6 +533,7 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.allday .chip:hover { border-color: var(--line); background: var(--surface); }
 .cal-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 
 .join {
@@ -542,9 +574,11 @@ kbd {
 .ruler-ticks { position: relative; height: 18px; }
 .tick { position: absolute; top: 4px; transform: translateX(-50%); font: 400 10.5px var(--font-mono); color: var(--muted); }
 
+.allday .chip { cursor: pointer; }
 .allday { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .ev-list { list-style: none; margin: 0 -8px; padding: 0; display: grid; gap: 1px; }
 .ev {
+  position: relative;
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr) auto auto;
   align-items: start;
@@ -552,6 +586,9 @@ kbd {
   padding: 8px;
   border-radius: 10px;
 }
+/* The whole row opens the event; the title is the button, stretched over the row. */
+.ev:hover { background: color-mix(in srgb, var(--raised) 70%, transparent); }
+.ev .join { position: relative; z-index: 1; }
 .ev-time { display: grid; font: 400 12px/1.45 var(--font-mono); color: var(--ink-2); padding-top: 1px; font-variant-numeric: tabular-nums; }
 .ev-time .to { color: var(--muted); font-size: 11px; }
 .ev-main { min-width: 0; }
@@ -559,12 +596,21 @@ kbd {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
   font-size: 14.5px;
   font-weight: 650;
   line-height: 1.35;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
+.ev-title::after { content: ""; position: absolute; inset: 0; border-radius: 10px; }
+.ev-title:focus-visible { outline: none; }
+.ev-title:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ev-title .cal-dot { transform: translateY(-1px); }
 .ev-title:hover span { text-decoration: underline; text-underline-offset: 3px; }
 .ev-where { display: block; padding-left: 16px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -718,9 +764,12 @@ kbd {
 .mev.all { padding-left: 5px; background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--ink); }
 .mev.all::before { display: none; }
 .mmore { padding-left: 3px; font: 500 10.5px var(--font-mono); color: var(--muted); }
-.mhol { padding: 0 3px; font-size: 10.5px; font-weight: 650; line-height: 1.3; color: var(--serious); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mhol.clock { color: var(--muted); font-weight: 500; }
-.mdetail-hol { margin: 0 0 8px; font-size: 13.5px; font-weight: 650; color: var(--serious); }
+.mhol { display: block; padding: 0 3px; border-radius: 4px; font-size: 10.5px; font-weight: 650; line-height: 1.3; color: color-mix(in srgb, var(--hol, var(--serious)) 70%, var(--ink)); background: color-mix(in srgb, var(--hol, var(--serious)) 16%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mhol .hol-glyph { margin-right: 3px; font-size: 10px; }
+.mhol.clock { color: var(--muted); font-weight: 500; background: none; }
+.mday.hol:not(.sel) { background: color-mix(in srgb, var(--hol) 7%, var(--surface)); }
+.mday.hol:not(.sel):hover { background: color-mix(in srgb, var(--hol) 12%, var(--raised)); }
+.mdetail-hol { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 .mhint { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
 .mdetail { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-2); }
 .mdetail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
@@ -735,7 +784,7 @@ kbd {
   .mev::before { display: none; }
   .mmore { display: none; }
   .mhol { display: none; }
-  .mday.hol:not(.today) .mnum { box-shadow: inset 0 -2px 0 var(--serious); border-radius: 4px; }
+  .mday.hol:not(.today) .mnum { box-shadow: inset 0 -2px 0 var(--hol, var(--serious)); border-radius: 4px; }
   .mwd { font-size: 9.5px; letter-spacing: 0; }
   .mweek { --bar-top: 29px; --bar-step: 6px; }
   .mbar, .mbar.cont-l, .mbar.cont-r { padding: 0; border-left: 0; font-size: 0; background: var(--c); }
@@ -1136,6 +1185,54 @@ kbd {
 .ev-error a { color: var(--accent); font-weight: 600; }
 .ev-form-foot { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
 .event-dialog .notice { margin: 0 0 6px; }
+.ev-hint { margin: -6px 0 0; }
+.ev-place > label { font-size: 12px; font-weight: 650; color: var(--ink-2); }
+.ev-form textarea:disabled { opacity: .6; }
+
+/* Address suggestions under Location. */
+.addr-list { margin: 2px 0 0; padding: 4px; list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: 0 14px 30px -20px rgb(6 10 14 / .45); max-height: 300px; overflow-y: auto; }
+.addr-list .places-note { padding: 10px; }
+.addr-credit { padding: 4px 10px 2px; font-size: 10.5px; color: var(--muted); }
+
+/* ---- An event's details ------------------------------------------------------- */
+
+.evd { display: grid; }
+.evd-head { position: sticky; justify-content: flex-start; gap: 12px; margin: 0; padding: 18px 16px 8px 22px; }
+.evd-head h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.evd-swatch { flex: none; align-self: stretch; width: 6px; min-height: 26px; border-radius: 3px; background: var(--c); }
+.evd-body { display: grid; gap: 10px; padding: 4px 22px 8px; }
+.evd-row { display: flex; align-items: flex-start; gap: 12px; margin: 0; font-size: 14px; color: var(--ink-2); }
+.evd-row > .ui-icon { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--muted); }
+.evd-row > .cal-dot { width: 12px; height: 12px; margin: 4px 3px 0; }
+.evd-when { color: var(--ink); font-weight: 600; }
+.evd-when .now-pill { margin-left: 6px; vertical-align: 1px; }
+.evd-len { color: var(--muted); font-weight: 400; }
+.evd-place > span { display: grid; gap: 3px; min-width: 0; }
+.evd-where { color: var(--ink); overflow-wrap: anywhere; }
+.evd-links { display: flex; gap: 14px; font-size: 13px; }
+.evd-links a, .evd-notes a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.evd-links a:hover, .evd-notes a:hover { text-decoration: underline; }
+.evd-place .ev-extra { padding-left: 0; }
+.evd-more { display: grid; gap: 12px; margin-top: 4px; }
+.evd-more:empty { display: none; }
+.evd-more .quiet { margin: 0; }
+.evd-guests ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13.5px; }
+.evd-guests li { display: flex; justify-content: space-between; gap: 12px; }
+.evd-guest { overflow-wrap: anywhere; }
+.evd-rsvp { flex: none; color: var(--muted); font-size: 12.5px; }
+.evd-notes p { margin: 0; max-height: 260px; overflow-y: auto; padding: 10px 12px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line-2); font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.evd-ro { margin: 2px 0 0; font-size: 12.5px; }
+.evd-foot { padding: 10px 22px 18px; }
+.evd-foot .btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.evd-foot .btn .ui-icon { width: 15px; height: 15px; }
+
+/* Settings: picking holidays. */
+.hol-choices { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.hol-choice { align-items: center; padding: 6px 8px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--hol) 30%, var(--line-2)); background: color-mix(in srgb, var(--hol) 7%, transparent); }
+.hol-choice .hol-glyph { font-size: 18px; }
+.hol-choice-text { display: grid; line-height: 1.25; }
+.hol-date { font-size: 11.5px; color: var(--muted); }
+.hol-choice:has(input:not(:checked)) { filter: grayscale(1); opacity: .6; }
 
 /* ---- Reading an email --------------------------------------------------------- */
 
