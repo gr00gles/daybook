@@ -47,6 +47,7 @@ const UI = {
   'chevron-right': '<path d="M9.5 6l6 6-6 6"/>',
   'mail-open': '<path d="M3.5 10.2L12 4.5l8.5 5.7V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M3.5 10.2l8.5 5.6 8.5-5.6"/>',
   trash: '<path d="M4.5 7h15M10 11v6M14 11v6M6.2 7l.9 12.1A1.5 1.5 0 0 0 8.6 20.5h6.8a1.5 1.5 0 0 0 1.5-1.4L17.8 7M9.2 7V4.5h5.6V7"/>',
+  junk: '<path d="M8.3 3.5h7.4l5.3 5.3v7.4l-5.3 5.3H8.3L3 16.2V8.8z"/><path d="M12 8v4.6M12 15.9v.01"/>',
   clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
   person: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5a7 7 0 0 1 14 0"/>',
   alert: '<path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4.2M12 16.9v.01"/>',
