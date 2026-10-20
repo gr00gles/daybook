@@ -1,9 +1,12 @@
 import { $, esc, cached, local, relTime, updatedText, errorText, safeUrl } from './util.js';
 import { NEWS_TOPICS } from './settings.js';
+import { icon } from './icons.js';
+import { rolodex } from './rolodex.js';
 
 let feeds = [];
 let active = null;
 let force = false;
+let rolo = null;
 
 export async function fetchFeed(url) {
   const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
@@ -38,18 +41,33 @@ function load() {
     render: (items, meta) => {
       if (active !== feed.id) return;
       $('#news-updated').textContent = updatedText(meta.at);
+      rolo?.stop();
+      rolo = null;
       if (!items) {
         body.innerHTML = `<p class="notice warn">${esc(feed.label)}: ${esc(errorText(meta.error))}.</p>`;
         return;
       }
-      body.innerHTML = `<ol class="news-list">${items
-        .map(
-          (n) => `<li><a href="${esc(safeUrl(n.url))}">
-            <span class="news-title">${esc(n.title)}</span>
-            <span class="news-meta">${esc(n.source || feed.label)}${n.at ? ` · ${relTime(n.at)}` : ''}</span>
-          </a></li>`,
-        )
-        .join('')}</ol>${meta.error ? `<p class="notice warn">Couldn't refresh: ${esc(errorText(meta.error))}.</p>` : ''}`;
+      if (!items.length) {
+        body.innerHTML = `<p class="quiet is-empty">No ${esc(feed.label)} headlines right now.</p>`;
+        return;
+      }
+      // A rolodex of headlines, one at a time, rather than a long list.
+      body.innerHTML = `<div class="rolo news-rolo" tabindex="0" role="group" aria-roledescription="carousel" aria-label="${esc(feed.label)} headlines">
+        <div class="rolo-stack">${items
+          .map(
+            (n) => `<div class="rolo-card news-card"><a class="rolo-link news-link" href="${esc(safeUrl(n.url))}">
+              <span class="news-title">${esc(n.title)}</span>
+              <span class="news-meta">${esc(n.source || feed.label)}${n.at ? ` · ${relTime(n.at)}` : ''}</span>
+            </a></div>`,
+          )
+          .join('')}</div>
+        ${items.length > 1 ? `<div class="rolo-nav">
+          <button class="icon-btn small" type="button" data-rolo="prev" aria-label="Previous headline">${icon('chevron-left')}</button>
+          <span class="rolo-pos" aria-live="polite"></span>
+          <button class="icon-btn small" type="button" data-rolo="next" aria-label="Next headline">${icon('chevron-right')}</button>
+        </div>` : ''}
+      </div>${meta.error ? `<p class="notice warn">Couldn't refresh: ${esc(errorText(meta.error))}.</p>` : ''}`;
+      rolo = rolodex(body.querySelector('.rolo'));
     },
   });
 }
@@ -69,7 +87,7 @@ export async function refreshNews(S, forceRefresh) {
     ...S.news.custom.filter((f) => f.url).map((f, i) => ({ id: `custom${i}`, label: f.label || 'Feed', short: f.label || 'Feed', url: f.url })),
   ];
   if (!feeds.length) {
-    $('#news-body').innerHTML = '<p class="quiet">Pick a few topics in Settings.</p>';
+    $('#news-body').innerHTML = '<p class="quiet is-empty">Pick a few topics in Settings.</p>';
     return;
   }
   if (!active || !feeds.some((f) => f.id === active)) {

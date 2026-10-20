@@ -1,4 +1,5 @@
-// Address suggestions and a map preview for the search bar's Maps mode.
+// Address suggestions and a map preview for the search bar's Maps mode (the event form's
+// Location field uses the same suggestions, see address.js).
 // Suggestions come from Photon (photon.komoot.io, OpenStreetMap data, no key) and are ranked
 // by distance from your weather location. The preview is an embedded Google Map.
 import { $, esc, local } from './util.js';
@@ -28,7 +29,7 @@ const HISTORY_KEY = 'places:recent';
 let history = [];
 let listMode = 'search'; // 'recent' while nothing is typed
 
-function remember(item) {
+export function remember(item) {
   if (!item) return;
   const { title, detail, label, lat, lon, zoom, cc } = item;
   history = [{ title, detail, label, lat, lon, zoom, cc, at: Date.now() }, ...history.filter((h) => h.label !== label)].slice(0, 15);
@@ -40,7 +41,9 @@ function forget(label) {
   local.set(HISTORY_KEY, history);
 }
 
-const recentMatching = (q) => {
+export const recentPlaces = () => history;
+
+export const recentMatching = (q) => {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   return history.filter((h) => words.every((w) => h.label.toLowerCase().includes(w)));
 };
@@ -111,7 +114,7 @@ function rank(list) {
     .map((x) => x.it);
 }
 
-async function suggest(q) {
+export async function suggest(q) {
   await loadBias();
   const key = bias ? `${q}|${bias.lat.toFixed(2)},${bias.lon.toFixed(2)}` : q;
   if (results.has(key)) return results.get(key);

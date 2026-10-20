@@ -38,6 +38,7 @@ function occurrence(item, startTime, endTime, recurrenceId) {
     allDay,
     location: location.trim().slice(0, 140),
     join: join ? join[0] : '',
+    notes: description.trim().slice(0, 2000),
   };
 }
 

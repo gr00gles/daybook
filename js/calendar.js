@@ -113,7 +113,7 @@ async function fetchGoogleEvents(cal, from, to) {
       maxResults: '250',
       maxAttendees: '1',
       fields:
-        'nextPageToken,items(id,status,summary,location,htmlLink,hangoutLink,start,end,eventType,attendees(self,responseStatus),conferenceData(entryPoints(entryPointType,uri)))',
+        'nextPageToken,items(id,status,summary,location,htmlLink,hangoutLink,start,end,eventType,recurringEventId,guestsCanModify,organizer(self,email),attendees(self,responseStatus),conferenceData(entryPoints(entryPointType,uri)))',
     });
     if (pageToken) q.set('pageToken', pageToken);
     const page = await gapi(`/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${q}`);
@@ -133,6 +133,12 @@ async function fetchGoogleEvents(cal, from, to) {
         location: (e.location || '').slice(0, 140),
         join: e.conferenceData?.entryPoints?.find((p) => p.entryPointType === 'video')?.uri || e.hangoutLink || (e.location || '').match(JOIN_TEXT)?.[0] || '',
         link: e.htmlLink,
+        // Where it lives, so its details can be opened and (on a calendar you can edit) changed.
+        src: 'google',
+        calId: cal.id,
+        // Someone else's invite can only be changed by them, unless they let guests edit.
+        editable: Boolean(cal.writable) && e.eventType !== 'outOfOffice' && Boolean(e.organizer?.self || e.organizer?.email === cal.id || e.guestsCanModify),
+        recurring: Boolean(e.recurringEventId),
       });
     }
     pageToken = page.nextPageToken || '';
@@ -146,7 +152,7 @@ async function fetchOutlookCalendar(clientId, from, to) {
     endDateTime: new Date(to).toISOString(),
     $top: '250',
     $orderby: 'start/dateTime',
-    $select: 'subject,start,end,isAllDay,isCancelled,location,webLink,onlineMeeting',
+    $select: 'subject,start,end,isAllDay,isCancelled,location,webLink,onlineMeeting,type,isOrganizer',
   });
   const items = [];
   let next = `/me/calendarView?${q}`;
@@ -172,6 +178,9 @@ async function fetchOutlookCalendar(clientId, from, to) {
         location: e.location?.displayName || '',
         join: e.onlineMeeting?.joinUrl || '',
         link: e.webLink,
+        src: 'outlook',
+        editable: e.isOrganizer !== false,
+        recurring: e.type === 'occurrence' || e.type === 'exception',
       };
     });
 }
@@ -191,7 +200,7 @@ export async function refreshCalendars(S, force, onChange) {
     wanted.add('google');
     cached({
       key: 'gcal',
-      sig: hash([S.google.calendars, from]),
+      sig: hash([S.google.calendars, from, 'v2']),
       maxAge: 5 * 60e3,
       force,
       fetch: async () => {
@@ -215,7 +224,7 @@ export async function refreshCalendars(S, force, onChange) {
     wanted.add(cal.id);
     cached({
       key: `cal:${cal.id}`,
-      sig: hash([cal.url, from]),
+      sig: hash([cal.url, from, 'v2']),
       maxAge: 10 * 60e3,
       force,
       fetch: () => fetchIcs(cal.url, from, to),
@@ -228,7 +237,7 @@ export async function refreshCalendars(S, force, onChange) {
     wanted.add(cal.id);
     cached({
       key: 'cal:outlook',
-      sig: hash([msClientId(S), from]),
+      sig: hash([msClientId(S), from, 'v2']),
       maxAge: 5 * 60e3,
       force,
       fetch: () => fetchOutlookCalendar(msClientId(S), from, to),
@@ -282,12 +291,27 @@ export function forgetEvent(id) {
   justRemoved.set(id, Date.now() + 5 * 60e3);
 }
 
+// Events just changed here, shown with the new details until the calendar has caught up.
+const justEdited = new Map(); // event id -> { changes, until }
+
+export function editPendingEvent(id, changes) {
+  if (changes) justEdited.set(id, { changes, until: Date.now() + 5 * 60e3 });
+  else justEdited.delete(id);
+}
+
+const withEdits = (list) => {
+  if (!justEdited.size) return list;
+  const now = Date.now();
+  for (const [id, { until }] of justEdited) if (until < now) justEdited.delete(id);
+  return list.map((e) => (justEdited.has(e.id) ? { ...e, ...justEdited.get(e.id).changes } : e));
+};
+
 export function allEvents() {
   const now = Date.now();
   justAdded = justAdded.filter((p) => p.until > now);
   for (const [id, until] of justRemoved) if (until < now) justRemoved.delete(id);
   const all = [...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))).concat(justAdded, games);
-  return dedupe(justRemoved.size ? all.filter((e) => !justRemoved.has(e.id)) : all);
+  return dedupe(withEdits(justRemoved.size ? all.filter((e) => !justRemoved.has(e.id)) : all));
 }
 
 // ---- Months outside the regular window (loaded when the month view flips to them) ----
@@ -369,7 +393,7 @@ export function calendarsChanged() {
 }
 
 export function eventsBetween(from, to) {
-  const extra = [...extraMonths.values()].flatMap((m) => m.events).filter((e) => !justRemoved.has(e.id));
+  const extra = withEdits([...extraMonths.values()].flatMap((m) => m.events).filter((e) => !justRemoved.has(e.id)));
   return dedupe([...allEvents(), ...extra]).filter((e) => e.end > from && e.start < to);
 }
 
@@ -390,8 +414,17 @@ const dayUrl = (t) => {
   const d = new Date(t);
   return `https://calendar.google.com/calendar/r/day/${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 };
-const eventHref = (e) => safeUrl(e.link || dayUrl(e.start));
+export const eventHref = (e) => safeUrl(e.link || dayUrl(e.start));
 export { colorVar };
+
+// Events on screen by a key in their markup, so a click can open the one it was on.
+const onScreen = new Map();
+export const shownEvent = (key) => onScreen.get(key);
+function eventKey(e) {
+  const k = hash([e.id, e.start, e.calName]);
+  onScreen.set(k, e);
+  return k;
+}
 // A team's logo stands in for the calendar dot on its games.
 const dot = (color, logo) =>
   logo
@@ -436,7 +469,7 @@ function ruler(timed, today, now, h24) {
 }
 
 // The forecast at the event's place and time, and when to leave to get there.
-function tripLine(e, state, h24) {
+export function tripLine(e, state, h24) {
   const t = state === 'past' ? null : tripInfo(e);
   if (!t) return '';
   const bits = [];
@@ -461,7 +494,7 @@ export function timedRow(e, now, h24, { compact = false } = {}) {
   return `<li class="ev ${state}">
     <span class="ev-time">${range}</span>
     <div class="ev-main">
-      <a class="ev-title" href="${esc(eventHref(e))}">${dot(e.color, e.logo)}<span>${esc(e.title)}</span></a>
+      <button class="ev-title" type="button" data-event="${eventKey(e)}" aria-haspopup="dialog">${dot(e.color, e.logo)}<span>${esc(e.title)}</span></button>
       ${!compact && e.location && !/^https?:/.test(e.location) ? `<span class="ev-where">${esc(e.location)}</span>` : ''}
       ${tripLine(e, state, h24)}
     </div>
@@ -473,13 +506,15 @@ export function timedRow(e, now, h24, { compact = false } = {}) {
 export function allDayChips(list) {
   if (!list.length) return '';
   return `<div class="allday">${list
-    .map((e) => `<a class="chip" href="${esc(eventHref(e))}" title="${esc(e.calName)}">${dot(e.color, e.logo)}${esc(e.title)}</a>`)
+    .map((e) => `<button class="chip" type="button" data-event="${eventKey(e)}" aria-haspopup="dialog" title="${esc(e.calName)}">${dot(e.color, e.logo)}${esc(e.title)}</button>`)
     .join('')}</div>`;
 }
 
 export function renderAgenda(S) {
   const body = $('#today-body');
   if (!body) return;
+  // The month view draws right after this and adds its own.
+  onScreen.clear();
   const now = Date.now();
   const today = startOfDay(now);
   const tomorrow = addDays(today, 1);

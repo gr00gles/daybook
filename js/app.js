@@ -4,11 +4,12 @@ import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp, allEvents, setGames } from './calendar.js';
 import { initAlerts, refreshAlerts } from './alerts.js';
-import { renderMoon, loadHolidays, renderHoliday } from './sky.js';
+import { renderMoon, loadHolidays, renderHoliday, setHolidayChoices } from './sky.js';
 import { planTrips, tripInfo, leaveText } from './trip.js';
 import { refreshStocks } from './stocks.js';
 import { refreshTeams } from './teams.js';
 import { initEvents } from './events.js';
+import { initDetails } from './details.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { initYouTube, refreshYouTube } from './youtube.js';
@@ -17,6 +18,8 @@ import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
 import { msAccount } from './msauth.js';
 import { icon } from './icons.js';
+import { groupTiles } from './sites.js';
+import { initDeliveries } from './packages.js';
 
 const S = await loadSettings();
 
@@ -209,9 +212,12 @@ async function initShortcuts() {
     list.push({ title: siteName(s.title, host), url: s.url });
     if (list.length >= 10) break;
   }
-  $('#shortcuts').innerHTML = list
+  const sites = list
     .map((s) => `<a class="shortcut" href="${esc(s.url)}" title="${esc(s.url)}"><img src="${favicon(s.url)}" alt="" width="20" height="20"><span>${esc(s.title)}</span></a>`)
     .join('');
+  // Groups of saved sites come first, so they never fall off the end of the row.
+  const paint = async () => ($('#shortcuts').innerHTML = (await groupTiles({ companies: S.show.companies, changed: paint })) + sites);
+  await paint();
 }
 
 // ---- Notes -------------------------------------------------------------------------
@@ -304,6 +310,8 @@ $('#refresh-btn').addEventListener('click', (e) => {
 });
 
 initSearch();
+if (S.show.mail && S.show.packages) initDeliveries();
+else $('#card-deliveries').hidden = true;
 initMail();
 initAlerts();
 if (S.show.calendar) {
@@ -317,7 +325,9 @@ if (S.show.calendar) {
       });
     },
   });
+  initDetails(S);
 }
+setHolidayChoices(S.holidays.choices);
 if (S.show.sky) loadHolidays(() => {
   renderHoliday();
   if (S.show.calendar) renderMonth();
