@@ -5,6 +5,7 @@ import { saveSettings, NEWS_TOPICS, ENGINES } from './settings.js';
 import { extraOrigins } from './calendar.js';
 import { mountGoogle, mountGmail, mountOutlook, mountLocation } from './setup-ui.js';
 import { icon } from './icons.js';
+import { AREA_KINDS } from './area.js';
 
 let draft;
 let dirty = false;
@@ -124,6 +125,19 @@ function build() {
     </div>
   </section>
 
+  <section id="set-area">
+    <h3>Area events</h3>
+    <p class="hint">Concerts, shows, festivals and games around your weather location, from Ticketmaster. It needs a free key: sign up at <a href="https://developer-acct.ticketmaster.com/user/register" target="_blank" rel="noopener">developer.ticketmaster.com</a>, open <strong>My Apps</strong> and copy the <strong>Consumer Key</strong>. Brewery nights and other small local events are rarely on Ticketmaster, so the card also has quick searches for those.</p>
+    <label class="field"><span>Ticketmaster key</span><input id="s-ticketmaster" type="text" data-path="area.key" value="${esc(d.area.key)}" placeholder="Paste your Ticketmaster Consumer Key" spellcheck="false" autocomplete="off"></label>
+    <div class="grid2">
+      <label class="field"><span>How far</span><select id="s-area-radius" data-path="area.radius" data-type="number">${[10, 25, 50, 100].map((r) => opt(r, `Within ${r} ${d.units === 'C' ? 'km' : 'miles'}`, d.area.radius)).join('')}</select></label>
+      <label class="field"><span>How far ahead</span><select id="s-area-days" data-path="area.days" data-type="number">${[[7, 'The next week'], [14, 'The next two weeks'], [30, 'The next month']].map(([n, l]) => opt(n, l, d.area.days)).join('')}</select></label>
+    </div>
+    <div class="topics">${Object.entries(AREA_KINDS)
+      .map(([k, t]) => `<label class="check"><input type="checkbox" data-area-kind="${k}"${d.area.kinds.includes(k) ? ' checked' : ''}><span>${t.label}</span></label>`)
+      .join('')}</div>
+  </section>
+
   <section id="set-sections">
     <h3>Sections</h3>
     <div class="topics">
@@ -136,6 +150,7 @@ function build() {
       ${check('show.packages', 'Deliveries', d.show.packages)}
       ${check('show.news', 'Headlines', d.show.news)}
       ${check('show.stocks', 'Stocks', d.show.stocks)}
+      ${check('show.area', 'Area events', d.show.area)}
       ${check('show.notes', 'Notes', d.show.notes)}
       ${check('show.youtube', 'YouTube', d.show.youtube)}
       ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}
@@ -215,6 +230,11 @@ function wire(dlg) {
       if (el.checked) set.add(el.dataset.topic);
       else set.delete(el.dataset.topic);
       draft.news.topics = Object.keys(NEWS_TOPICS).filter((k) => set.has(k));
+    } else if (el.dataset.areaKind) {
+      const set = new Set(draft.area.kinds);
+      if (el.checked) set.add(el.dataset.areaKind);
+      else set.delete(el.dataset.areaKind);
+      draft.area.kinds = Object.keys(AREA_KINDS).filter((k) => set.has(k));
     } else return;
     if (el.classList.contains('swatch')) el.previousElementSibling.style.setProperty('--c', `var(--cat-${el.value})`);
     queueSave();

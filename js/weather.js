@@ -64,7 +64,7 @@ async function reverseGeocode(lat, lon) {
   }
 }
 
-async function locate(S) {
+export async function locate(S) {
   if (S.location.mode === 'manual' && S.location.lat != null) return S.location;
   const last = await local.get('geo');
   if (last && Date.now() - last.at < 30 * 60e3) return last;

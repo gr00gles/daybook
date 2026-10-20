@@ -7,6 +7,7 @@ import { initAlerts, refreshAlerts } from './alerts.js';
 import { renderMoon, loadHolidays, renderHoliday } from './sky.js';
 import { planTrips, tripInfo, leaveText } from './trip.js';
 import { refreshStocks } from './stocks.js';
+import { initArea, refreshArea } from './area.js';
 import { initEvents } from './events.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
@@ -281,6 +282,7 @@ function refreshAll(force = false) {
       scheduleTrips();
     });
   if (S.show.stocks) refreshStocks(S, force);
+  if (S.show.area) refreshArea(S, force);
   if (S.show.news) refreshNews(S, force);
   if (S.show.youtube) refreshYouTube(S, force);
 }
@@ -319,6 +321,7 @@ if (S.show.sky) loadHolidays(() => {
 $('#moon').hidden = !S.show.sky;
 if (S.show.youtube) await initYouTube(S);
 initNews();
+if (S.show.area) initArea();
 tick(true);
 setInterval(tick, 1000);
 initShortcuts();
