@@ -1859,9 +1859,11 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 /* ---- Arranging cards (js/layout.js) ----------------------------------------------- */
 
 .card { position: relative; }
-/* A height set by dragging: the body scrolls inside it. Empty one-line cards ignore it. */
-.card.sized:not(:has(> .card-body > .is-empty:only-child)) { display: flex; flex-direction: column; height: var(--card-h); }
-.card.sized:not(:has(> .card-body > .is-empty:only-child)) > :is(.card-body, textarea) { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+/* A height set by dragging. Cards with lists show as many whole items as fit (js/layout.js
+   hides the rest), so nothing scrolls; Notes stretches its text box to the height instead. */
+[data-clip] { display: none !important; }
+.card.sized:has(> textarea) { display: flex; flex-direction: column; height: var(--card-h); }
+.card.sized > textarea { flex: 1 1 auto; min-height: 0; resize: none; }
 .card-move, .card-size, .col-gutter { display: none; }
 .arranging .board .card { outline: 1.5px dashed color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 3px; transition: box-shadow .15s ease; }
 .arranging .board .card.dragging { z-index: 5; outline-style: solid; outline-color: var(--accent); box-shadow: 0 24px 48px -20px rgb(6 10 14 / .45); }

@@ -2,6 +2,8 @@
 // edge to set its height, drag the lines between columns to change their widths.
 // The layout is saved under its own key in chrome.storage.sync, apart from Settings:
 //   { v: 1, cols: { day: [card ids], mail: [...], out: [...] }, widths: [fr, fr, fr], heights: { id: px } }
+// A card's height never scrolls: below its natural height it drops whole items (emails, games,
+// events, list rows) from the end until it fits, and grows back as there's room again.
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
 import { $, $$, esc, showPop } from './util.js';
 import { icon } from './icons.js';
@@ -31,11 +33,58 @@ function applyWidths() {
   if (!w) board().style.removeProperty('--board-cols');
 }
 
+// The items a card can drop: entries of its lists, outermost only, in page order.
+const itemsOf = (card) =>
+  [...card.querySelectorAll(':scope > :not(.card-head, .card-foot) :is(ol, ul) > li')].filter((li) => !li.parentElement.closest('li'));
+
+// Shows only the first k items.
+function showFirst(items, k) {
+  items.forEach((li, i) => li.toggleAttribute('data-clip', i >= k));
+}
+
+function fitItems(card) {
+  const h = layout.heights[card.id];
+  const items = itemsOf(card);
+  showFirst(items, items.length);
+  if (!h || card.offsetHeight <= h || items.length < 2) return;
+  // The most items that fit, at least one: a binary search keeps it to a few layouts.
+  let lo = 1;
+  let hi = items.length - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    showFirst(items, mid);
+    if (card.offsetHeight <= h) lo = mid;
+    else hi = mid - 1;
+  }
+  showFirst(items, lo);
+}
+
 function applyHeight(card) {
   const h = layout.heights[card.id];
   card.classList.toggle('sized', Boolean(h));
   if (h) card.style.setProperty('--card-h', `${h}px`);
   else card.style.removeProperty('--card-h');
+  fitItems(card);
+}
+
+// Cards re-render their lists on every refresh; fit them again after each one.
+const pending = new Set();
+const refit = (card) => {
+  if (!layout.heights[card.id] || pending.has(card)) return;
+  pending.add(card);
+  requestAnimationFrame(() => {
+    pending.delete(card);
+    fitItems(card);
+  });
+};
+function watchCards() {
+  for (const card of $$('.board .card[id]')) new MutationObserver(() => refit(card)).observe(card, { childList: true, subtree: true, characterData: true });
+  let width = board().offsetWidth;
+  new ResizeObserver(() => {
+    if (board().offsetWidth === width) return;
+    width = board().offsetWidth;
+    for (const card of $$('.board .card.sized')) refit(card);
+  }).observe(board());
 }
 
 // Runs before the cards render, so a saved layout doesn't jump into place.
@@ -56,6 +105,7 @@ export async function applyLayout() {
   if (layout.widths?.length !== 3) layout.widths = null;
   applyWidths();
   for (const card of $$('.board .card[id]')) applyHeight(card);
+  watchCards();
 }
 
 // ---- Moving ------------------------------------------------------------------------
@@ -242,11 +292,19 @@ function addControls() {
     move.addEventListener('keydown', (e) => keyMove(e, card));
     size.addEventListener('pointerdown', (e) => startResize(e, card));
     size.addEventListener('dblclick', () => resetHeight(card));
+    // Up and down show one item fewer or more; cards without a list step by 40px.
     size.addEventListener('keydown', (e) => {
-      const d = { ArrowUp: -40, ArrowDown: 40 }[e.key];
+      const d = { ArrowUp: -1, ArrowDown: 1 }[e.key];
       if (!d) return;
       e.preventDefault();
-      layout.heights[card.id] = Math.max(MIN_HEIGHT, (layout.heights[card.id] || card.offsetHeight) + d);
+      const items = itemsOf(card);
+      if (items.length) {
+        const k = Math.min(items.length, Math.max(1, items.filter((li) => !li.hasAttribute('data-clip')).length + d));
+        showFirst(items, k);
+        layout.heights[card.id] = card.offsetHeight;
+      } else {
+        layout.heights[card.id] = Math.max(MIN_HEIGHT, (layout.heights[card.id] || card.offsetHeight) + d * 40);
+      }
       applyHeight(card);
       save();
     });
