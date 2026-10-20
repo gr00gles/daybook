@@ -1,5 +1,6 @@
 // The moon's phase and the next holidays, worked out on this computer. US holidays are
-// computed; other countries' public holidays come from Nager.Date (no key).
+// computed; other countries' public holidays come from Nager.Date (no key). Settings picks
+// which holidays show, and each has its own look (Halloween orange with a pumpkin, say).
 import { $, esc, local, startOfDay, addDays } from './util.js';
 
 // ---- Moon -------------------------------------------------------------------------------
@@ -136,29 +137,36 @@ function easter(y) {
   return new Date(y, month, day).getTime();
 }
 
+// The ones marked false start out hidden; Settings → Holidays turns them on.
 function usHolidays(y) {
   const d = (m, day) => new Date(y, m, day).getTime();
   return [
-    [d(0, 1), "New Year's Day"],
-    [nth(y, 0, 1, 3), 'Martin Luther King Jr. Day'],
-    [d(1, 14), "Valentine's Day"],
-    [nth(y, 1, 1, 3), "Presidents' Day"],
-    [d(2, 17), "St. Patrick's Day"],
-    [easter(y), 'Easter'],
-    [nth(y, 4, 0, 2), "Mother's Day"],
-    [nth(y, 4, 1, -1), 'Memorial Day'],
-    [nth(y, 5, 0, 3), "Father's Day"],
-    [d(5, 19), 'Juneteenth'],
-    [d(6, 4), 'Independence Day'],
-    [nth(y, 8, 1, 1), 'Labor Day'],
-    [nth(y, 9, 1, 2), 'Columbus Day'],
-    [d(9, 31), 'Halloween'],
-    [d(10, 11), 'Veterans Day'],
-    [nth(y, 10, 4, 4), 'Thanksgiving'],
-    [d(11, 24), 'Christmas Eve'],
-    [d(11, 25), 'Christmas'],
-    [d(11, 31), "New Year's Eve"],
-  ].map(([at, name]) => ({ at, name }));
+    ['newyear', d(0, 1), "New Year's Day"],
+    ['mlk', nth(y, 0, 1, 3), 'Martin Luther King Jr. Day'],
+    ['superbowl', nth(y, 1, 0, 2), 'Super Bowl Sunday', false],
+    ['valentines', d(1, 14), "Valentine's Day"],
+    ['presidents', nth(y, 1, 1, 3), "Presidents' Day"],
+    ['stpatricks', d(2, 17), "St. Patrick's Day"],
+    ['easter', easter(y), 'Easter'],
+    ['earthday', d(3, 22), 'Earth Day', false],
+    ['cincodemayo', d(4, 5), 'Cinco de Mayo', false],
+    ['mothers', nth(y, 4, 0, 2), "Mother's Day"],
+    ['memorial', nth(y, 4, 1, -1), 'Memorial Day'],
+    ['fathers', nth(y, 5, 0, 3), "Father's Day"],
+    ['juneteenth', d(5, 19), 'Juneteenth'],
+    ['independence', d(6, 4), 'Independence Day'],
+    ['labor', nth(y, 8, 1, 1), 'Labor Day'],
+    ['columbus', nth(y, 9, 1, 2), 'Columbus Day'],
+    ['halloween', d(9, 31), 'Halloween'],
+    // The Tuesday after the first Monday in November.
+    ['election', addDays(nth(y, 10, 1, 1), 1), 'Election Day', false],
+    ['veterans', d(10, 11), 'Veterans Day'],
+    ['thanksgiving', nth(y, 10, 4, 4), 'Thanksgiving'],
+    ['blackfriday', addDays(nth(y, 10, 4, 4), 1), 'Black Friday', false],
+    ['christmaseve', d(11, 24), 'Christmas Eve'],
+    ['christmas', d(11, 25), 'Christmas'],
+    ['newyearseve', d(11, 31), "New Year's Eve"],
+  ].map(([key, at, name, on = true]) => ({ key, at, name, on }));
 }
 
 // Days the clocks change in this computer's time zone. Offsets are compared at noon, since
@@ -171,7 +179,7 @@ function clockChanges(y) {
     if (off !== prev) {
       const mins = Math.abs(off - prev);
       const amount = mins === 60 ? 'an hour' : mins === 30 ? 'half an hour' : `${mins} minutes`;
-      out.push({ at: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), name: `Clocks go ${off > prev ? 'back' : 'forward'} ${amount}`, clock: true });
+      out.push({ key: 'clocks', at: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), name: `Clocks go ${off > prev ? 'back' : 'forward'} ${amount}`, clock: true, on: true });
     }
     prev = off;
   }
@@ -187,7 +195,8 @@ const region = () => {
 };
 
 async function publicHolidays(country, y) {
-  const key = `holidays:${country}:${y}`;
+  // v2 keeps a key and look for each.
+  const key = `holidays2:${country}:${y}`;
   const stored = await local.get(key);
   if (stored && Date.now() - stored.at < 30 * 86400e3) return stored.list;
   try {
@@ -200,7 +209,9 @@ async function publicHolidays(country, y) {
       .filter((h) => h.global !== false && /^\d{4}-\d{2}-\d{2}$/.test(h.date))
       .map((h) => {
         const [yy, mm, dd] = h.date.split('-').map(Number);
-        return { at: new Date(yy, mm - 1, dd).getTime(), name: String(h.localName || h.name).slice(0, 60) };
+        const name = String(h.localName || h.name).slice(0, 60);
+        // Keyed by the English name, which stays the same from year to year.
+        return { key: `p:${norm(String(h.name || name))}`, at: new Date(yy, mm - 1, dd).getTime(), name, en: String(h.name || ''), on: true };
       });
     await local.set(key, { at: Date.now(), list });
     return list;
@@ -234,10 +245,17 @@ export function loadHolidays(onReady, ...extraYears) {
   Promise.all(want.map(loadYear)).then(() => onReady?.());
 }
 
+// Which holidays show: Settings keeps only the ones you changed, by key.
+let choices = {};
+export function setHolidayChoices(c) {
+  choices = c && typeof c === 'object' ? c : {};
+}
+const picked = (h) => choices[h.key] ?? h.on !== false;
+
 // Holidays on one day, from the years already loaded.
 export function holidaysOn(t) {
   const d0 = startOfDay(t);
-  return (years.get(new Date(d0).getFullYear()) || []).filter((h) => h.at === d0);
+  return (years.get(new Date(d0).getFullYear()) || []).filter((h) => h.at === d0 && picked(h));
 }
 
 // The next holiday within a month, for the line under the date.
@@ -245,7 +263,82 @@ export function nextHoliday(t = Date.now()) {
   const d0 = startOfDay(t);
   const y = new Date(d0).getFullYear();
   const all = [...(years.get(y) || []), ...(years.get(y + 1) || [])];
-  return all.find((h) => h.at >= d0 && h.at < addDays(d0, 31)) || null;
+  return all.find((h) => h.at >= d0 && h.at < addDays(d0, 31) && picked(h)) || null;
+}
+
+// Every holiday there is to pick from, in this year's order, for Settings.
+export async function holidayChoices() {
+  const y = new Date().getFullYear();
+  await loadYear(y);
+  const seen = new Set();
+  return (years.get(y) || [])
+    .filter((h) => !seen.has(h.key) && seen.add(h.key))
+    .map((h) => ({ key: h.key, name: h.clock ? 'Clock changes' : h.name, at: h.at, on: h.on !== false, theme: holidayTheme(h) }));
+}
+
+// ---- How each holiday looks ----------------------------------------------------------------
+
+const THEMES = {
+  newyear: { color: '#c99a06', glyph: '🎉' },
+  mlk: { color: '#5b6fd6', glyph: '🕊️' },
+  superbowl: { color: '#3f7d34', glyph: '🏈' },
+  valentines: { color: '#e0457b', glyph: '💘' },
+  presidents: { color: '#3d5fc4', glyph: '🏛️' },
+  stpatricks: { color: '#1f9d55', glyph: '☘️' },
+  easter: { color: '#9b6fd6', glyph: '🐣' },
+  earthday: { color: '#2e9d5b', glyph: '🌎' },
+  cincodemayo: { color: '#de5a12', glyph: '🌮' },
+  mothers: { color: '#d6549a', glyph: '💐' },
+  memorial: { color: '#3d5a99', glyph: '🎖️' },
+  fathers: { color: '#2f6fb3', glyph: '👔' },
+  juneteenth: { color: '#c0392b', glyph: '✊🏾' },
+  independence: { color: '#d03b3b', glyph: '🎆' },
+  labor: { color: '#4f7392', glyph: '🛠️' },
+  columbus: { color: '#13839a', glyph: '⛵' },
+  halloween: { color: '#f07a18', glyph: '🎃' },
+  election: { color: '#3d5fc4', glyph: '🗳️' },
+  veterans: { color: '#667a2e', glyph: '🎖️' },
+  thanksgiving: { color: '#b8621b', glyph: '🦃' },
+  blackfriday: { color: '#6b6f78', glyph: '🛍️' },
+  christmaseve: { color: '#1f8a52', glyph: '🕯️' },
+  christmas: { color: '#d62f2f', glyph: '🎄', hat: true },
+  newyearseve: { color: '#8a6dd9', glyph: '🥂' },
+  clocks: { color: '#7a8794', glyph: '⏰' },
+  other: { color: '#c2410c', glyph: '✨' },
+};
+
+// Other countries' holidays get the look of the one they match, by their English name.
+const LIKE = [
+  [/christmas eve/i, 'christmaseve'],
+  [/christmas|boxing|st\.? stephen/i, 'christmas'],
+  [/new year'?s eve/i, 'newyearseve'],
+  [/new year/i, 'newyear'],
+  [/easter|good friday|whit|pentecost|ascension/i, 'easter'],
+  [/halloween/i, 'halloween'],
+  [/valentine/i, 'valentines'],
+  [/patrick/i, 'stpatricks'],
+  [/mother/i, 'mothers'],
+  [/father/i, 'fathers'],
+  [/thanksgiving/i, 'thanksgiving'],
+  [/labou?r|workers|may day/i, 'labor'],
+  [/remembrance|memorial|anzac|veteran|armistice/i, 'memorial'],
+  [/independence|national|republic|constitution|liberation|canada day|australia day/i, 'independence'],
+];
+
+export function holidayTheme(h) {
+  if (h.clock) return { id: 'clocks', ...THEMES.clocks };
+  if (THEMES[h.key]) return { id: h.key, ...THEMES[h.key] };
+  const id = LIKE.find(([re]) => re.test(h.en || h.name))?.[1] || 'other';
+  return { id, ...THEMES[id] };
+}
+
+// A Santa hat for the corner of Christmas's badge.
+const HAT = `<svg class="hol-hat" viewBox="0 0 32 26" aria-hidden="true"><path d="M4 19C6 9 13 3 21 4c4 .6 6 4 6.6 8.4L24 14C22 10 19 9.6 16.5 11 13 13 11 16 10.5 19z" fill="#e03131" stroke="#8e1b1b" stroke-width="1.2" stroke-linejoin="round"/><rect x="2" y="17.5" width="16" height="6" rx="3" fill="#fff" stroke="#e3e3e3"/><circle cx="26.5" cy="16" r="3.4" fill="#fff" stroke="#e3e3e3"/></svg>`;
+
+// A holiday as a small colored badge with its emblem; `text` says it (defaults to its name).
+export function holidayBadge(h, { text = h.name, today = false, tag = 'span' } = {}) {
+  const t = holidayTheme(h);
+  return `<${tag} class="hol-badge hol-${t.id}${today ? ' today' : ''}" style="--hol: ${t.color}">${t.hat ? HAT : ''}<span class="hol-glyph" aria-hidden="true">${t.glyph}</span><span class="hol-name">${esc(text)}</span></${tag}>`;
 }
 
 export function renderHoliday() {
@@ -255,7 +348,8 @@ export function renderHoliday() {
   el.hidden = !h;
   if (!h) return;
   const days = Math.round((h.at - startOfDay()) / 86400000);
-  el.textContent = days === 0 ? (h.clock ? `${h.name} today` : `Today is ${h.name}`) : days === 1 ? `${h.name} tomorrow` : `${h.name} in ${days} days`;
+  const text = days === 0 ? (h.clock ? `${h.name} today` : `Today is ${h.name}`) : days === 1 ? `${h.name} tomorrow` : `${h.name} in ${days} days`;
+  el.innerHTML = holidayBadge(h, { text, today: days === 0 });
 }
 
 // Calendar names a holiday too ("Halloween", "Thanksgiving Day"): don't say it twice.
