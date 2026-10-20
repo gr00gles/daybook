@@ -1,7 +1,12 @@
 // Arrange mode: drag cards between and within the board's columns, drag a card's bottom
-// edge to set its height, drag the lines between columns to change their widths.
+// edge to set its height, drag the lines between columns to change their widths, and switch
+// the board between three columns and four.
 // The layout is saved under its own key in chrome.storage.sync, apart from Settings:
-//   { v: 1, cols: { day: [card ids], mail: [...], out: [...] }, widths: [fr, fr, fr], heights: { id: px } }
+//   { v: 1, count: 3 | 4, cols: { day: [card ids], mail: [...], out: [...] }, cols4: { day, mail, out, more },
+//     widths: [fr × 3], widths4: [fr × 4], heights: { id: px } }
+// Three and four columns each keep their own arrangement and widths; heights are shared. With
+// no count saved, windows at least AUTO_FOUR wide get four. Four columns start from the
+// three-column arrangement with YouTube and Notes moved to the fourth.
 // A card's height never scrolls: below its natural height it drops whole items (emails, games,
 // events, list rows) from the end until it fits, and grows back as there's room again.
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
@@ -9,28 +14,61 @@ import { $, $$, esc, showPop } from './util.js';
 import { icon } from './icons.js';
 
 const KEY = 'layout';
-const DEFAULT_WIDTHS = [1.25, 1, 0.95];
+const DEFAULT_WIDTHS = { 3: [1.25, 1, 0.95], 4: [1.3, 1, 1, 1] };
+const FOURTH = ['card-youtube', 'card-notes'];
+const AUTO_FOUR = 1480;
 const MIN_WIDTH = 0.5;
 const MIN_HEIGHT = 140;
 
-let layout = { v: 1, cols: {}, widths: null, heights: {} };
+let layout = { v: 1, count: null, cols: {}, cols4: null, widths: null, widths4: null, heights: {} };
 let arranging = false;
+let count = 3; // columns on the board now
+let defaults = null; // where each card sits in newtab.html
 
 const board = () => $('.board');
-const columns = () => $$('.board > .col');
+const allColumns = () => $$('.board > .col');
+const columns = () => allColumns().filter((col) => !col.hidden);
 const colKey = (col) => [...col.classList].find((c) => c.startsWith('col-'))?.slice(4);
 const cardsIn = (col) => [...col.children].filter((el) => el.matches('.card[id]'));
 const shown = (card) => !card.hidden && card.offsetParent !== null;
+const widthsKey = () => (count === 4 ? 'widths4' : 'widths');
+const wantedCount = () => layout.count || (innerWidth >= AUTO_FOUR ? 4 : 3);
 
 async function save() {
-  layout.cols = Object.fromEntries(columns().map((col) => [colKey(col), cardsIn(col).map((c) => c.id)]));
+  layout[count === 4 ? 'cols4' : 'cols'] = Object.fromEntries(columns().map((col) => [colKey(col), cardsIn(col).map((c) => c.id)]));
   await chrome.storage.sync.set({ [KEY]: layout });
 }
 
 function applyWidths() {
-  const w = layout.widths;
+  const w = layout[widthsKey()];
   board().style.setProperty('--board-cols', w ? w.map((f) => `minmax(0, ${f}fr)`).join(' ') : null);
   if (!w) board().style.removeProperty('--board-cols');
+}
+
+// Puts every card in its column for `n` columns: its spot in newtab.html, then the saved
+// arrangement on top, so cards it doesn't name stay where they start.
+function place(n) {
+  const byKey = Object.fromEntries(allColumns().map((col) => [colKey(col), col]));
+  const put = (cols) => {
+    for (const [key, ids] of Object.entries(cols || {})) {
+      const col = byKey[key];
+      if (!col || (key === 'more' && n !== 4) || !Array.isArray(ids)) continue;
+      for (const id of ids) {
+        const card = document.getElementById(id);
+        if (card?.matches('.board .card')) col.append(card);
+      }
+    }
+  };
+  put(defaults);
+  if (n === 4) {
+    if (!layout.cols4) put(layout.cols);
+    put({ more: FOURTH });
+    put(layout.cols4);
+  } else put(layout.cols);
+  count = n;
+  byKey.more.hidden = n !== 4;
+  board().dataset.cols = String(n);
+  applyWidths();
 }
 
 // The items a card can drop: entries of its lists, outermost only, in page order.
@@ -77,13 +115,16 @@ const refit = (card) => {
     fitItems(card);
   });
 };
+const refitAll = () => {
+  for (const card of $$('.board .card.sized')) refit(card);
+};
 function watchCards() {
   for (const card of $$('.board .card[id]')) new MutationObserver(() => refit(card)).observe(card, { childList: true, subtree: true, characterData: true });
   let width = board().offsetWidth;
   new ResizeObserver(() => {
     if (board().offsetWidth === width) return;
     width = board().offsetWidth;
-    for (const card of $$('.board .card.sized')) refit(card);
+    refitAll();
   }).observe(board());
 }
 
@@ -91,21 +132,29 @@ function watchCards() {
 export async function applyLayout() {
   try {
     const saved = (await chrome.storage.sync.get(KEY))[KEY];
-    if (saved?.v === 1) layout = { v: 1, cols: saved.cols || {}, widths: saved.widths || null, heights: saved.heights || {} };
+    if (saved?.v === 1)
+      layout = {
+        v: 1,
+        count: [3, 4].includes(saved.count) ? saved.count : null,
+        cols: saved.cols || {},
+        cols4: saved.cols4 || null,
+        widths: saved.widths?.length === 3 ? saved.widths : null,
+        widths4: saved.widths4?.length === 4 ? saved.widths4 : null,
+        heights: saved.heights || {},
+      };
   } catch {}
-  const byKey = Object.fromEntries(columns().map((col) => [colKey(col), col]));
-  for (const [key, ids] of Object.entries(layout.cols)) {
-    const col = byKey[key];
-    if (!col || !Array.isArray(ids)) continue;
-    for (const id of ids) {
-      const card = document.getElementById(id);
-      if (card?.matches('.board .card')) col.append(card);
-    }
-  }
-  if (layout.widths?.length !== 3) layout.widths = null;
-  applyWidths();
+  defaults = Object.fromEntries(allColumns().map((col) => [colKey(col), cardsIn(col).map((c) => c.id)]));
+  place(wantedCount());
   for (const card of $$('.board .card[id]')) applyHeight(card);
   watchCards();
+  // Without a saved count, the board follows the window across AUTO_FOUR.
+  addEventListener('resize', () => {
+    if (wantedCount() === count) return;
+    place(wantedCount());
+    refitAll();
+    paintCount();
+    placeGutters();
+  });
 }
 
 // ---- Moving ------------------------------------------------------------------------
@@ -129,12 +178,14 @@ function follow(e, onMove, onEnd) {
 }
 
 // Where a pointer at (x, y) would put a card: the column under it and the card to go before.
+// In narrow windows columns stack in rows; the lowest one starting above the pointer wins.
 function dropSpot(x, y, dragged) {
   const cols = columns().filter((c) => c.offsetParent !== null);
-  let col = cols.find((c) => {
+  const under = cols.filter((c) => {
     const r = c.getBoundingClientRect();
     return x >= r.left && x <= r.right;
   });
+  let col = under.filter((c) => c.getBoundingClientRect().top <= y).at(-1) || under[0];
   if (!col) {
     col = cols.reduce((best, c) => {
       const r = c.getBoundingClientRect();
@@ -225,31 +276,31 @@ function resetHeight(card) {
 
 // ---- Column widths -------------------------------------------------------------------
 
-// The lines between columns only make sense while the board shows three side by side.
-const threeAcross = () => {
-  const cols = columns();
-  return cols.length === 3 && Math.abs(cols[0].getBoundingClientRect().top - cols[2].getBoundingClientRect().top) < 2 && cols[0].getBoundingClientRect().right < cols[2].getBoundingClientRect().left;
+// The lines between columns only make sense while the board shows them all side by side.
+const allAcross = () => {
+  const cols = columns().map((c) => c.getBoundingClientRect());
+  return cols.length === count && cols.every((r, i) => i === 0 || (Math.abs(r.top - cols[0].top) < 2 && cols[i - 1].right < r.left));
 };
 
 function placeGutters() {
   const b = board();
   const gutters = $$('.col-gutter', b);
-  if (!arranging || !threeAcross()) {
+  if (!arranging || !allAcross()) {
     for (const g of gutters) g.hidden = true;
     return;
   }
   const br = b.getBoundingClientRect();
   const cols = columns().map((c) => c.getBoundingClientRect());
   gutters.forEach((g, i) => {
-    g.hidden = false;
-    g.style.left = `${(cols[i].right + cols[i + 1].left) / 2 - br.left}px`;
+    g.hidden = i >= cols.length - 1;
+    if (!g.hidden) g.style.left = `${(cols[i].right + cols[i + 1].left) / 2 - br.left}px`;
   });
 }
 
 function startWiden(e, i) {
   const g = e.currentTarget;
   const rects = columns().map((c) => c.getBoundingClientRect());
-  const total = (layout.widths || DEFAULT_WIDTHS).reduce((a, b) => a + b, 0);
+  const total = (layout[widthsKey()] || DEFAULT_WIDTHS[count]).reduce((a, b) => a + b, 0);
   const span = rects.reduce((a, r) => a + r.width, 0);
   const start = e.clientX;
   const base = rects.map((r) => (r.width / span) * total);
@@ -262,15 +313,33 @@ function startWiden(e, i) {
       const pair = base[i] + base[i + 1];
       w[i] = Math.min(pair - MIN_WIDTH, Math.max(MIN_WIDTH, base[i] + d));
       w[i + 1] = pair - w[i];
-      layout.widths = w.map((f) => Math.round(f * 100) / 100);
+      layout[widthsKey()] = w.map((f) => Math.round(f * 100) / 100);
       applyWidths();
       placeGutters();
     },
     () => {
       g.classList.remove('dragging');
+      refitAll();
       save();
     },
   );
+}
+
+// ---- Three or four columns -----------------------------------------------------------
+
+function setCount(n) {
+  layout.count = n;
+  if (n !== count) {
+    place(n);
+    refitAll();
+  }
+  paintCount();
+  save();
+  placeGutters();
+}
+
+function paintCount() {
+  for (const b of $$('#arrange-bar [data-cols]')) b.setAttribute('aria-pressed', String(Number(b.dataset.cols) === count));
 }
 
 // ---- Arrange mode --------------------------------------------------------------------
@@ -311,13 +380,14 @@ function addControls() {
   }
   const b = board();
   if (!$('.col-gutter', b)) {
-    for (const i of [0, 1]) {
+    for (const i of [0, 1, 2]) {
       b.insertAdjacentHTML('beforeend', `<div class="col-gutter" data-gutter="${i}" title="Drag to change the column widths. Double-click to reset." hidden></div>`);
       const g = b.lastElementChild;
       g.addEventListener('pointerdown', (e) => startWiden(e, i));
       g.addEventListener('dblclick', () => {
-        layout.widths = null;
+        layout[widthsKey()] = null;
         applyWidths();
+        refitAll();
         placeGutters();
         save();
       });
@@ -330,6 +400,7 @@ function setArranging(on) {
   document.body.classList.toggle('arranging', on);
   $('#arrange-btn').setAttribute('aria-pressed', String(on));
   if (on) addControls();
+  paintCount();
   showPop($('#arrange-bar'), on);
   placeGutters();
 }
@@ -345,12 +416,17 @@ export function initLayout() {
   btn.addEventListener('click', () => setArranging(!arranging));
   const bar = $('#arrange-bar');
   bar.innerHTML = `<span>Drag a card by ${icon('grip')} to move it, its bottom edge to resize it, or the lines between columns to widen them.</span>
+    <span class="cols-pick" role="group" aria-label="Columns">Columns
+      <button type="button" data-cols="3" aria-pressed="false">3</button><button type="button" data-cols="4" aria-pressed="false">4</button>
+    </span>
     <button class="btn small" type="button" data-arrange="reset">Reset layout</button>
     <button class="btn small primary" type="button" data-arrange="done">Done</button>`;
   bar.addEventListener('click', (e) => {
     const what = e.target.closest('[data-arrange]')?.dataset.arrange;
+    const cols = e.target.closest('[data-cols]')?.dataset.cols;
     if (what === 'done') setArranging(false);
     if (what === 'reset') resetLayout();
+    if (cols) setCount(Number(cols));
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && arranging && !document.querySelector('dialog[open]')) setArranging(false);
