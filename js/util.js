@@ -118,6 +118,34 @@ export const colorVar = (c) => (typeof c === 'number' ? `var(--cat-${c})` : /^#[
 // Only ordinary web links go into href attributes; feeds and calendars are outside data.
 export const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '').trim()) ? String(u).trim() : '#');
 
+// Shows or hides an element with the "pop" class (styles.css, Motion), letting it animate
+// out before it gets the hidden attribute.
+const leaving = new WeakMap();
+export function showPop(el, show) {
+  if (!el) return;
+  clearTimeout(leaving.get(el));
+  leaving.delete(el);
+  el.classList.remove('leaving');
+  if (show || el.hidden) {
+    el.hidden = !show;
+    return;
+  }
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.hidden = true;
+    return;
+  }
+  el.classList.add('leaving');
+  const ms = parseFloat(getComputedStyle(el).getPropertyValue('--pop-out')) * 1000 || 160;
+  leaving.set(
+    el,
+    setTimeout(() => {
+      el.hidden = true;
+      el.classList.remove('leaving');
+      leaving.delete(el);
+    }, ms),
+  );
+}
+
 // A short message at the bottom of the page, optionally with an Undo button.
 let toastTimer;
 export function showToast(message, undo) {
@@ -125,8 +153,8 @@ export function showToast(message, undo) {
   if (!el) return;
   clearTimeout(toastTimer);
   el.innerHTML = `<span>${esc(message)}</span>${undo ? '<button class="btn small" type="button">Undo</button>' : ''}`;
-  el.hidden = false;
-  const hide = () => (el.hidden = true);
+  showPop(el, true);
+  const hide = () => showPop(el, false);
   el.querySelector('button')?.addEventListener('click', () => {
     hide();
     undo();

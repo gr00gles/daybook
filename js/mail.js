@@ -252,7 +252,7 @@ function render() {
         )
         .join('')}</ol>`
     : live.length
-      ? `<div class="inbox-zero"><span class="big">0</span><p>Nothing unread${filter === 'all' ? '' : ' here'}. Enjoy it.</p></div>`
+      ? `<p class="quiet is-empty">Nothing unread${filter === 'all' ? '' : ' here'}. Enjoy it.</p>`
       : '';
 
   const openLinks = list
@@ -269,7 +269,7 @@ function render() {
     settingsRef.outlook.mail && !outlookConnected && msClientId(settingsRef)
       ? `<button class="foot-link" type="button" data-open-settings="accounts">${icon('plus')}Connect Outlook</button>`
       : '';
-  body.innerHTML = `${deliveriesHtml(deliveries)}${live.length > 1 ? `<div class="filters" role="group" aria-label="Show mail from">${chips.join('')}</div>` : ''}${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
+  body.innerHTML = `${deliveriesHtml(deliveries)}${live.length > 1 && (total || filter !== 'all') ? `<div class="filters" role="group" aria-label="Show mail from">${chips.join('')}</div>` : ''}${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
   $('#mail-links').innerHTML = openLinks + connectOutlook;
   const ats = list.map(([, s]) => s.at).filter(Boolean);
   $('#mail-updated').textContent = ats.length ? updatedText(Math.min(...ats)) : '';
