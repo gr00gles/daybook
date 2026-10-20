@@ -16,6 +16,8 @@ import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
 import { msAccount } from './msauth.js';
 import { icon } from './icons.js';
+import { groupTiles } from './sites.js';
+import { initDeliveries } from './packages.js';
 
 const S = await loadSettings();
 
@@ -208,9 +210,12 @@ async function initShortcuts() {
     list.push({ title: siteName(s.title, host), url: s.url });
     if (list.length >= 10) break;
   }
-  $('#shortcuts').innerHTML = list
+  const sites = list
     .map((s) => `<a class="shortcut" href="${esc(s.url)}" title="${esc(s.url)}"><img src="${favicon(s.url)}" alt="" width="20" height="20"><span>${esc(s.title)}</span></a>`)
     .join('');
+  // Groups of saved sites come first, so they never fall off the end of the row.
+  const paint = async () => ($('#shortcuts').innerHTML = (await groupTiles({ companies: S.show.companies, changed: paint })) + sites);
+  await paint();
 }
 
 // ---- Notes -------------------------------------------------------------------------
@@ -298,6 +303,8 @@ $('#refresh-btn').addEventListener('click', (e) => {
 });
 
 initSearch();
+if (S.show.mail && S.show.packages) initDeliveries();
+else $('#card-deliveries').hidden = true;
 initMail();
 initAlerts();
 if (S.show.calendar) {

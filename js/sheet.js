@@ -4,7 +4,8 @@ import { $, $$, esc } from './util.js';
 import { saveSettings, NEWS_TOPICS, ENGINES } from './settings.js';
 import { extraOrigins } from './calendar.js';
 import { mountGoogle, mountGmail, mountOutlook, mountLocation } from './setup-ui.js';
-import { icon } from './icons.js';
+import { icon, hasIcon } from './icons.js';
+import { groupList, openGroupEditor } from './sites.js';
 
 let draft;
 let dirty = false;
@@ -124,6 +125,14 @@ function build() {
     </div>
   </section>
 
+  <section id="set-sites">
+    <h3>Site groups</h3>
+    <p class="hint">Groups sit at the start of the shortcuts row. Hover over one to see its sites; <strong>Edit</strong> at the end changes it.</p>
+    <div class="group-rows" id="sheet-groups"></div>
+    <button class="btn small" type="button" data-action="add-group">${icon('plus')}Add a group</button>
+    <p class="hint small">Your companies have their own pages: <a href="companies.html">open Companies</a>.</p>
+  </section>
+
   <section id="set-sections">
     <h3>Sections</h3>
     <div class="topics">
@@ -139,6 +148,7 @@ function build() {
       ${check('show.notes', 'Notes', d.show.notes)}
       ${check('show.youtube', 'YouTube', d.show.youtube)}
       ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}
+      ${check('show.companies', 'Companies in the shortcuts', d.show.companies)}
     </div>
   </section>
 
@@ -188,6 +198,26 @@ function mountAll() {
   mountGmail($('#sheet-gmail'), draft, queueSave);
   mountOutlook($('#sheet-outlook'), draft, queueSave);
   mountLocation($('#sheet-location'), draft, queueSave);
+  paintGroups();
+}
+
+// Site groups save on their own (see sites.js), so the page shows a change without reloading.
+async function paintGroups() {
+  const el = $('#sheet-groups');
+  if (!el) return;
+  const groups = await groupList();
+  el.innerHTML = groups.length
+    ? groups
+        .map(
+          (g) => `<div class="group-row">
+          <span class="group-icon small">${icon(hasIcon(g.icon) ? g.icon : 'folder')}</span>
+          <span class="group-row-name">${esc(g.name)}</span>
+          <span class="hint">${g.sites.length} ${g.sites.length === 1 ? 'site' : 'sites'}</span>
+          <button class="btn small" type="button" data-action="edit-group" data-id="${esc(g.id)}">${icon('edit')}Edit</button>
+        </div>`,
+        )
+        .join('')
+    : '<p class="hint">No groups yet.</p>';
 }
 
 function rerender() {
@@ -244,6 +274,8 @@ function wire(dlg) {
       draft.news.custom.push({ label: '', url: '' });
       queueSave();
       rerender();
+    } else if (action === 'add-group' || action === 'edit-group') {
+      openGroupEditor(action === 'edit-group' ? btn.dataset.id : null, paintGroups);
     } else if (action === 'rerun') {
       draft.onboarded = false;
       queueSave();

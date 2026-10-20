@@ -3,7 +3,7 @@ import { graph, graphWrite, msAccount, msHas } from './msauth.js';
 import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
 import { GMAIL_FEEDS, outlookWebUrl, msClientId } from './settings.js';
 import { icon } from './icons.js';
-import { deliveriesFrom, deliveriesHtml, deliveryOf, deliveryTag, refreshShippingMail } from './packages.js';
+import { deliveriesFrom, renderDeliveries, deliveryOf, deliveryTag, refreshShippingMail } from './packages.js';
 import { openReader, initReader } from './reader.js';
 
 const sources = new Map(); // key -> { kind, label, ... , data, at, error }
@@ -50,6 +50,7 @@ async function fetchGmail(index, feedKey = 'inbox') {
       subject: text(e, 'title') || '(no subject)',
       snippet: text(e, 'summary'),
       from: (author && (text(author, 'name') || text(author, 'email'))) || 'Unknown sender',
+      fromAddr: (author && text(author, 'email')) || '',
       at: Date.parse(text(e, 'issued') || text(e, 'modified')) || Date.now(),
       url: link,
     };
@@ -110,6 +111,7 @@ async function fetchOutlookMail(clientId) {
       subject: m.subject || '(no subject)',
       snippet: m.bodyPreview || '',
       from: m.from?.emailAddress?.name || m.from?.emailAddress?.address || 'Unknown sender',
+      fromAddr: m.from?.emailAddress?.address || '',
       at: Date.parse(m.receivedDateTime),
       url: m.webLink,
     })),
@@ -229,8 +231,12 @@ function render() {
     .slice(0, 40);
   const packages = settingsRef.show.packages;
   const deliveries = packages
-    ? deliveriesFrom([...live.flatMap(([, s]) => s.data.items.map((m) => ({ ...m, account: sourceLabel(s) }))), ...shipping])
+    ? deliveriesFrom([
+        ...live.flatMap(([, s]) => s.data.items.map((m) => ({ ...m, account: sourceLabel(s), api: s.kind === 'gmail' && s.acct.email === googleEmail }))),
+        ...shipping,
+      ])
     : [];
+  if (packages) renderDeliveries(deliveries);
 
   const rows = items.length
     ? `<ol class="mail-list">${items
@@ -269,7 +275,7 @@ function render() {
     settingsRef.outlook.mail && !outlookConnected && msClientId(settingsRef)
       ? `<button class="foot-link" type="button" data-open-settings="accounts">${icon('plus')}Connect Outlook</button>`
       : '';
-  body.innerHTML = `${deliveriesHtml(deliveries)}${live.length > 1 ? `<div class="filters" role="group" aria-label="Show mail from">${chips.join('')}</div>` : ''}${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
+  body.innerHTML = `${live.length > 1 ? `<div class="filters" role="group" aria-label="Show mail from">${chips.join('')}</div>` : ''}${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
   $('#mail-links').innerHTML = openLinks + connectOutlook;
   const ats = list.map(([, s]) => s.at).filter(Boolean);
   $('#mail-updated').textContent = ats.length ? updatedText(Math.min(...ats)) : '';

@@ -65,7 +65,7 @@ export const DEFAULTS = {
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
   show: {
     weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true, youtube: true,
-    alerts: true, sky: true, travel: true, packages: true, stocks: true,
+    alerts: true, sky: true, travel: true, packages: true, stocks: true, companies: true,
   },
 };
 
