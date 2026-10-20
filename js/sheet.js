@@ -5,6 +5,7 @@ import { saveSettings, NEWS_TOPICS, ENGINES } from './settings.js';
 import { extraOrigins } from './calendar.js';
 import { mountGoogle, mountGmail, mountOutlook, mountLocation } from './setup-ui.js';
 import { icon } from './icons.js';
+import { mountTeams } from './teams.js';
 
 let draft;
 let dirty = false;
@@ -124,6 +125,16 @@ function build() {
     </div>
   </section>
 
+  <section id="set-teams">
+    <h3>Teams</h3>
+    <p class="hint">Follow teams to get a card with each one’s next game (and the score while it’s on), their games on your calendar with the team’s logo, and recent team news. Schedules come from ESPN; news from Google News.</p>
+    <div id="sheet-teams"></div>
+    <div class="topics">
+      ${check('teams.calendar', 'Show games on the calendar', d.teams.calendar)}
+      ${check('teams.news', 'Show team news', d.teams.news)}
+    </div>
+  </section>
+
   <section id="set-sections">
     <h3>Sections</h3>
     <div class="topics">
@@ -136,6 +147,7 @@ function build() {
       ${check('show.packages', 'Deliveries', d.show.packages)}
       ${check('show.news', 'Headlines', d.show.news)}
       ${check('show.stocks', 'Stocks', d.show.stocks)}
+      ${check('show.teams', 'Teams', d.show.teams)}
       ${check('show.notes', 'Notes', d.show.notes)}
       ${check('show.youtube', 'YouTube', d.show.youtube)}
       ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}
@@ -188,6 +200,7 @@ function mountAll() {
   mountGmail($('#sheet-gmail'), draft, queueSave);
   mountOutlook($('#sheet-outlook'), draft, queueSave);
   mountLocation($('#sheet-location'), draft, queueSave);
+  mountTeams($('#sheet-teams'), draft, queueSave);
 }
 
 function rerender() {
@@ -205,7 +218,7 @@ function wire(dlg) {
   wired = true;
   const onEdit = (e) => {
     const el = e.target;
-    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location')) return;
+    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams')) return;
     if (el.dataset.path) {
       setPath(el.dataset.path, readValue(el));
     } else if (el.dataset.list) {

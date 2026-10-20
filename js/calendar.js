@@ -257,6 +257,12 @@ const dedupe = (list) => {
     });
 };
 
+// Games of the teams you follow (teams.js), shown alongside your calendars.
+let games = [];
+export function setGames(list) {
+  games = list;
+}
+
 // Events just added here, shown until the calendar's next refresh brings them in.
 let justAdded = [];
 
@@ -280,7 +286,7 @@ export function allEvents() {
   const now = Date.now();
   justAdded = justAdded.filter((p) => p.until > now);
   for (const [id, until] of justRemoved) if (until < now) justRemoved.delete(id);
-  const all = [...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))).concat(justAdded);
+  const all = [...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))).concat(justAdded, games);
   return dedupe(justRemoved.size ? all.filter((e) => !justRemoved.has(e.id)) : all);
 }
 
@@ -386,7 +392,11 @@ const dayUrl = (t) => {
 };
 const eventHref = (e) => safeUrl(e.link || dayUrl(e.start));
 export { colorVar };
-const dot = (color) => `<span class="cal-dot" style="--c: ${colorVar(color)}"></span>`;
+// A team's logo stands in for the calendar dot on its games.
+const dot = (color, logo) =>
+  logo
+    ? `<img class="cal-logo" src="${esc(safeUrl(logo))}" alt="" width="16" height="16" loading="lazy">`
+    : `<span class="cal-dot" style="--c: ${colorVar(color)}"></span>`;
 
 function joinButton(e) {
   return e.join
@@ -451,7 +461,7 @@ export function timedRow(e, now, h24, { compact = false } = {}) {
   return `<li class="ev ${state}">
     <span class="ev-time">${range}</span>
     <div class="ev-main">
-      <a class="ev-title" href="${esc(eventHref(e))}">${dot(e.color)}<span>${esc(e.title)}</span></a>
+      <a class="ev-title" href="${esc(eventHref(e))}">${dot(e.color, e.logo)}<span>${esc(e.title)}</span></a>
       ${!compact && e.location && !/^https?:/.test(e.location) ? `<span class="ev-where">${esc(e.location)}</span>` : ''}
       ${tripLine(e, state, h24)}
     </div>
@@ -463,7 +473,7 @@ export function timedRow(e, now, h24, { compact = false } = {}) {
 export function allDayChips(list) {
   if (!list.length) return '';
   return `<div class="allday">${list
-    .map((e) => `<a class="chip" href="${esc(eventHref(e))}" title="${esc(e.calName)}">${dot(e.color)}${esc(e.title)}</a>`)
+    .map((e) => `<a class="chip" href="${esc(eventHref(e))}" title="${esc(e.calName)}">${dot(e.color, e.logo)}${esc(e.title)}</a>`)
     .join('')}</div>`;
 }
 
