@@ -106,7 +106,7 @@ svg { flex: none; }
   padding-block: 16px 14px;
   padding-left: var(--gutter);
   /* Room for the refresh and settings buttons in the corner. */
-  padding-right: calc(max(24px, env(safe-area-inset-right, 0px)) + 64px);
+  padding-right: calc(max(24px, env(safe-area-inset-right, 0px)) + 104px);
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(420px, 1.35fr) minmax(300px, 1fr);
   grid-template-areas: "when finder weather";
@@ -580,9 +580,10 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   padding-left: var(--gutter);
   padding-right: max(24px, env(safe-area-inset-right, 0px));
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.95fr);
+  grid-template-columns: var(--board-cols, minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.95fr));
   gap: 20px;
   align-items: start;
+  position: relative;
 }
 .col { display: grid; gap: 20px; align-content: start; min-width: 0; }
 
@@ -1845,6 +1846,91 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 }
 .wiz-actions { display: flex; align-items: center; gap: 18px; margin-left: auto; }
 .wiz-gap { margin-top: 20px; }
+
+/* ---- Arranging cards (js/layout.js) ----------------------------------------------- */
+
+.card { position: relative; }
+/* A height set by dragging: the body scrolls inside it. Empty one-line cards ignore it. */
+.card.sized:not(:has(> .card-body > .is-empty:only-child)) { display: flex; flex-direction: column; height: var(--card-h); }
+.card.sized:not(:has(> .card-body > .is-empty:only-child)) > :is(.card-body, textarea) { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.card-move, .card-size, .col-gutter { display: none; }
+.arranging .board .card { outline: 1.5px dashed color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 3px; transition: box-shadow .15s ease; }
+.arranging .board .card.dragging { z-index: 5; outline-style: solid; outline-color: var(--accent); box-shadow: 0 24px 48px -20px rgb(6 10 14 / .45); }
+.arranging .card-move {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+.arranging .card-move .ui-icon { width: 16px; height: 16px; rotate: 90deg; }
+.arranging .card-move:hover, .arranging .dragging .card-move { color: var(--accent); border-color: var(--accent); }
+.arranging .dragging .card-move { cursor: grabbing; }
+.arranging .card-size {
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  translate: -50% 0;
+  z-index: 2;
+  display: block;
+  width: 64px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: .55;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.arranging .card-size:hover, .arranging .card-size:focus-visible { opacity: 1; }
+.arranging .col-gutter {
+  position: absolute;
+  top: 6px;
+  bottom: 48px;
+  z-index: 3;
+  display: block;
+  width: 14px;
+  translate: -50% 0;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.arranging .col-gutter[hidden] { display: none; }
+.arranging .col-gutter::after { content: ''; position: absolute; inset: 0 6px; border-radius: 2px; background: var(--accent); opacity: .35; }
+.arranging .col-gutter:hover::after, .arranging .col-gutter.dragging::after { opacity: 1; }
+.arrange-bar {
+  position: fixed;
+  left: 50%;
+  bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 13.5px;
+  transform: translateX(-50%);
+  box-shadow: 0 12px 32px -12px rgb(6 10 14 / .5);
+}
+.arrange-bar .ui-icon { width: 15px; height: 15px; vertical-align: -3px; rotate: 90deg; }
+.arrange-bar .btn:not(.primary) { background: transparent; color: var(--surface); border-color: color-mix(in srgb, var(--surface) 35%, transparent); }
+#arrange-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+#arrange-btn .ui-icon { rotate: 90deg; }
 
 /* ---- Motion ------------------------------------------------------------------ */
 /* Every <dialog> rises and fades in on showModal() and fades out on close(), with no script:

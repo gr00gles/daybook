@@ -22,8 +22,10 @@ import { icon } from './icons.js';
 import { groupTiles } from './sites.js';
 import { initDeliveries } from './packages.js';
 import { initAsk, ask, hasKey } from './ask.js';
+import { applyLayout, initLayout } from './layout.js';
 
 const S = await loadSettings();
+await applyLayout();
 
 if (S.theme !== 'system') document.documentElement.dataset.theme = S.theme;
 for (const [section, on] of Object.entries(S.show)) {
@@ -321,6 +323,7 @@ $('#refresh-btn').addEventListener('click', (e) => {
 });
 
 initSearch();
+initLayout();
 if (S.show.mail && S.show.packages) initDeliveries();
 else $('#card-deliveries').hidden = true;
 initMail();
