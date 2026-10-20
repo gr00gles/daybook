@@ -12,11 +12,13 @@
 <header class="sky">
   <div class="sky-inner">
     <section class="when" aria-label="Time and date">
-      <p class="greeting" id="greeting">Hello</p>
       <p class="clock"><span id="clock-time"></span><span class="ampm" id="clock-ampm"></span></p>
+      <p class="greeting" id="greeting">Hello</p>
       <p class="date-line"><span id="date-long"></span><span class="date-meta" id="date-meta"></span></p>
-      <p class="holiday-line" id="holiday-line" hidden></p>
-      <div class="next-up" id="next-up" hidden></div>
+      <div class="when-extra">
+        <p class="holiday-line" id="holiday-line" hidden></p>
+        <div class="next-up" id="next-up" hidden></div>
+      </div>
     </section>
 
     <section class="finder">
@@ -33,26 +35,28 @@
       <nav class="shortcuts" id="shortcuts" aria-label="Shortcuts" data-section="shortcuts"></nav>
     </section>
 
-    <section class="now-weather" aria-label="Weather now" data-section="weather">
-      <button class="nw-alert" id="nw-alert" type="button" hidden></button>
-      <div id="now-weather"></div>
-      <div class="nw-sky"><div class="suntrack" id="suntrack"></div><div class="moon" id="moon"></div></div>
-      <div class="wx-pop pop" id="wx-pop" role="dialog" aria-labelledby="wx-pop-h" hidden>
-        <header class="wx-pop-head">
-          <h2 id="wx-pop-h">This week</h2>
-          <span class="head-meta" id="weather-place"></span>
-          <span class="stamp" id="weather-updated"></span>
-          <button class="icon-btn small" type="button" id="wx-pop-close" aria-label="Close"></button>
-        </header>
-        <div class="wx-alerts" id="wx-alerts" data-section="alerts"></div>
-        <div id="weather-body"><p class="quiet">Getting the forecast…</p></div>
+    <div class="sky-end">
+      <section class="now-weather" aria-label="Weather now" data-section="weather">
+        <button class="nw-alert" id="nw-alert" type="button" hidden></button>
+        <div id="now-weather"></div>
+        <div class="nw-sky"><div class="suntrack" id="suntrack"></div><div class="moon" id="moon"></div></div>
+        <div class="wx-pop pop" id="wx-pop" role="dialog" aria-labelledby="wx-pop-h" hidden>
+          <header class="wx-pop-head">
+            <h2 id="wx-pop-h">This week</h2>
+            <span class="head-meta" id="weather-place"></span>
+            <span class="stamp" id="weather-updated"></span>
+            <button class="icon-btn small" type="button" id="wx-pop-close" aria-label="Close"></button>
+          </header>
+          <div class="wx-alerts" id="wx-alerts" data-section="alerts"></div>
+          <div id="weather-body"><p class="quiet">Getting the forecast…</p></div>
+        </div>
+      </section>
+      <div class="toolbar">
+        <button class="icon-btn" id="arrange-btn" type="button" title="Arrange cards" aria-label="Arrange cards" aria-pressed="false"></button>
+        <button class="icon-btn" id="refresh-btn" type="button" title="Refresh everything" aria-label="Refresh everything"></button>
+        <button class="icon-btn" id="settings-btn" type="button" title="Settings" aria-label="Settings"></button>
       </div>
-    </section>
-  </div>
-  <div class="toolbar">
-    <button class="icon-btn" id="arrange-btn" type="button" title="Arrange cards" aria-label="Arrange cards" aria-pressed="false"></button>
-    <button class="icon-btn" id="refresh-btn" type="button" title="Refresh everything" aria-label="Refresh everything"></button>
-    <button class="icon-btn" id="settings-btn" type="button" title="Settings" aria-label="Settings"></button>
+    </div>
   </div>
 </header>
 
@@ -159,6 +163,8 @@
       <div class="card-body" id="news-body"><p class="quiet">Loading headlines…</p></div>
     </section>
   </div>
+
+  <div class="col col-more" hidden></div>
 </main>
 
 <div class="update-bar pop" id="update-bar" role="status" hidden></div>
