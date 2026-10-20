@@ -251,6 +251,7 @@ function render() {
             canChange(sources.get(m.key))
               ? `<div class="mail-actions">
               <button type="button" class="mail-act" data-mail-act="read" data-key="${esc(m.key)}" data-id="${esc(m.id)}" title="Mark as read" aria-label="Mark as read: ${esc(m.subject)}">${icon('mail-open')}</button>
+              <button type="button" class="mail-act" data-mail-act="junk" data-key="${esc(m.key)}" data-id="${esc(m.id)}" title="Junk" aria-label="Junk: ${esc(m.subject)}">${icon('junk')}</button>
               <button type="button" class="mail-act danger" data-mail-act="delete" data-key="${esc(m.key)}" data-id="${esc(m.id)}" title="Delete" aria-label="Delete: ${esc(m.subject)}">${icon('trash')}</button>
             </div>`
               : ''
@@ -283,7 +284,7 @@ function render() {
 
 const shortLabel = (s) => (s.includes('@') ? s.split('@')[0] : s);
 
-// ---- Mark as read / delete -----------------------------------------------------------
+// ---- Mark as read / junk / delete ----------------------------------------------------
 // Outlook: any connected account. Gmail: only the account connected under Google, because
 // that's the one Chrome can get permission for.
 function canChange(src) {
@@ -323,6 +324,11 @@ async function gmailChange(action, item) {
     await gmailApi(`${thread}/modify`, { body: { removeLabelIds: ['UNREAD'] } });
     return () => gmailApi(`${thread}/modify`, { body: { addLabelIds: ['UNREAD'] } });
   }
+  // Labelling it SPAM is Gmail's Report spam: it moves to Spam and teaches the filter.
+  if (action === 'junk') {
+    await gmailApi(`${thread}/modify`, { body: { addLabelIds: ['SPAM'], removeLabelIds: ['INBOX'] } });
+    return () => gmailApi(`${thread}/modify`, { body: { addLabelIds: ['INBOX'], removeLabelIds: ['SPAM'] } });
+  }
   await gmailApi(`${thread}/trash`);
   return () => gmailApi(`${thread}/untrash`);
 }
@@ -334,9 +340,17 @@ async function outlookChange(action, item) {
     await graphWrite(clientId, message, { method: 'PATCH', body: { isRead: true } });
     return () => graphWrite(clientId, message, { method: 'PATCH', body: { isRead: false } });
   }
-  const moved = await graphWrite(clientId, `${message}/move`, { body: { destinationId: 'deleteditems' } });
+  const moved = await graphWrite(clientId, `${message}/move`, { body: { destinationId: action === 'junk' ? 'junkemail' : 'deleteditems' } });
   return () => graphWrite(clientId, `/me/messages/${encodeURIComponent(moved.id)}/move`, { body: { destinationId: 'inbox' } });
 }
+
+// What the toast says afterwards, for Gmail and for Outlook.
+const DONE = {
+  read: ['Marked as read', 'Marked as read'],
+  junk: ['Reported as spam', 'Moved to Junk Email'],
+  delete: ['Moved to Trash', 'Moved to Deleted Items'],
+};
+const FAILED = { read: 'mark that as read', junk: 'move that to junk', delete: 'delete that' };
 
 // Resolves to a function that undoes the change, or null if it didn't happen.
 // `opts.item` lets the reader delete a message it already marked read (no longer listed).
@@ -360,7 +374,7 @@ async function change(action, key, id, { toast = true, item: known = null } = {}
       await undo();
       putBack();
     };
-    const done = action === 'read' ? 'Marked as read' : src.kind === 'outlook' ? 'Moved to Deleted Items' : 'Moved to Trash';
+    const done = DONE[action][src.kind === 'outlook' ? 1 : 0];
     if (toast)
       showToast(done, async () => {
         try {
@@ -374,7 +388,7 @@ async function change(action, key, id, { toast = true, item: known = null } = {}
     putBack();
     // Without a toast (the reader asked), the caller reports it where it can be seen.
     if (!toast) throw err;
-    showToast(`Couldn’t ${action === 'read' ? 'mark that as read' : 'delete that'}: ${errorText(err).replace(/[.\s]+$/, '')}.`);
+    showToast(`Couldn’t ${FAILED[action]}: ${errorText(err).replace(/[.\s]+$/, '')}.`);
     return null;
   }
 }

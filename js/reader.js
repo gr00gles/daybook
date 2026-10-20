@@ -268,7 +268,7 @@ function paintStatus(html) {
 
 // Opens a message. `how` says where the full text comes from: 'gmail', 'outlook', or null when
 // this account can't be read here (another Gmail account signed in to Chrome).
-// `actions.change(action, { toast })` marks it read or deletes it and resolves to an undo.
+// `actions.change(action, { toast })` marks it read, junks or deletes it and resolves to an undo.
 export async function openReader({ item, how, clientId, providerUrl, providerName, account, letter, actions, autoRead }) {
   const dlg = $('#mail-dialog');
   current = { item, msg: null, images: false, providerName, undoRead: null, actions };
@@ -283,7 +283,7 @@ export async function openReader({ item, how, clientId, providerUrl, providerNam
     </header>
     <div class="rd-bar">
       <a class="btn small primary" href="${esc(providerUrl)}" target="_blank" rel="noopener">${icon('external')}Open in ${esc(providerName)}</a>
-      ${actions ? `<button class="btn small" type="button" data-rd="read" id="rd-read">${icon('mail-open')}Mark as read</button><button class="btn small" type="button" data-rd="delete">${icon('trash')}Delete</button>` : ''}
+      ${actions ? `<button class="btn small" type="button" data-rd="read" id="rd-read">${icon('mail-open')}Mark as read</button><button class="btn small" type="button" data-rd="junk">${icon('junk')}Junk</button><button class="btn small" type="button" data-rd="delete">${icon('trash')}Delete</button>` : ''}
       <span class="rd-state" id="rd-state"></span>
     </div>
     <p class="rd-status" id="rd-status" hidden></p>
@@ -348,7 +348,7 @@ export function initReader() {
       } catch (err) {
         $('#rd-state').textContent = `Couldn’t keep it unread: ${reason(err)}.`;
       }
-    } else if ((what === 'read' || what === 'delete') && current.actions) {
+    } else if ((what === 'read' || what === 'junk' || what === 'delete') && current.actions) {
       const { actions } = current;
       dlg.close();
       actions.change(what, { toast: true });
