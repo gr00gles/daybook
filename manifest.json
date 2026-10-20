@@ -40,7 +40,8 @@
     "https://routing.openstreetmap.de/*",
     "https://api.tomtom.com/*",
     "https://finnhub.io/*",
-    "https://date.nager.at/*"
+    "https://date.nager.at/*",
+    "https://en.wikipedia.org/*"
   ],
   "optional_host_permissions": [
     "https://*/*"
