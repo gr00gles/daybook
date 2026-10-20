@@ -1389,6 +1389,39 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .tm-pick:disabled { cursor: default; opacity: .6; }
 .tm-pick small { font-size: 12px; color: var(--muted); }
 .tm-pick .ui-icon { width: 14px; height: 14px; color: var(--muted); }
+/* ---- Around you (area events) ---------------------------------------------- */
+
+.ae-day { margin: 10px 0 2px; font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.ae-day:first-child { margin-top: 0; }
+.ae-list { list-style: none; margin: 0 -8px; padding: 0; }
+.ae {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+.ae:hover { background: var(--raised); }
+.ae:hover .ae-name { color: var(--accent); }
+.ae-img { width: 76px; height: 50px; border-radius: 8px; object-fit: cover; background: var(--line-2); }
+.ae-img.none { display: grid; place-items: center; color: var(--muted); }
+.ae-text { display: grid; gap: 2px; min-width: 0; }
+.ae-name { font-size: 14px; font-weight: 650; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ae-meta { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ae-tags { display: flex; align-items: center; gap: 8px; }
+.ae-tag { font: 500 10.5px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--k, var(--muted)); }
+.ae-tag.k-music { --k: var(--cat-7); }
+.ae-tag.k-arts { --k: var(--cat-5); }
+.ae-tag.k-other { --k: var(--cat-2); }
+.ae-tag.k-sports { --k: var(--cat-3); }
+.ae-tag.k-film { --k: var(--cat-1); }
+.ae-more { font-size: 11.5px; color: var(--muted); }
+.ae-toggle { margin-top: 6px; font-size: 13px; }
+.ae-search { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.ae-search .ui-icon { width: 13px; height: 13px; color: var(--muted); }
 
 /* ---- Headlines --------------------------------------------------------------- */
 

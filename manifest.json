@@ -44,7 +44,8 @@
     "https://en.wikipedia.org/*",
     "https://site.api.espn.com/*",
     "https://api.anthropic.com/*",
-    "https://api.openai.com/*"
+    "https://api.openai.com/*",
+    "https://app.ticketmaster.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*"
