@@ -44,6 +44,7 @@ const UI = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
   grip: '<circle cx="9" cy="6" r="1.2" fill="currentColor"/><circle cx="15" cy="6" r="1.2" fill="currentColor"/><circle cx="9" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="12" r="1.2" fill="currentColor"/><circle cx="9" cy="18" r="1.2" fill="currentColor"/><circle cx="15" cy="18" r="1.2" fill="currentColor"/>',
+  'chevron-down': '<path d="M6 9.5l6 6 6-6"/>',
   'chevron-left': '<path d="M14.5 6l-6 6 6 6"/>',
   'chevron-right': '<path d="M9.5 6l6 6-6 6"/>',
   'mail-open': '<path d="M3.5 10.2L12 4.5l8.5 5.7V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M3.5 10.2l8.5 5.6 8.5-5.6"/>',

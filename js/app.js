@@ -1,6 +1,6 @@
 import { loadSettings, ENGINES, outlookWebUrl } from './settings.js';
 import { $, $$, esc, colorVar, safeUrl, fmtTime, local } from './util.js';
-import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js';
+import { refreshWeather, renderSun, lastWeather, todayIndex, initWeather } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp, allEvents, setGames } from './calendar.js';
 import { initAlerts, refreshAlerts } from './alerts.js';
@@ -328,6 +328,7 @@ if (S.show.mail && S.show.packages) initDeliveries();
 else $('#card-deliveries').hidden = true;
 initMail();
 initAlerts();
+initWeather();
 if (S.show.calendar) {
   initMonth(S);
   initEvents(S, {

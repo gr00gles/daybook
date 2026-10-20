@@ -2,6 +2,7 @@
 // Outside the US the API has no data for the location, and nothing is shown.
 import { $, esc, local, cached, hash, fmtTime } from './util.js';
 import { icon } from './icons.js';
+import { openWeekWeather } from './weather.js';
 
 const POINT_KEY = 'nws:point';
 const SEVERITY = { Extreme: 'critical', Severe: 'serious', Moderate: 'warning', Minor: 'minor', Unknown: 'minor' };
@@ -156,7 +157,7 @@ export function initAlerts() {
   $('#nw-alert')?.addEventListener('click', () => {
     const first = $('#wx-alert-0');
     if (!first) return;
+    openWeekWeather();
     first.open = true;
-    first.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 }

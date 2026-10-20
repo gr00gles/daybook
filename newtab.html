@@ -34,9 +34,19 @@
     </section>
 
     <section class="now-weather" aria-label="Weather now" data-section="weather">
-      <div id="now-weather"></div>
       <button class="nw-alert" id="nw-alert" type="button" hidden></button>
-      <div class="moon" id="moon"></div>
+      <div id="now-weather"></div>
+      <div class="nw-sky"><div class="suntrack" id="suntrack"></div><div class="moon" id="moon"></div></div>
+      <div class="wx-pop pop" id="wx-pop" role="dialog" aria-labelledby="wx-pop-h" hidden>
+        <header class="wx-pop-head">
+          <h2 id="wx-pop-h">This week</h2>
+          <span class="head-meta" id="weather-place"></span>
+          <span class="stamp" id="weather-updated"></span>
+          <button class="icon-btn small" type="button" id="wx-pop-close" aria-label="Close"></button>
+        </header>
+        <div class="wx-alerts" id="wx-alerts" data-section="alerts"></div>
+        <div id="weather-body"><p class="quiet">Getting the forecast…</p></div>
+      </div>
     </section>
   </div>
   <div class="toolbar">
@@ -110,16 +120,6 @@
   </div>
 
   <div class="col col-out">
-    <section class="card" id="card-weather" data-section="weather" aria-labelledby="weather-h">
-      <header class="card-head">
-        <h2 id="weather-h">Weather</h2>
-        <span class="head-meta" id="weather-place"></span>
-        <span class="stamp" id="weather-updated"></span>
-      </header>
-      <div class="wx-alerts" id="wx-alerts" data-section="alerts"></div>
-      <div class="card-body" id="weather-body"><p class="quiet">Getting the forecast…</p></div>
-    </section>
-
     <section class="card" id="card-stocks" data-section="stocks" aria-labelledby="stocks-h" hidden>
       <header class="card-head">
         <h2 id="stocks-h">Markets</h2>
