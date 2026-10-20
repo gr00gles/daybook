@@ -2,7 +2,7 @@
 // streams into a bubble under the search box and follow-ups continue the same conversation.
 // Without a key, the question opens in claude.ai or chatgpt.com, where you are signed in.
 // Keys stay in chrome.storage.local on this computer; they never sync with your profile.
-import { $, esc, safeUrl, local } from './util.js';
+import { $, esc, safeUrl, local, showPop } from './util.js';
 import { icon } from './icons.js';
 
 export const AI_DEFAULTS = { anthropicKey: '', claudeModel: 'claude-opus-5-5', openaiKey: '', openaiModel: 'gpt-5' };
@@ -195,7 +195,7 @@ function close() {
   controller?.abort();
   controller = null;
   convo = { engine: null, messages: [] };
-  if (bubble) bubble.hidden = true;
+  showPop(bubble, false);
 }
 
 function paint() {
@@ -232,7 +232,7 @@ export async function ask(engine, question) {
   convo.messages.push({ role: 'user', content: question });
   const reply = { role: 'assistant', content: '', pending: true };
   convo.messages.push(reply);
-  bubble.hidden = false;
+  showPop(bubble, true);
   paint();
   // Earlier turns that ended in an error are left out of what is sent.
   const history = [];

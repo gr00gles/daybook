@@ -4,7 +4,10 @@ import { $, $$, esc } from './util.js';
 import { saveSettings, NEWS_TOPICS, ENGINES } from './settings.js';
 import { extraOrigins } from './calendar.js';
 import { mountGoogle, mountGmail, mountOutlook, mountLocation } from './setup-ui.js';
-import { icon } from './icons.js';
+import { holidayChoices } from './sky.js';
+import { icon, hasIcon } from './icons.js';
+import { groupList, openGroupEditor } from './sites.js';
+import { mountTeams } from './teams.js';
 import { loadAi, saveAi, CLAUDE_MODELS } from './ask.js';
 
 let draft;
@@ -96,6 +99,12 @@ function build() {
     <button class="btn small" type="button" data-action="add-calendar">${icon('plus')}Add a calendar link</button>
   </section>
 
+  <section id="set-holidays">
+    <h3>Holidays</h3>
+    <p class="hint">Pick the holidays to show under the date and on the month calendar. Each one has its own colors and emblem.${d.show.sky ? '' : ' They show once <em>Moon and holidays</em> is on under Sections.'}</p>
+    <div class="topics hol-choices" id="sheet-holidays"><p class="quiet">Loading holidays…</p></div>
+  </section>
+
   <section id="set-news">
     <h3>Headlines</h3>
     <div class="topics">${Object.entries(NEWS_TOPICS)
@@ -138,6 +147,24 @@ function build() {
     </div>
   </section>
 
+  <section id="set-sites">
+    <h3>Site groups</h3>
+    <p class="hint">Groups sit at the start of the shortcuts row. Hover over one to see its sites; <strong>Edit</strong> at the end changes it.</p>
+    <div class="group-rows" id="sheet-groups"></div>
+    <button class="btn small" type="button" data-action="add-group">${icon('plus')}Add a group</button>
+    <p class="hint small">Your companies have their own pages: <a href="companies.html">open Companies</a>.</p>
+  </section>
+
+  <section id="set-teams">
+    <h3>Teams</h3>
+    <p class="hint">Follow teams to get a card with each one’s next game (and the score while it’s on), their games on your calendar with the team’s logo, and recent team news. Schedules come from ESPN; news from Google News.</p>
+    <div id="sheet-teams"></div>
+    <div class="topics">
+      ${check('teams.calendar', 'Show games on the calendar', d.teams.calendar)}
+      ${check('teams.news', 'Show team news', d.teams.news)}
+    </div>
+  </section>
+
   <section id="set-sections">
     <h3>Sections</h3>
     <div class="topics">
@@ -150,9 +177,11 @@ function build() {
       ${check('show.packages', 'Deliveries', d.show.packages)}
       ${check('show.news', 'Headlines', d.show.news)}
       ${check('show.stocks', 'Stocks', d.show.stocks)}
+      ${check('show.teams', 'Teams', d.show.teams)}
       ${check('show.notes', 'Notes', d.show.notes)}
       ${check('show.youtube', 'YouTube', d.show.youtube)}
       ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}
+      ${check('show.companies', 'Companies in the shortcuts', d.show.companies)}
     </div>
   </section>
 
@@ -197,11 +226,53 @@ function queueSave() {
   }, 250);
 }
 
+async function mountHolidays() {
+  const box = $('#sheet-holidays');
+  let list;
+  try {
+    list = await holidayChoices();
+  } catch {
+    list = [];
+  }
+  if (!box.isConnected) return;
+  const date = (t) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  box.innerHTML = list.length
+    ? list
+        .map(
+          (h) => `<label class="check hol-choice" style="--hol: ${h.theme.color}"><input type="checkbox" data-holiday="${esc(h.key)}"${draft.holidays.choices[h.key] ?? h.on ? ' checked' : ''}>
+        <span class="hol-glyph" aria-hidden="true">${h.theme.glyph}</span><span class="hol-choice-text"><span>${esc(h.name)}</span><span class="hol-date">${h.key === 'clocks' ? 'Spring and fall' : esc(date(h.at))}</span></span></label>`,
+        )
+        .join('')
+    : '<p class="quiet">The holiday list couldn’t be loaded right now.</p>';
+}
+
 function mountAll() {
+  mountHolidays();
   mountGoogle($('#sheet-google'), draft, queueSave);
   mountGmail($('#sheet-gmail'), draft, queueSave);
   mountOutlook($('#sheet-outlook'), draft, queueSave);
   mountLocation($('#sheet-location'), draft, queueSave);
+  mountTeams($('#sheet-teams'), draft, queueSave);
+  paintGroups();
+}
+
+// Site groups save on their own (see sites.js), so the page shows a change without reloading.
+async function paintGroups() {
+  const el = $('#sheet-groups');
+  if (!el) return;
+  const groups = await groupList();
+  el.innerHTML = groups.length
+    ? groups
+        .map(
+          (g) => `<div class="group-row">
+          <span class="group-icon small">${icon(hasIcon(g.icon) ? g.icon : 'folder')}</span>
+          <span class="group-row-name">${esc(g.name)}</span>
+          <span class="hint">${g.sites.length} ${g.sites.length === 1 ? 'site' : 'sites'}</span>
+          <button class="btn small" type="button" data-action="edit-group" data-id="${esc(g.id)}">${icon('edit')}Edit</button>
+        </div>`,
+        )
+        .join('')
+    : '<p class="hint">No groups yet.</p>';
 }
 
 function rerender() {
@@ -219,7 +290,7 @@ function wire(dlg) {
   wired = true;
   const onEdit = (e) => {
     const el = e.target;
-    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location')) return;
+    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams')) return;
     if (el.dataset.ai) {
       // Saved straight to this computer; the search box picks it up without a reload.
       aiDraft[el.dataset.ai] = el.value.trim();
@@ -230,6 +301,8 @@ function wire(dlg) {
       setPath(el.dataset.path, readValue(el));
     } else if (el.dataset.list) {
       listAt(el.dataset.list)[Number(el.dataset.i)][el.dataset.field] = readValue(el);
+    } else if (el.dataset.holiday) {
+      draft.holidays.choices = { ...draft.holidays.choices, [el.dataset.holiday]: el.checked };
     } else if (el.dataset.topic) {
       const set = new Set(draft.news.topics);
       if (el.checked) set.add(el.dataset.topic);
@@ -264,6 +337,8 @@ function wire(dlg) {
       draft.news.custom.push({ label: '', url: '' });
       queueSave();
       rerender();
+    } else if (action === 'add-group' || action === 'edit-group') {
+      openGroupEditor(action === 'edit-group' ? btn.dataset.id : null, paintGroups);
     } else if (action === 'rerun') {
       draft.onboarded = false;
       queueSave();
