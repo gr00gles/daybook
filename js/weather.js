@@ -1,6 +1,6 @@
 // Weather from Open-Meteo (free, no key). Location comes from Chrome's geolocation or a
 // city you pick in Settings.
-import { $, esc, cached, hash, local, getJSON, fmtTime, fmtHour, updatedText, errorText } from './util.js';
+import { $, esc, cached, hash, local, getJSON, fmtTime, fmtHour, updatedText, errorText, showPop } from './util.js';
 import { weatherIcon, icon } from './icons.js';
 
 const WMO = {
@@ -158,29 +158,74 @@ export async function refreshWeather(S, force, onData) {
 
 function renderNoLocation() {
   $('#now-weather').innerHTML = `<button class="btn ghost" type="button" data-open-settings="location">${icon('locate')}Set your location for weather</button>`;
-  $('#weather-body').innerHTML = `<div class="notice setup"><p>Chrome didn't share a location. Pick your city and the forecast appears here.</p><button class="btn small primary" type="button" data-open-settings="location">Choose a city</button></div>`;
 }
 
 function renderError(err) {
+  if (!last) $('#now-weather').innerHTML = `<p class="notice warn">Weather isn't loading: ${esc(errorText(err))}. It will retry in a minute.</p>`;
   $('#weather-body').innerHTML = `<p class="notice warn">Weather isn't loading: ${esc(errorText(err))}. It will retry in a minute.</p>`;
 }
 
+// Today in the top bar: conditions, the next few hours, and the sun's day. Clicking it opens
+// the week (#wx-pop) with the hourly chart, the 7 days and the details.
 function renderNow(d) {
   const c = d.current;
   const i = todayIndex(d.daily);
   const { label, glyph } = describe(c.weather_code, c.is_day);
+  const rain = d.daily.precipitation_probability_max[i];
+  const h = d.hourly;
+  const nowS = Date.now() / 1000;
+  let start = h.time.findIndex((t) => t + 3600 > nowS);
+  if (start < 0) start = 0;
+  const hours = [];
+  for (let k = start; k < Math.min(start + 6, h.time.length); k++) {
+    const { label: cond, glyph: g } = describe(h.weather_code[k], h.is_day[k]);
+    const pop = h.precipitation_probability[k];
+    hours.push(`<li title="${esc(cond)}${pop >= 20 ? `, ${pop}% chance of rain` : ''}">
+        <span class="nh-time">${k === start ? 'Now' : fmtHour(h.time[k] * 1000, settingsRef?.clock24)}</span>
+        ${weatherIcon(g)}
+        <span class="nh-temp">${round(k === start ? c.temperature_2m : h.temperature_2m[k])}°</span>
+        <span class="nh-pop">${pop >= 20 ? `${pop}%` : ''}</span>
+      </li>`);
+  }
+  const open = !$('#wx-pop')?.hidden;
   $('#now-weather').innerHTML = `
-    <div class="nw-main">
+    <button class="nw-main" type="button" id="nw-today" aria-controls="wx-pop" aria-expanded="${open}" title="This week's forecast">
       <span class="nw-icon">${weatherIcon(glyph)}</span>
       <span class="nw-temp">${round(c.temperature_2m)}°</span>
-      <div class="nw-text">
-        <div class="nw-cond">${esc(label)}</div>
-        <div class="nw-meta">H ${round(d.daily.temperature_2m_max[i])}° · L ${round(d.daily.temperature_2m_min[i])}° · Feels ${round(c.apparent_temperature)}°</div>
-        <div class="nw-place">${icon('pin')}${esc(d.place)}</div>
-      </div>
-    </div>
-    <div class="suntrack" id="suntrack"></div>`;
+      <span class="nw-text">
+        <span class="nw-cond">${esc(label)}</span>
+        <span class="nw-meta">H ${round(d.daily.temperature_2m_max[i])}° · L ${round(d.daily.temperature_2m_min[i])}° · Feels ${round(c.apparent_temperature)}°</span>
+        <span class="nw-place">${icon('pin')}${esc(d.place)}${rain >= 10 ? `<span class="nw-rain">${icon('drop', 'drop')}${rain}%</span>` : ''}</span>
+      </span>
+      <span class="nw-more" aria-hidden="true">${icon('chevron-down')}</span>
+    </button>
+    <ol class="nw-hours" aria-label="Next hours">${hours.join('')}</ol>`;
   renderSun();
+}
+
+export function openWeekWeather(show = true) {
+  const pop = $('#wx-pop');
+  if (!pop) return;
+  showPop(pop, show);
+  $('#nw-today')?.setAttribute('aria-expanded', String(show));
+  if (show) drawHourly();
+}
+
+export function initWeather() {
+  $('#wx-pop-close').innerHTML = icon('close');
+  $('#wx-pop-close').addEventListener('click', () => openWeekWeather(false));
+  $('#now-weather').addEventListener('click', (e) => {
+    if (e.target.closest('#nw-today')) openWeekWeather($('#wx-pop').hidden);
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (!$('#wx-pop').hidden && !e.target.closest('#wx-pop, #nw-today, #nw-alert')) openWeekWeather(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#wx-pop').hidden && !document.querySelector('dialog[open]')) {
+      openWeekWeather(false);
+      $('#nw-today')?.focus();
+    }
+  });
 }
 
 const dur = (ms) => {
@@ -188,6 +233,7 @@ const dur = (ms) => {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 };
 
+// Sunrise to sunset as a bar, with the sun where it is now.
 export function renderSun() {
   const el = $('#suntrack');
   if (!el || !last) return;
@@ -201,28 +247,18 @@ export function renderSun() {
   const now = Date.now();
   const f = (now - rise) / len;
   const up = f >= 0 && f <= 1;
-  const W = 248, H = 74, cx = W / 2, cy = 54, rx = 104, ry = 40;
-  const pt = (t) => [cx - rx * Math.cos(Math.PI * t), cy - ry * Math.sin(Math.PI * t)];
-  const arc = (t0, t1) => {
-    const pts = [];
-    for (let k = 0; k <= 48; k++) pts.push(pt(t0 + ((t1 - t0) * k) / 48).map((v) => v.toFixed(1)).join(' '));
-    return `M${pts.join('L')}`;
-  };
-  const [sx, sy] = pt(Math.min(1, Math.max(0, f)));
   let caption;
   if (up) {
     const diff = prev == null ? 0 : Math.round((len - prev) / 60000);
     caption = `${dur(len)} of daylight${diff ? ` · ${Math.abs(diff)}m ${diff > 0 ? 'longer' : 'shorter'}` : ''}`;
   } else if (now < rise) caption = `Sunrise at ${fmtTime(rise, h24)}`;
   else caption = dly.sunrise[i + 1] ? `Sunrise tomorrow at ${fmtTime(dly.sunrise[i + 1] * 1000, h24)}` : 'After sunset';
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Sunrise ${fmtTime(rise, h24)}, sunset ${fmtTime(set, h24)}">
-      <path d="${arc(0, 1)}" class="st-path"/>
-      ${up ? `<path d="${arc(0, f)}" class="st-done"/>` : ''}
-      <line x1="6" x2="${W - 6}" y1="${cy}" y2="${cy}" class="st-horizon"/>
-      ${up ? `<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="6.5" class="st-sun"/>` : ''}
-      <text x="${cx - rx}" y="${H - 3}" class="st-label" text-anchor="middle">${fmtTime(rise, h24)}</text>
-      <text x="${cx + rx}" y="${H - 3}" class="st-label" text-anchor="middle">${fmtTime(set, h24)}</text>
-    </svg>
+  const pct = Math.min(100, Math.max(0, f * 100));
+  el.innerHTML = `<div class="sunline" role="img" aria-label="Sunrise ${fmtTime(rise, h24)}, sunset ${fmtTime(set, h24)}">
+      <span>${fmtTime(rise, h24)}</span>
+      <span class="sunbar${up ? '' : ' down'}"><span class="sunbar-done" style="width:${pct}%"></span>${up ? `<span class="sunbar-sun" style="left:${pct}%"></span>` : ''}</span>
+      <span>${fmtTime(set, h24)}</span>
+    </div>
     <div class="st-caption">${caption}</div>`;
 }
 
