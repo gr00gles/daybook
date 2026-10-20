@@ -1258,6 +1258,97 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 }
 .tk-none { font-size: 13px; color: var(--muted); }
 
+/* ---- Teams ------------------------------------------------------------------- */
+
+.teams { list-style: none; margin: 0 -8px; padding: 0; }
+.teams li + li { box-shadow: 0 -1px 0 var(--line-2); }
+.team { padding: 4px 0 8px; }
+.tm-game {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 10px;
+  text-decoration: none;
+}
+.tm-game:hover { background: var(--raised); }
+.tm-logos { display: flex; align-items: center; gap: 4px; }
+.tm-logo { width: 32px; height: 32px; object-fit: contain; }
+.tm-logo.none { display: inline-block; border-radius: 50%; background: var(--line-2); }
+.tm-at { font: 500 11px var(--font-mono); color: var(--muted); }
+.tm-info { display: grid; min-width: 0; }
+.tm-title { font-size: 14.5px; font-weight: 650; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-game:hover .tm-title { text-decoration: underline; text-underline-offset: 3px; }
+.tm-when { display: flex; align-items: center; gap: 6px; margin-top: 2px; font: 400 11.5px var(--font-mono); color: var(--ink-2); }
+.tm-live {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--now);
+  color: #fff;
+  font: 500 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.tm-count { font: 500 12px var(--font-mono); color: var(--ink-2); white-space: nowrap; }
+.tm-score { font: 600 16px var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tm-score.won { color: var(--good); }
+.tm-score.lost { color: var(--critical); }
+.tm-none { margin: 0; padding: 8px; font-size: 13.5px; color: var(--muted); }
+.tm-meta { margin: -2px 0 0; padding: 0 8px; font: 400 11px var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+.tm-news-wrap:not(:empty) { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-2); }
+.tm-news { list-style: none; margin: 0; padding: 0; }
+.tm-news li + li { border-top: 1px solid var(--line-2); }
+.tm-news a { display: grid; grid-template-columns: 22px minmax(0, 1fr); padding: 7px 0; text-decoration: none; }
+.tm-news .news-title { font-size: 14px; }
+.tm-news .news-meta { grid-column: 2; }
+.tm-news a:hover .news-title { color: var(--accent); }
+.tm-news-logo { width: 16px; height: 16px; margin-top: 2px; object-fit: contain; }
+.tm-news-logo.none { display: inline-block; }
+#teams-body { container-type: inline-size; }
+@container (max-width: 300px) {
+  .tm-logos .tm-at, .tm-logos .tm-logo + .tm-at + .tm-logo { display: none; }
+}
+
+/* Team logos in place of calendar dots. */
+.cal-logo { flex: none; width: 16px; height: 16px; object-fit: contain; align-self: center; }
+.mev.logo { display: flex; align-items: center; gap: 3px; padding-left: 2px; }
+.mev.logo::before { display: none; }
+.mev.logo img { flex: none; width: 12px; height: 12px; object-fit: contain; }
+.mev.logo.all { padding-left: 3px; }
+@container (max-width: 390px) {
+  .mev.logo, .mev.logo.all { width: 12px; height: 12px; padding: 0; border-radius: 0; background: none; }
+}
+
+/* Following teams, in Settings. */
+.tm-following { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; }
+.tm-following li { display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 10px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line-2); }
+.tm-following li span { font-weight: 600; }
+.tm-following li small { margin-right: auto; font-size: 12px; color: var(--muted); }
+.tm-pick-logo { width: 20px; height: 20px; object-fit: contain; flex: none; }
+.tm-pick-logo.none { display: inline-block; }
+.tm-results { display: grid; gap: 4px; margin: 6px 0 12px; }
+.tm-results:empty { display: none; }
+.tm-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.tm-pick span { margin-right: auto; }
+.tm-pick:hover:not(:disabled) { border-color: var(--faint); }
+.tm-pick:disabled { cursor: default; opacity: .6; }
+.tm-pick small { font-size: 12px; color: var(--muted); }
+.tm-pick .ui-icon { width: 14px; height: 14px; color: var(--muted); }
+
 /* ---- Headlines --------------------------------------------------------------- */
 
 .tabs { display: flex; gap: 4px; margin: -4px 0 8px; overflow-x: auto; scrollbar-width: none; }

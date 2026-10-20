@@ -266,6 +266,12 @@ const dedupe = (list) => {
     });
 };
 
+// Games of the teams you follow (teams.js), shown alongside your calendars.
+let games = [];
+export function setGames(list) {
+  games = list;
+}
+
 // Events just added here, shown until the calendar's next refresh brings them in.
 let justAdded = [];
 
@@ -304,7 +310,7 @@ export function allEvents() {
   const now = Date.now();
   justAdded = justAdded.filter((p) => p.until > now);
   for (const [id, until] of justRemoved) if (until < now) justRemoved.delete(id);
-  const all = [...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))).concat(justAdded);
+  const all = [...sources.values()].flatMap((s) => s.events.map((e) => ({ ...e, color: s.cal.color, calName: s.cal.name }))).concat(justAdded, games);
   return dedupe(withEdits(justRemoved.size ? all.filter((e) => !justRemoved.has(e.id)) : all));
 }
 
@@ -419,7 +425,11 @@ function eventKey(e) {
   onScreen.set(k, e);
   return k;
 }
-const dot = (color) => `<span class="cal-dot" style="--c: ${colorVar(color)}"></span>`;
+// A team's logo stands in for the calendar dot on its games.
+const dot = (color, logo) =>
+  logo
+    ? `<img class="cal-logo" src="${esc(safeUrl(logo))}" alt="" width="16" height="16" loading="lazy">`
+    : `<span class="cal-dot" style="--c: ${colorVar(color)}"></span>`;
 
 function joinButton(e) {
   return e.join
@@ -484,7 +494,7 @@ export function timedRow(e, now, h24, { compact = false } = {}) {
   return `<li class="ev ${state}">
     <span class="ev-time">${range}</span>
     <div class="ev-main">
-      <button class="ev-title" type="button" data-event="${eventKey(e)}" aria-haspopup="dialog">${dot(e.color)}<span>${esc(e.title)}</span></button>
+      <button class="ev-title" type="button" data-event="${eventKey(e)}" aria-haspopup="dialog">${dot(e.color, e.logo)}<span>${esc(e.title)}</span></button>
       ${!compact && e.location && !/^https?:/.test(e.location) ? `<span class="ev-where">${esc(e.location)}</span>` : ''}
       ${tripLine(e, state, h24)}
     </div>
@@ -496,7 +506,7 @@ export function timedRow(e, now, h24, { compact = false } = {}) {
 export function allDayChips(list) {
   if (!list.length) return '';
   return `<div class="allday">${list
-    .map((e) => `<button class="chip" type="button" data-event="${eventKey(e)}" aria-haspopup="dialog" title="${esc(e.calName)}">${dot(e.color)}${esc(e.title)}</button>`)
+    .map((e) => `<button class="chip" type="button" data-event="${eventKey(e)}" aria-haspopup="dialog" title="${esc(e.calName)}">${dot(e.color, e.logo)}${esc(e.title)}</button>`)
     .join('')}</div>`;
 }
 

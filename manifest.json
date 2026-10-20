@@ -41,7 +41,8 @@
     "https://api.tomtom.com/*",
     "https://finnhub.io/*",
     "https://date.nager.at/*",
-    "https://en.wikipedia.org/*"
+    "https://en.wikipedia.org/*",
+    "https://site.api.espn.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*"

@@ -2,11 +2,12 @@ import { loadSettings, ENGINES, outlookWebUrl } from './settings.js';
 import { $, $$, esc, colorVar, safeUrl, fmtTime, local } from './util.js';
 import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
-import { refreshCalendars, renderAgenda, nextUp, allEvents } from './calendar.js';
+import { refreshCalendars, renderAgenda, nextUp, allEvents, setGames } from './calendar.js';
 import { initAlerts, refreshAlerts } from './alerts.js';
 import { renderMoon, loadHolidays, renderHoliday, setHolidayChoices } from './sky.js';
 import { planTrips, tripInfo, leaveText } from './trip.js';
 import { refreshStocks } from './stocks.js';
+import { refreshTeams } from './teams.js';
 import { initEvents } from './events.js';
 import { initDetails } from './details.js';
 import { initMonth, renderMonth } from './month.js';
@@ -287,6 +288,11 @@ function refreshAll(force = false) {
       scheduleTrips();
     });
   if (S.show.stocks) refreshStocks(S, force);
+  if (S.show.teams)
+    refreshTeams(S, force, (games) => {
+      setGames(games);
+      if (S.show.calendar) renderCalendars();
+    });
   if (S.show.news) refreshNews(S, force);
   if (S.show.youtube) refreshYouTube(S, force);
 }
