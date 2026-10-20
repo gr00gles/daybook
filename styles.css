@@ -181,31 +181,16 @@ svg { flex: none; }
   align-items: start;
 }
 .finder { grid-area: finder; min-width: 0; }
-.sky-end { grid-area: end; justify-self: end; display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-/* Today's weather: one pane of glass with the conditions (a button that opens the week) beside
-   the next six hours, and the sun's day and the moon under them. The frost sits on ::before,
-   so the week bubble inside can frost the cards under it too. */
+.sky-end { grid-area: end; justify-self: end; display: flex; align-items: flex-start; gap: 20px; min-width: 0; }
+/* Today's weather, straight on the backdrop like the clock: the conditions (a button that
+   opens the week) beside the next six hours, and the sun's day and the moon under them. */
 .now-weather {
   position: relative;
-  isolation: isolate;
   min-width: 0;
   display: grid;
   justify-items: stretch;
-  gap: 7px;
-  padding: 10px 14px 9px 12px;
-  border-radius: 20px;
-}
-.now-weather::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: linear-gradient(180deg, var(--sheen), transparent 140px), var(--glass);
-  -webkit-backdrop-filter: var(--blur);
-  backdrop-filter: var(--blur);
-  box-shadow: inset 0 0 0 1px var(--glass-edge), 0 0 0 1px var(--glass-rim), var(--shadow);
-  pointer-events: none;
+  gap: 8px;
+  padding-top: 4px;
 }
 .now-weather > .nw-alert { justify-self: start; }
 #now-weather { display: flex; align-items: center; gap: 12px; }
@@ -500,6 +485,9 @@ kbd {
   overflow: hidden;
   margin-top: 4px;
 }
+/* The engine tabs and the shortcut circles are hidden for now. The default engine is set in
+   Settings, and !m, !y, !c and the other bangs still pick one. */
+.engines, .shortcuts { display: none; }
 .shortcut {
   display: grid;
   justify-items: center;
