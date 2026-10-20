@@ -315,6 +315,47 @@ kbd {
   .places-map { min-height: 240px; border-left: 0; border-top: 1px solid var(--line-2); }
   .places-list { max-height: 220px; }
 }
+/* Claude / ChatGPT answers: a bubble under the engine chips, so you can switch while it's open. */
+.ask {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 15;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: min(62vh, 560px);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  box-shadow: 0 24px 48px -24px rgb(6 10 14 / .45);
+  overflow: hidden;
+  text-align: left;
+}
+.ask[hidden] { display: none; }
+.ask-head { display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 14px; border-bottom: 1px solid var(--line-2); }
+.ask-who { font: 500 10.5px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
+.ask-hint { flex: 1; margin-left: 6px; font-size: 12px; color: var(--muted); }
+.ask-head .icon-btn { width: 30px; height: 30px; }
+.ask-head .ui-icon { width: 16px; height: 16px; }
+.ask-log { overflow-y: auto; padding: 4px 16px 14px; font-size: 14.5px; line-height: 1.55; color: var(--ink); }
+.ask-q { margin: 12px 0 4px; font-weight: 650; color: var(--ink-2); }
+.ask-q::before { content: '› '; color: var(--muted); }
+.ask-a { overflow-wrap: anywhere; }
+.ask-a p, .ask-a ul, .ask-a ol, .ask-a pre { margin: 6px 0; }
+.ask-a ul, .ask-a ol { padding-left: 22px; }
+.ask-a h4 { margin: 10px 0 4px; font-size: 14.5px; }
+.ask-a code { font: 12.5px var(--font-mono); background: var(--surface); border-radius: 4px; padding: 1px 4px; }
+.ask-a pre { padding: 10px 12px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; overflow-x: auto; }
+.ask-a pre code { padding: 0; background: none; }
+.ask-a a { color: var(--accent); }
+.ask-error { color: var(--critical); }
+.ask-wait { display: flex; gap: 5px; padding: 6px 0; }
+.ask-wait span { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); animation: ask-dot 1s infinite ease-in-out both; }
+.ask-wait span:nth-child(2) { animation-delay: .15s; }
+.ask-wait span:nth-child(3) { animation-delay: .3s; }
+@keyframes ask-dot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+
 /* One row of engine chips, however many there are: they tighten, then scroll sideways. */
 .engines { display: flex; justify-content: safe center; gap: 2px; margin-top: 7px; overflow-x: auto; scrollbar-width: none; }
 .engine {
@@ -564,7 +605,7 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .head-meta { font-size: 13.5px; color: var(--ink-2); }
 .head-count:not(:empty) {
   font: 500 13px/1 var(--font-mono);
-  padding: 4px 9px;
+  padding: 4px 11px;
   border-radius: 999px;
   background: var(--ink);
   color: var(--surface);
