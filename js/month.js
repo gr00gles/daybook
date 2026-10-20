@@ -1,6 +1,6 @@
 // The month calendar: every day of the month with its events, flippable to other months.
 // Clicking a day shows that day's full schedule under the grid.
-import { $, esc, colorVar, startOfDay, addDays } from './util.js';
+import { $, esc, colorVar, startOfDay, addDays, safeUrl } from './util.js';
 import { monthGrid, eventsBetween, ensureMonth, FIRST_DAY, timedRow, allDayChips } from './calendar.js';
 import { icon } from './icons.js';
 import { holidaysOn, loadHolidays, coveredBy, holidayTheme, holidayBadge } from './sky.js';
@@ -84,7 +84,7 @@ function cell(d0, events, now, week, c) {
     ${week.lanes ? '<span class="mlanes" aria-hidden="true"></span>' : ''}
     ${hols.map((h) => `<span class="mhol${h.clock ? ' clock' : ''}" style="--hol: ${holidayTheme(h).color}"><span class="hol-glyph" aria-hidden="true">${holidayTheme(h).glyph}</span>${esc(h.name)}</span>`).join('')}
     <span class="mevs">${shown
-      .map((e) => `<span class="mev${e.allDay ? ' all' : ''}" style="--c: ${colorVar(e.color)}">${esc(e.title)}</span>`)
+      .map((e) => `<span class="mev${e.allDay ? ' all' : ''}${e.logo ? ' logo' : ''}" style="--c: ${colorVar(e.color)}">${e.logo ? `<img src="${esc(safeUrl(e.logo))}" alt="" width="12" height="12" loading="lazy">` : ''}${esc(e.title)}</span>`)
       .join('')}${more > 0 ? `<span class="mmore">+${more}</span>` : ''}</span>
   </button>`;
 }

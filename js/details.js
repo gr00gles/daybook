@@ -123,8 +123,9 @@ function view(e) {
   const place = e.location && !/^https?:/.test(e.location) ? e.location : '';
   const len = lengthText(e);
   const canEdit = Boolean(e.editable && (e.src === 'google' || e.src === 'outlook'));
-  const where = e.src === 'outlook' ? 'Outlook' : e.src === 'google' ? 'Google Calendar' : '';
-  const readOnly = !e.src ? 'Added by iCal link, so it can only be read here.' : !canEdit ? 'You can’t change this one here: it’s someone else’s invitation or on a calendar you can only read.' : '';
+  const game = String(e.id).startsWith('game:'); // a followed team's game (teams.js)
+  const where = e.src === 'outlook' ? 'Outlook' : e.src === 'google' ? 'Google Calendar' : game ? 'ESPN' : '';
+  const readOnly = game ? 'Games come from ESPN, so they can only be read here.' : !e.src ? 'Added by iCal link, so it can only be read here.' : !canEdit ? 'You can’t change this one here: it’s someone else’s invitation or on a calendar you can only read.' : '';
   return `<article class="evd" style="--c: ${colorVar(e.color)}">
     <header class="ev-form-head evd-head">
       <span class="evd-swatch" aria-hidden="true"></span>

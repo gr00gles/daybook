@@ -8,7 +8,7 @@ let active = null;
 let force = false;
 let rolo = null;
 
-async function fetchFeed(url) {
+export async function fetchFeed(url) {
   const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const xml = new DOMParser().parseFromString(await res.text(), 'text/xml');
