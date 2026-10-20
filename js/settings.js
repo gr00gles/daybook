@@ -63,6 +63,7 @@ export const DEFAULTS = {
   youtube: { hideShorts: true },
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
+  holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
   show: {
     weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true, youtube: true,
     alerts: true, sky: true, travel: true, packages: true, stocks: true, companies: true,

@@ -3,7 +3,7 @@
 import { $, esc, colorVar, startOfDay, addDays } from './util.js';
 import { monthGrid, eventsBetween, ensureMonth, FIRST_DAY, timedRow, allDayChips } from './calendar.js';
 import { icon } from './icons.js';
-import { holidaysOn, loadHolidays, coveredBy } from './sky.js';
+import { holidaysOn, loadHolidays, coveredBy, holidayTheme, holidayBadge } from './sky.js';
 import { openEventEditor } from './events.js';
 
 const SHOWN_PER_DAY = 3;
@@ -77,11 +77,12 @@ function cell(d0, events, now, week, c) {
   const shown = singles.slice(0, room);
   const more = singles.length - shown.length + week.hidden[c];
   const label = `${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${hols.map((h) => `, ${h.name}`).join('')}: ${list.length ? `${list.length} event${list.length === 1 ? '' : 's'}` : 'nothing scheduled'}`;
-  const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected === d0 && 'sel', hols.some((h) => !h.clock) && 'hol'].filter(Boolean).join(' ');
-  return `<button type="button" class="${cls}" data-day="${d0}" aria-label="${esc(label)}"${selected === d0 ? ' aria-pressed="true"' : ''}${hols.length ? ` title="${esc(hols.map((h) => h.name).join(', '))}"` : ''}>
+  const festive = hols.find((h) => !h.clock);
+  const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected === d0 && 'sel', festive && 'hol', festive && `hol-${holidayTheme(festive).id}`].filter(Boolean).join(' ');
+  return `<button type="button" class="${cls}" data-day="${d0}" aria-label="${esc(label)}"${selected === d0 ? ' aria-pressed="true"' : ''}${hols.length ? ` title="${esc(hols.map((h) => h.name).join(', '))}"` : ''}${festive ? ` style="--hol: ${holidayTheme(festive).color}"` : ''}>
     <span class="mnum">${d.getDate()}</span>
     ${week.lanes ? '<span class="mlanes" aria-hidden="true"></span>' : ''}
-    ${hols.map((h) => `<span class="mhol${h.clock ? ' clock' : ''}">${esc(h.name)}</span>`).join('')}
+    ${hols.map((h) => `<span class="mhol${h.clock ? ' clock' : ''}" style="--hol: ${holidayTheme(h).color}"><span class="hol-glyph" aria-hidden="true">${holidayTheme(h).glyph}</span>${esc(h.name)}</span>`).join('')}
     <span class="mevs">${shown
       .map((e) => `<span class="mev${e.allDay ? ' all' : ''}" style="--c: ${colorVar(e.color)}">${esc(e.title)}</span>`)
       .join('')}${more > 0 ? `<span class="mmore">+${more}</span>` : ''}</span>
@@ -102,7 +103,7 @@ function detail(events, now) {
   const hols = holidays(selected, list);
   return `<section class="mdetail" aria-live="polite">
     <header class="mdetail-head"><h3>${esc(title)}</h3><button class="btn small" type="button" data-month="add">${icon('plus')}Add event</button><button class="icon-btn small" type="button" data-month="close" aria-label="Close day">${icon('close')}</button></header>
-    ${hols.length ? `<p class="mdetail-hol">${hols.map((h) => esc(h.name)).join(' · ')}</p>` : ''}
+    ${hols.length ? `<p class="mdetail-hol">${hols.map((h) => holidayBadge(h)).join('')}</p>` : ''}
     ${allDayChips(allDay)}
     ${timed.length ? `<ol class="ev-list">${timed.map((e) => timedRow(e, now, settingsRef.clock24)).join('')}</ol>` : ''}
     ${list.length || hols.length ? '' : '<p class="quiet">Nothing scheduled.</p>'}

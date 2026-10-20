@@ -1,13 +1,15 @@
-// Adding an event: a small form for the title, time, place and which calendar it goes on.
-// Google calendars get it through the Calendar API and Outlook through Microsoft Graph; the
-// first time, each asks for permission to add events. Undo deletes it again.
+// Adding or changing an event: a small form for the title, time, place and which calendar it
+// goes on. Google calendars get it through the Calendar API and Outlook through Microsoft Graph;
+// the first time, each asks for permission to add events. Undo deletes it again, or puts the
+// changes back.
 import { $, esc, local, colorVar, showToast, errorText, startOfDay, addDays } from './util.js';
-import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent } from './calendar.js';
+import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent, editPendingEvent } from './calendar.js';
 import { calendarWrite } from './gauth.js';
 import { graph, graphWrite } from './msauth.js';
 import { msClientId } from './settings.js';
 import { openSettings } from './sheet.js';
 import { icon } from './icons.js';
+import { attachAddressSuggest } from './address.js';
 
 const LAST_KEY = 'event:lastCal';
 const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -16,6 +18,8 @@ let settingsRef;
 let onChange = () => {};
 let cals = [];
 let busy = false;
+// While changing an event: { event, more, cal }, where more holds what its details view loaded.
+let editing = null;
 
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (t) => {
@@ -55,8 +59,11 @@ function startFor(day) {
   return d.getTime();
 }
 
-function form(start, last) {
-  const end = start + 3600e3;
+// v: the values to start from (title, start, end, allDay, location, notes); for all-day events
+// end is the morning after the last day, as calendars keep it.
+function form(v, last) {
+  const { start, end } = v;
+  const lastDay = v.allDay ? addDays(end, -1) : end;
   const options = cals.length
     ? ['google', 'outlook']
         .map((kind) => {
@@ -72,29 +79,31 @@ function form(start, last) {
         })
         .join('')
     : '';
-  return `<form class="ev-form" id="ev-form" novalidate>
+  const notesLocked = editing && editing.more?.notes == null;
+  return `<form class="ev-form${editing ? ' editing' : ''}" id="ev-form" novalidate>
     <header class="ev-form-head">
-      <h2 id="ev-h">New event</h2>
+      <h2 id="ev-h">${editing ? 'Edit event' : 'New event'}</h2>
       <button class="icon-btn" type="button" data-ev="cancel" aria-label="Close">${icon('close')}</button>
     </header>
-    <label class="field"><span>Title</span><input id="ev-title" type="text" maxlength="300" placeholder="Add a title" autocomplete="off"></label>
+    <label class="field"><span>Title</span><input id="ev-title" type="text" maxlength="300" placeholder="Add a title" autocomplete="off" value="${esc(v.title || '')}"></label>
     <label class="field"><span>Calendar</span>
-      <span class="ev-cal"><span class="cal-dot" id="ev-cal-dot"></span><select id="ev-cal">${options}</select></span>
+      <span class="ev-cal"><span class="cal-dot" id="ev-cal-dot"></span><select id="ev-cal"${editing ? ' disabled' : ''}>${options}</select></span>
     </label>
-    <label class="check"><input type="checkbox" id="ev-allday"><span>All day</span></label>
+    ${editing?.event.recurring ? '<p class="hint ev-hint">This is one of a series. Changes here apply to this one only.</p>' : ''}
+    <label class="check"><input type="checkbox" id="ev-allday"${v.allDay ? ' checked' : ''}><span>All day</span></label>
     <div class="ev-when">
       <label class="field"><span>Starts</span><input id="ev-start-date" type="date" value="${ymd(start)}" required></label>
-      <label class="field ev-clock"><span>Start time</span><input id="ev-start-time" type="time" step="300" value="${hm(start)}"></label>
-      <label class="field"><span>Ends</span><input id="ev-end-date" type="date" value="${ymd(end)}" required></label>
-      <label class="field ev-clock"><span>End time</span><input id="ev-end-time" type="time" step="300" value="${hm(end)}"></label>
+      <label class="field ev-clock"><span>Start time</span><input id="ev-start-time" type="time" step="300" value="${v.allDay ? '09:00' : hm(start)}"></label>
+      <label class="field"><span>Ends</span><input id="ev-end-date" type="date" value="${ymd(lastDay)}" required></label>
+      <label class="field ev-clock"><span>End time</span><input id="ev-end-time" type="time" step="300" value="${v.allDay ? '10:00' : hm(end)}"></label>
     </div>
-    <label class="field"><span>Location</span><input id="ev-location" type="text" maxlength="300" placeholder="Address or place (optional)" autocomplete="off" list="ev-places"><datalist id="ev-places"></datalist></label>
+    <div class="field ev-place"><label for="ev-location">Location</label><input id="ev-location" type="text" maxlength="300" placeholder="Address or place (optional)" autocomplete="off" value="${esc(v.location || '')}"></div>
     <label class="check" id="ev-meet-row"><input type="checkbox" id="ev-meet"><span>Add a Google Meet video call</span></label>
-    <label class="field"><span>Notes</span><textarea id="ev-notes" rows="3" maxlength="4000" placeholder="Optional"></textarea></label>
+    <label class="field"><span>Notes</span><textarea id="ev-notes" rows="3" maxlength="4000" placeholder="${notesLocked ? 'The notes couldn’t be loaded, so they stay as they are' : 'Optional'}"${notesLocked ? ' disabled' : ''}>${esc(editing?.more?.notes || '')}</textarea></label>
     <div class="ev-error" id="ev-error" role="alert" hidden></div>
     <footer class="ev-form-foot">
       <button class="btn" type="button" data-ev="cancel">Cancel</button>
-      <button class="btn primary" type="submit" id="ev-save">Add event</button>
+      <button class="btn primary" type="submit" id="ev-save">${editing ? 'Save changes' : 'Add event'}</button>
     </footer>
   </form>`;
 }
@@ -121,7 +130,7 @@ function selectedCal() {
 function paintCal() {
   const c = selectedCal();
   field('ev-cal-dot').style.setProperty('--c', colorVar(c?.color));
-  field('ev-meet-row').hidden = c?.kind !== 'google';
+  field('ev-meet-row').hidden = c?.kind !== 'google' || Boolean(editing);
 }
 
 function paintAllDay() {
@@ -180,14 +189,24 @@ function keepLength(changedStart) {
   lastEnd = now.end;
 }
 
+// Google's start and end for an event; `end` is the morning after the last day when all day.
+// The other kind of time is cleared, for when a change turns one into the other.
+const googleWhen = (allDay, start, end) => ({
+  start: allDay ? { date: ymd(start), dateTime: null, timeZone: null } : { dateTime: rfc3339(start), timeZone: ZONE, date: null },
+  end: allDay ? { date: ymd(end), dateTime: null, timeZone: null } : { dateTime: rfc3339(end), timeZone: ZONE, date: null },
+});
+
+// The moment an event in the form ends: all-day events end the morning after their last day.
+const endOf = (d) => (d.allDay ? addDays(at(d.endDate), 1) : d.end);
+
 async function addGoogle(cal, d) {
+  const { start, end } = googleWhen(d.allDay, d.start, endOf(d));
   const body = {
     summary: d.title,
     location: d.location || undefined,
     description: d.notes || undefined,
-    start: d.allDay ? { date: d.startDate } : { dateTime: rfc3339(d.start), timeZone: ZONE },
-    // All-day events end the morning after their last day.
-    end: d.allDay ? { date: ymd(addDays(at(d.endDate), 1)) } : { dateTime: rfc3339(d.end), timeZone: ZONE },
+    start: d.allDay ? { date: start.date } : { dateTime: start.dateTime, timeZone: ZONE },
+    end: d.allDay ? { date: end.date } : { dateTime: end.dateTime, timeZone: ZONE },
   };
   if (d.meet) body.conferenceData = { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
   const path = `/calendars/${encodeURIComponent(cal.id)}/events`;
@@ -228,17 +247,19 @@ async function outlookZone(clientId, days) {
   return same || ZONE;
 }
 
+// Outlook's start and end. Timed events go in as UTC, which can't be misread; all-day events
+// need midnight in your own time zone so they cover the right days.
+async function outlookWhen(clientId, allDay, start, end) {
+  const zone = allDay ? await outlookZone(clientId, [start, end]) : 'UTC';
+  const when = (t) => (allDay ? { dateTime: `${ymd(t)}T00:00:00`, timeZone: zone } : { dateTime: new Date(t).toISOString().slice(0, 19), timeZone: 'UTC' });
+  return { isAllDay: allDay, start: when(start), end: when(end) };
+}
+
 async function addOutlook(d) {
   const clientId = msClientId(settingsRef);
-  // Timed events go in as UTC, which can't be misread; all-day events need midnight in your
-  // own time zone so they cover the right days.
-  const zone = d.allDay ? await outlookZone(clientId, [at(d.startDate), addDays(at(d.endDate), 1)]) : 'UTC';
-  const when = (t) => (d.allDay ? { dateTime: `${ymd(t)}T00:00:00`, timeZone: zone } : { dateTime: new Date(t).toISOString().slice(0, 19), timeZone: 'UTC' });
   const body = {
     subject: d.title,
-    isAllDay: d.allDay,
-    start: when(d.start),
-    end: when(d.allDay ? addDays(at(d.endDate), 1) : d.end),
+    ...(await outlookWhen(clientId, d.allDay, d.start, endOf(d))),
     location: d.location ? { displayName: d.location } : undefined,
     body: d.notes ? { contentType: 'text', content: d.notes } : undefined,
   };
@@ -263,8 +284,104 @@ function problem(d, cal) {
   return '';
 }
 
+// An event's values, in the shape the calendars take and give back.
+const valuesOf = (e, more) => ({
+  title: e.title,
+  allDay: e.allDay,
+  start: e.start,
+  end: e.end,
+  location: more?.location ?? e.location ?? '',
+});
+
+// Sends a change to one event: `to` and `from` are values as valuesOf gives them, and only the
+// parts that differ go out. Notes go as they are given (raw, with their kind for Outlook).
+async function patchEvent(ev, to, from, notes) {
+  const id = ev.apiId || ev.id;
+  const when = to.allDay !== from.allDay || to.start !== from.start || to.end !== from.end;
+  if (ev.src === 'google') {
+    const body = {};
+    if (to.title !== from.title) body.summary = to.title;
+    if (to.location !== from.location) body.location = to.location;
+    if (notes) body.description = notes.content;
+    if (when) Object.assign(body, googleWhen(to.allDay, to.start, to.end));
+    return calendarWrite(`/calendars/${encodeURIComponent(ev.calId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+  }
+  const clientId = msClientId(settingsRef);
+  const body = {};
+  if (to.title !== from.title) body.subject = to.title;
+  if (to.location !== from.location) body.location = { displayName: to.location };
+  if (notes) body.body = { contentType: notes.type || 'text', content: notes.content };
+  if (when) Object.assign(body, await outlookWhen(clientId, to.allDay, to.start, to.end));
+  return graphWrite(clientId, `/me/events/${encodeURIComponent(id)}`, { method: 'PATCH', body, need: 'Calendars.ReadWrite' });
+}
+
+function saveFailed(dlg, err, what) {
+  if (err.code === 'needs-admin')
+    showError(`<p>Your organization needs to approve Daybook changing events on your calendar.</p><p><a href="${esc(err.adminUrl)}" target="_blank" rel="noopener">Approval link to send to your IT team</a></p>`);
+  else if (err.code === 'needs-google' || err.code === 'needs-connect')
+    showError(`<p>${esc(reason(err))}. Reconnect in Settings → Accounts, then try again.</p>`);
+  else if (err.status === 403 && editing)
+    showError(`<p>This calendar didn’t allow the change: ${esc(reason(err))}. Only the person who sent an invitation can change it.</p>`);
+  else showError(`<p>Couldn’t ${what}: ${esc(reason(err))}.</p>`);
+  // Closed meanwhile (Chrome lets Escape through in the end): say so where it can be seen.
+  if (!dlg.open) showToast(`The event wasn’t ${what === 'add the event' ? 'added' : 'changed'}: ${reason(err)}.`);
+}
+
+async function saveEdit(dlg) {
+  const { event: ev, more, cal } = editing;
+  const d = read();
+  const why = problem(d, cal);
+  if (why) {
+    showError(`<p>${esc(why)}</p>`);
+    if (!d.title) field('ev-title').focus();
+    return;
+  }
+  const from = valuesOf(ev, more);
+  const to = { title: d.title, allDay: d.allDay, start: d.start, end: endOf(d), location: d.location };
+  // Notes only go out when they were loaded and then changed, so formatting nobody touched stays.
+  const notesChanged = more?.notes != null && d.notes !== more.notes.trim();
+  const same = to.title === from.title && to.allDay === from.allDay && to.start === from.start && to.end === from.end && to.location === from.location;
+  if (same && !notesChanged) {
+    dlg.close();
+    return;
+  }
+  busy = true;
+  const btn = field('ev-save');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  showError('');
+  try {
+    await patchEvent(ev, to, from, notesChanged ? { content: d.notes, type: 'text' } : null);
+    dlg.close();
+    const show = (v) => {
+      editPendingEvent(ev.id, { title: v.title, allDay: v.allDay, start: v.start, end: v.end, location: v.location });
+      calendarsChanged();
+      onChange();
+    };
+    show(to);
+    showToast(`Changed in ${cal.kind === 'outlook' ? 'Outlook' : cal.name}`, async () => {
+      try {
+        await patchEvent(ev, from, to, notesChanged ? { content: more.raw, type: more.type } : null);
+        show(from);
+        showToast('Change undone');
+      } catch (err) {
+        showToast(`Couldn’t undo it: ${reason(err)}.`);
+      }
+    });
+  } catch (err) {
+    saveFailed(dlg, err, 'save the changes');
+  } finally {
+    busy = false;
+    if (dlg.open) {
+      btn.disabled = false;
+      btn.textContent = 'Save changes';
+    }
+  }
+}
+
 async function save(dlg) {
   if (busy) return;
+  if (editing) return saveEdit(dlg);
   const d = read();
   const cal = selectedCal();
   const why = problem(d, cal);
@@ -283,7 +400,11 @@ async function save(dlg) {
     await local.set(LAST_KEY, calKey(cal));
     dlg.close();
     const end = d.allDay ? addDays(at(d.endDate), 1) : d.end;
-    if (cal.shown) addPendingEvent({ id: `new:${made.id}`, title: d.title, start: d.start, end, allDay: d.allDay, location: d.location, join: made.join, link: made.link, color: cal.color, calName: cal.name });
+    if (cal.shown)
+      addPendingEvent({
+        id: `new:${made.id}`, apiId: made.id, title: d.title, start: d.start, end, allDay: d.allDay, location: d.location, join: made.join, link: made.link,
+        color: cal.color, calName: cal.name, src: cal.kind, calId: cal.id, editable: true, notes: d.notes,
+      });
     calendarsChanged();
     onChange();
     showToast(`Added to ${cal.kind === 'outlook' ? 'Outlook' : cal.name}`, async () => {
@@ -299,13 +420,7 @@ async function save(dlg) {
       }
     });
   } catch (err) {
-    if (err.code === 'needs-admin')
-      showError(`<p>Your organization needs to approve Daybook adding events to your calendar.</p><p><a href="${esc(err.adminUrl)}" target="_blank" rel="noopener">Approval link to send to your IT team</a></p>`);
-    else if (err.code === 'needs-google' || err.code === 'needs-connect')
-      showError(`<p>${esc(reason(err))}. Reconnect in Settings → Accounts, then try again.</p>`);
-    else showError(`<p>Couldn’t add the event: ${esc(reason(err))}.</p>`);
-    // Closed meanwhile (Chrome lets Escape through in the end): say so where it can be seen.
-    if (!dlg.open) showToast(`The event wasn’t added: ${reason(err)}.`);
+    saveFailed(dlg, err, 'add the event');
   } finally {
     busy = false;
     if (dlg.open) {
@@ -316,10 +431,22 @@ async function save(dlg) {
 }
 
 // Opens the form. `day` (a local midnight) prefills the date, e.g. from the month calendar.
-export async function openEventEditor({ day } = {}) {
+// With `event`, it changes that event instead, from its details view (`more` is what that loaded).
+export async function openEventEditor({ day, event, more } = {}) {
   const dlg = $('#event-dialog');
   // While a save is waiting (on a permission window, say), the form stays as it is.
-  if (!dlg || dlg.open || busy) return;
+  if (!dlg || busy) return;
+  if (event) {
+    editing = { event, more, cal: { kind: event.src, id: event.calId || 'outlook', name: event.calName, color: event.color, shown: true } };
+    cals = [editing.cal];
+    dlg.innerHTML = form({ ...valuesOf(event, more) }, calKey(editing.cal));
+    wireForm();
+    if (!dlg.open) dlg.showModal();
+    field('ev-title').focus();
+    return;
+  }
+  if (dlg.open) return;
+  editing = null;
   let error = null;
   try {
     ({ list: cals, error } = await writableCalendars(settingsRef));
@@ -334,15 +461,19 @@ export async function openEventEditor({ day } = {}) {
   }
   const stored = await local.get(LAST_KEY);
   const last = cals.some((c) => calKey(c) === stored) ? stored : calKey(cals.find((c) => c.primary) || cals[0]);
-  dlg.innerHTML = form(startFor(day), last);
-  const places = (await local.get('places:recent')) || [];
-  field('ev-places').innerHTML = places.map((p) => `<option value="${esc(p.label)}"></option>`).join('');
-  paintCal();
-  paintAllDay();
-  keepLength(false);
+  const start = startFor(day);
+  dlg.innerHTML = form({ start, end: start + 3600e3, allDay: false }, last);
+  wireForm();
   if (error) showError(`<p>Only some calendars are listed: ${esc(reason(error))}.</p>`);
   dlg.showModal();
   field('ev-title').focus();
+}
+
+function wireForm() {
+  attachAddressSuggest(field('ev-location'));
+  paintCal();
+  paintAllDay();
+  keepLength(false);
 }
 
 export function initEvents(S, { onChange: changed }) {

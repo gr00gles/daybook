@@ -4,10 +4,11 @@ import { refreshWeather, renderSun, lastWeather, todayIndex } from './weather.js
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp, allEvents } from './calendar.js';
 import { initAlerts, refreshAlerts } from './alerts.js';
-import { renderMoon, loadHolidays, renderHoliday } from './sky.js';
+import { renderMoon, loadHolidays, renderHoliday, setHolidayChoices } from './sky.js';
 import { planTrips, tripInfo, leaveText } from './trip.js';
 import { refreshStocks } from './stocks.js';
 import { initEvents } from './events.js';
+import { initDetails } from './details.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { initYouTube, refreshYouTube } from './youtube.js';
@@ -318,7 +319,9 @@ if (S.show.calendar) {
       });
     },
   });
+  initDetails(S);
 }
+setHolidayChoices(S.holidays.choices);
 if (S.show.sky) loadHolidays(() => {
   renderHoliday();
   if (S.show.calendar) renderMonth();

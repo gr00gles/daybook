@@ -27,6 +27,7 @@
   --good: #1f7a3a; --warning: #b07a00; --serious: #c2410c; --critical: #c0262d;
   --warn-bg: #fbf3e2; --warn-line: #efdcb1;
   --sky-dawn: #f4dccf; --sky-day: #cfe0f2; --sky-dusk: #ddd4ee; --sky-night: #cbd3e1;
+  --sky-top: #ffffff; /* Chrome's toolbar, so the page runs on from it */
   --moon-lit: #fbf3d5; --moon-dark: #8a96a3;
 
   --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -49,6 +50,7 @@
     --good: #4cc27a; --warning: #e0a82e; --serious: #f07b3f; --critical: #ff6b6b;
     --warn-bg: #2a2416; --warn-line: #4a3c1c;
     --sky-dawn: #2b1e22; --sky-day: #12263a; --sky-dusk: #221c34; --sky-night: #0f1824;
+    --sky-top: var(--sky);
     --moon-lit: #ece4c6; --moon-dark: #2c3742;
     color-scheme: dark;
   }
@@ -64,6 +66,7 @@
   --good: #4cc27a; --warning: #e0a82e; --serious: #f07b3f; --critical: #ff6b6b;
   --warn-bg: #2a2416; --warn-line: #4a3c1c;
   --sky-dawn: #2b1e22; --sky-day: #12263a; --sky-dusk: #221c34; --sky-night: #0f1824;
+  --sky-top: var(--sky);
   --moon-lit: #ece4c6; --moon-dark: #2c3742;
   color-scheme: dark;
 }
@@ -94,34 +97,48 @@ svg { flex: none; }
 
 .sky {
   position: relative;
-  background: linear-gradient(180deg, var(--sky) 0%, color-mix(in srgb, var(--sky) 45%, var(--bg)) 62%, var(--bg) 100%);
+  /* White at the top, where Chrome's toolbar ends, into the sky's tint, into the board. */
+  background: linear-gradient(180deg, var(--sky-top) 0%, color-mix(in srgb, var(--sky) 55%, var(--sky-top)) 38%, var(--sky) 72%, var(--bg) 100%);
 }
 .sky-inner {
   max-width: 1520px;
   margin: 0 auto;
-  padding-block: 34px 26px;
+  padding-block: 16px 14px;
   padding-left: var(--gutter);
-  padding-right: max(24px, env(safe-area-inset-right, 0px));
+  /* Room for the refresh and settings buttons in the corner. */
+  padding-right: calc(max(24px, env(safe-area-inset-right, 0px)) + 64px);
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(420px, 1.35fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(280px, 1fr) minmax(420px, 1.35fr) minmax(300px, 1fr);
   grid-template-areas: "when finder weather";
-  gap: 28px 40px;
+  gap: 16px 36px;
   align-items: center;
 }
 .when { grid-area: when; min-width: 0; }
 .finder { grid-area: finder; min-width: 0; }
-.now-weather { grid-area: weather; justify-self: end; min-width: 0; display: grid; justify-items: start; gap: 10px; }
+.now-weather {
+  grid-area: weather;
+  justify-self: end;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-items: start;
+  align-items: center;
+  gap: 6px 18px;
+}
+/* Conditions across the top, then the sun's arc and the moon side by side. */
+#now-weather { display: contents; }
+.now-weather > .nw-alert, .nw-main, #now-weather > .btn { grid-column: 1 / -1; }
 
 .greeting {
-  margin: 0 0 4px;
-  font: 500 20px/1.2 var(--font-display);
+  margin: 0 0 2px;
+  font: 500 17px/1.2 var(--font-display);
   color: var(--ink-2);
   text-wrap: balance;
 }
 .clock {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(68px, 6.4vw, 104px);
+  font-size: clamp(52px, 4.6vw, 74px);
   font-weight: 600;
   line-height: .92;
   letter-spacing: -0.04em;
@@ -135,29 +152,60 @@ svg { flex: none; }
   color: var(--ink-2);
 }
 .date-line {
-  margin: 10px 0 0;
+  margin: 6px 0 0;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 12px;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
 }
 .date-meta { font: 400 12px var(--font-mono); color: var(--muted); letter-spacing: .02em; }
-.holiday-line { margin: 4px 0 0; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.holiday-line { margin: 2px 0 0; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+
+/* Holidays: each wears its own color (--hol) and emblem. */
+.hol-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 11px 3px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--hol) 38%, transparent);
+  background: color-mix(in srgb, var(--hol) 14%, var(--raised));
+  color: color-mix(in srgb, var(--hol) 62%, var(--ink));
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.hol-badge .hol-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hol-glyph { flex: none; font-size: 1.05em; line-height: 1; font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; }
+.hol-badge.today {
+  padding: 5px 14px 5px 9px;
+  font-size: 15px;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--hol) 26%, var(--raised)), color-mix(in srgb, var(--hol) 9%, var(--raised)));
+  box-shadow: 0 6px 18px -10px var(--hol);
+}
+.hol-badge.today .hol-glyph { font-size: 1.3em; }
+.hol-halloween { border-color: color-mix(in srgb, #f07a18 60%, #1b1b1b); }
+.hol-halloween.today { background: linear-gradient(100deg, #f07a18, #ffa94d); color: #1b1208; }
+.hol-christmas.today { background: linear-gradient(100deg, #c62828, #e04848); color: #fff; border-color: #a51f1f; }
+.hol-christmas { padding-left: 16px; margin-top: 8px; margin-left: 4px; }
+.hol-hat { position: absolute; left: -10px; top: -15px; width: 30px; height: 25px; transform: rotate(-22deg); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .25)); pointer-events: none; }
 
 .next-up {
-  margin-top: 14px;
+  margin-top: 8px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  padding: 6px 6px 6px 12px;
+  padding: 4px 6px 4px 12px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--raised) 82%, transparent);
   border: 1px solid var(--line);
   font-size: 14px;
-  min-height: 38px;
+  min-height: 34px;
 }
 .nu-label { font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
 .next-up.soon .nu-label { color: var(--now); }
@@ -172,7 +220,7 @@ svg { flex: none; }
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 56px;
+  height: 50px;
   padding: 0 14px 0 18px;
   border-radius: 16px;
   background: var(--raised);
@@ -206,7 +254,7 @@ kbd {
 .search { position: relative; }
 .places {
   position: absolute;
-  top: 64px;
+  top: 58px;
   left: 0;
   right: 0;
   z-index: 15;
@@ -267,11 +315,13 @@ kbd {
   .places-map { min-height: 240px; border-left: 0; border-top: 1px solid var(--line-2); }
   .places-list { max-height: 220px; }
 }
-.engines { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 10px; }
+/* One row of engine chips, however many there are: they tighten, then scroll sideways. */
+.engines { display: flex; justify-content: safe center; gap: 2px; margin-top: 7px; overflow-x: auto; scrollbar-width: none; }
 .engine {
+  flex: none;
   font-size: 12.5px;
   font-weight: 600;
-  padding: 4px 11px;
+  padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
@@ -288,23 +338,23 @@ kbd {
   grid-template-rows: auto;
   justify-content: center;
   overflow: hidden;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 .shortcut {
   display: grid;
   justify-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding: 8px 2px 6px;
+  padding: 5px 2px 4px;
   border-radius: 12px;
   text-decoration: none;
   font-size: 12px;
   color: var(--ink-2);
 }
 .shortcut img {
-  width: 38px;
-  height: 38px;
-  padding: 9px;
+  width: 34px;
+  height: 34px;
+  padding: 8px;
   border-radius: 50%;
   background: var(--raised);
   border: 1px solid var(--line-2);
@@ -409,19 +459,19 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .group-row-name { font-weight: 600; }
 
 .nw-main { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 4px 12px; }
-.nw-icon .wx-icon { width: 54px; height: 54px; stroke-width: 1.4; }
-.nw-temp { font: 500 66px/1 var(--font-display); letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
+.nw-icon .wx-icon { width: 46px; height: 46px; stroke-width: 1.4; }
+.nw-temp { font: 500 54px/1 var(--font-display); letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
 .nw-cond { font-size: 17px; font-weight: 650; line-height: 1.25; }
 .nw-meta { font-size: 13.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .nw-place { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .nw-place .ui-icon { width: 13px; height: 13px; }
-.suntrack { margin-top: 10px; width: 248px; }
-.suntrack svg { display: block; overflow: visible; }
+.suntrack { width: 220px; }
+.suntrack svg { display: block; width: 100%; height: auto; overflow: visible; }
 .st-path { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 1 5; stroke-linecap: round; }
 .st-done { fill: none; stroke: var(--sun); stroke-width: 2; stroke-linecap: round; }
 .st-horizon { stroke: var(--faint); stroke-width: 1; }
 .st-sun { fill: var(--sun); stroke: var(--bg); stroke-width: 2.5; }
-.st-label { font: 400 11px var(--font-mono); fill: var(--muted); }
+.st-label { font: 400 12.5px var(--font-mono); fill: var(--muted); }
 
 /* Severe weather: a chip above the conditions; the full text sits on the weather card. */
 .nw-alert {
@@ -447,7 +497,7 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .moon-disc { display: block; }
 .moon-dark { fill: var(--moon-dark); opacity: .55; }
 .moon-lit { fill: var(--moon-lit); }
-.moon-text { display: grid; line-height: 1.3; }
+.moon-text { display: grid; max-width: 170px; line-height: 1.3; }
 .moon-name { font-size: 13px; font-weight: 650; color: var(--ink-2); }
 .moon-sub { font: 400 11.5px var(--font-mono); color: var(--muted); }
 .st-caption { font: 400 11.5px var(--font-mono); color: var(--muted); text-align: center; margin-top: 4px; }
@@ -533,6 +583,23 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 }
 .card-foot:has(> :only-child:empty) { display: none; }
 .quiet { margin: 6px 0 10px; color: var(--muted); font-size: 14px; }
+
+/* A card with nothing to show folds to one line: title, the note, its links, the stamp.
+   Any card gets this by making <p class="quiet is-empty"> the only thing in its .card-body. */
+.card:has(> .card-body > .is-empty:only-child) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding-block: 12px;
+}
+.card:has(> .card-body > .is-empty:only-child) > .card-head { display: contents; }
+.card:has(> .card-body > .is-empty:only-child) h2 { font-size: 18px; }
+.card:has(> .card-body > .is-empty:only-child) .head-count { display: none; }
+.card:has(> .card-body > .is-empty:only-child) > .card-body { order: 1; min-width: 0; }
+.card:has(> .card-body > .is-empty:only-child) > .card-foot { order: 2; margin: 0; padding: 0; border: 0; }
+.card:has(> .card-body > .is-empty:only-child) .stamp { order: 3; }
+.is-empty { margin: 0; font-size: 13.5px; }
 .eyebrow { margin: 0 0 6px; font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
 
 .notice {
@@ -598,6 +665,7 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.allday .chip:hover { border-color: var(--line); background: var(--surface); }
 .cal-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 
 .join {
@@ -638,9 +706,11 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .ruler-ticks { position: relative; height: 18px; }
 .tick { position: absolute; top: 4px; transform: translateX(-50%); font: 400 10.5px var(--font-mono); color: var(--muted); }
 
+.allday .chip { cursor: pointer; }
 .allday { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .ev-list { list-style: none; margin: 0 -8px; padding: 0; display: grid; gap: 1px; }
 .ev {
+  position: relative;
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr) auto auto;
   align-items: start;
@@ -648,6 +718,9 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   padding: 8px;
   border-radius: 10px;
 }
+/* The whole row opens the event; the title is the button, stretched over the row. */
+.ev:hover { background: color-mix(in srgb, var(--raised) 70%, transparent); }
+.ev .join { position: relative; z-index: 1; }
 .ev-time { display: grid; font: 400 12px/1.45 var(--font-mono); color: var(--ink-2); padding-top: 1px; font-variant-numeric: tabular-nums; }
 .ev-time .to { color: var(--muted); font-size: 11px; }
 .ev-main { min-width: 0; }
@@ -655,12 +728,21 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   display: flex;
   align-items: baseline;
   gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
   font-size: 14.5px;
   font-weight: 650;
   line-height: 1.35;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
+.ev-title::after { content: ""; position: absolute; inset: 0; border-radius: 10px; }
+.ev-title:focus-visible { outline: none; }
+.ev-title:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ev-title .cal-dot { transform: translateY(-1px); }
 .ev-title:hover span { text-decoration: underline; text-underline-offset: 3px; }
 .ev-where { display: block; padding-left: 16px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -814,9 +896,12 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .mev.all { padding-left: 5px; background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--ink); }
 .mev.all::before { display: none; }
 .mmore { padding-left: 3px; font: 500 10.5px var(--font-mono); color: var(--muted); }
-.mhol { padding: 0 3px; font-size: 10.5px; font-weight: 650; line-height: 1.3; color: var(--serious); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mhol.clock { color: var(--muted); font-weight: 500; }
-.mdetail-hol { margin: 0 0 8px; font-size: 13.5px; font-weight: 650; color: var(--serious); }
+.mhol { display: block; padding: 0 3px; border-radius: 4px; font-size: 10.5px; font-weight: 650; line-height: 1.3; color: color-mix(in srgb, var(--hol, var(--serious)) 70%, var(--ink)); background: color-mix(in srgb, var(--hol, var(--serious)) 16%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mhol .hol-glyph { margin-right: 3px; font-size: 10px; }
+.mhol.clock { color: var(--muted); font-weight: 500; background: none; }
+.mday.hol:not(.sel) { background: color-mix(in srgb, var(--hol) 7%, var(--surface)); }
+.mday.hol:not(.sel):hover { background: color-mix(in srgb, var(--hol) 12%, var(--raised)); }
+.mdetail-hol { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 .mhint { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
 .mdetail { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-2); }
 .mdetail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
@@ -831,7 +916,7 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   .mev::before { display: none; }
   .mmore { display: none; }
   .mhol { display: none; }
-  .mday.hol:not(.today) .mnum { box-shadow: inset 0 -2px 0 var(--serious); border-radius: 4px; }
+  .mday.hol:not(.today) .mnum { box-shadow: inset 0 -2px 0 var(--hol, var(--serious)); border-radius: 4px; }
   .mwd { font-size: 9.5px; letter-spacing: 0; }
   .mweek { --bar-top: 29px; --bar-step: 6px; }
   .mbar, .mbar.cont-l, .mbar.cont-r { padding: 0; border-left: 0; font-size: 0; background: var(--c); }
@@ -904,9 +989,6 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .mail-time { grid-area: time; font: 400 11.5px var(--font-mono); color: var(--muted); align-self: center; }
 .mail-subject { grid-area: subject; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mail-snippet { grid-area: snippet; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.inbox-zero { text-align: center; padding: 20px 0 10px; }
-.inbox-zero .big { display: block; font: 300 76px/1 var(--font-display); color: var(--faint); letter-spacing: -0.04em; }
-.inbox-zero p { margin: 6px 0 0; color: var(--muted); }
 .foot-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .foot-link { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 12.5px; font-weight: 600; text-decoration: none; }
 .foot-link:hover { color: var(--accent); }
@@ -974,7 +1056,8 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 
 /* ---- YouTube ----------------------------------------------------------------- */
 
-/* A stack of cards: the front one in full, the next two peeking out above it. */
+/* Rolodex (js/rolodex.js, also used by Headlines): a stack of cards, the front one in full,
+   the next two peeking out above it. */
 .rolo { outline: none; }
 .rolo:focus-visible .rolo-card[data-pos="0"] { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rolo-card { position: relative; }
@@ -1191,14 +1274,20 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 }
 .tab:hover { color: var(--ink); }
 .tab.on { background: var(--ink); color: var(--surface); }
-.news-list { list-style: none; margin: 0; padding: 0; counter-reset: rank; }
-.news-list li { counter-increment: rank; }
-.news-list li + li { border-top: 1px solid var(--line-2); }
-.news-list a { display: grid; grid-template-columns: 22px minmax(0, 1fr); padding: 8px 0; text-decoration: none; }
-.news-list a::before { content: counter(rank); grid-row: span 2; font: 400 11px/1.9 var(--font-mono); color: var(--muted); }
-.news-title { font-size: 14.5px; font-weight: 550; line-height: 1.35; text-wrap: pretty; }
-.news-list a:hover .news-title { color: var(--accent); }
-.news-meta { margin-top: 3px; font: 400 11px var(--font-mono); color: var(--muted); }
+/* Headlines flip like the YouTube stack (see .rolo), each card a headline. */
+.news-link { align-content: start; gap: 6px; min-height: 104px; padding: 14px 16px 12px; }
+.news-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+.news-link:hover .news-title { color: var(--accent); }
+.news-meta { font: 400 11px var(--font-mono); color: var(--muted); }
 
 /* ---- New event --------------------------------------------------------------- */
 
@@ -1251,6 +1340,54 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .ev-error a { color: var(--accent); font-weight: 600; }
 .ev-form-foot { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
 .event-dialog .notice { margin: 0 0 6px; }
+.ev-hint { margin: -6px 0 0; }
+.ev-place > label { font-size: 12px; font-weight: 650; color: var(--ink-2); }
+.ev-form textarea:disabled { opacity: .6; }
+
+/* Address suggestions under Location. */
+.addr-list { margin: 2px 0 0; padding: 4px; list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: 0 14px 30px -20px rgb(6 10 14 / .45); max-height: 300px; overflow-y: auto; }
+.addr-list .places-note { padding: 10px; }
+.addr-credit { padding: 4px 10px 2px; font-size: 10.5px; color: var(--muted); }
+
+/* ---- An event's details ------------------------------------------------------- */
+
+.evd { display: grid; }
+.evd-head { position: sticky; justify-content: flex-start; gap: 12px; margin: 0; padding: 18px 16px 8px 22px; }
+.evd-head h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.evd-swatch { flex: none; align-self: stretch; width: 6px; min-height: 26px; border-radius: 3px; background: var(--c); }
+.evd-body { display: grid; gap: 10px; padding: 4px 22px 8px; }
+.evd-row { display: flex; align-items: flex-start; gap: 12px; margin: 0; font-size: 14px; color: var(--ink-2); }
+.evd-row > .ui-icon { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--muted); }
+.evd-row > .cal-dot { width: 12px; height: 12px; margin: 4px 3px 0; }
+.evd-when { color: var(--ink); font-weight: 600; }
+.evd-when .now-pill { margin-left: 6px; vertical-align: 1px; }
+.evd-len { color: var(--muted); font-weight: 400; }
+.evd-place > span { display: grid; gap: 3px; min-width: 0; }
+.evd-where { color: var(--ink); overflow-wrap: anywhere; }
+.evd-links { display: flex; gap: 14px; font-size: 13px; }
+.evd-links a, .evd-notes a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.evd-links a:hover, .evd-notes a:hover { text-decoration: underline; }
+.evd-place .ev-extra { padding-left: 0; }
+.evd-more { display: grid; gap: 12px; margin-top: 4px; }
+.evd-more:empty { display: none; }
+.evd-more .quiet { margin: 0; }
+.evd-guests ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13.5px; }
+.evd-guests li { display: flex; justify-content: space-between; gap: 12px; }
+.evd-guest { overflow-wrap: anywhere; }
+.evd-rsvp { flex: none; color: var(--muted); font-size: 12.5px; }
+.evd-notes p { margin: 0; max-height: 260px; overflow-y: auto; padding: 10px 12px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line-2); font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.evd-ro { margin: 2px 0 0; font-size: 12.5px; }
+.evd-foot { padding: 10px 22px 18px; }
+.evd-foot .btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.evd-foot .btn .ui-icon { width: 15px; height: 15px; }
+
+/* Settings: picking holidays. */
+.hol-choices { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.hol-choice { align-items: center; padding: 6px 8px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--hol) 30%, var(--line-2)); background: color-mix(in srgb, var(--hol) 7%, transparent); }
+.hol-choice .hol-glyph { font-size: 18px; }
+.hol-choice-text { display: grid; line-height: 1.25; }
+.hol-date { font-size: 11.5px; color: var(--muted); }
+.hol-choice:has(input:not(:checked)) { filter: grayscale(1); opacity: .6; }
 
 /* ---- Reading an email --------------------------------------------------------- */
 
@@ -1488,7 +1625,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
   margin: 0;
   padding: 0;
   border: 0;
-  background: linear-gradient(180deg, var(--sky) 0%, var(--bg) 60%);
+  background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky) 30%, var(--bg) 60%);
   color: var(--ink);
   overflow-y: auto;
 }
@@ -1543,6 +1680,42 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 }
 .wiz-actions { display: flex; align-items: center; gap: 18px; margin-left: auto; }
 .wiz-gap { margin-top: 20px; }
+
+/* ---- Motion ------------------------------------------------------------------ */
+/* Every <dialog> rises and fades in on showModal() and fades out on close(), with no script:
+   @starting-style is its first frame, and allow-discrete keeps it in the top layer while it
+   leaves. The Settings sheet slides in from the right instead. Pop-ups shown with the hidden
+   attribute get the class "pop" for the same entrance; showPop() in util.js adds the exit. */
+:root { --ease-out: cubic-bezier(.2, .8, .2, 1); --pop-in: .22s; --pop-out: .16s; }
+dialog {
+  opacity: 0;
+  translate: 0 12px;
+  scale: .98;
+  transition:
+    opacity var(--pop-out) ease,
+    translate var(--pop-in) var(--ease-out),
+    scale var(--pop-in) var(--ease-out),
+    overlay var(--pop-in) allow-discrete,
+    display var(--pop-in) allow-discrete;
+}
+dialog[open] { opacity: 1; translate: 0; scale: 1; }
+@starting-style { dialog[open] { opacity: 0; translate: 0 12px; scale: .98; } }
+dialog::backdrop {
+  opacity: 0;
+  transition: opacity var(--pop-in) ease, overlay var(--pop-in) allow-discrete, display var(--pop-in) allow-discrete;
+}
+dialog[open]::backdrop { opacity: 1; }
+@starting-style { dialog[open]::backdrop { opacity: 0; } }
+.sheet { opacity: 1; translate: 100% 0; scale: 1; transition-duration: .28s; }
+.sheet[open] { translate: 0; }
+@starting-style { .sheet[open] { opacity: 1; translate: 100% 0; scale: 1; } }
+.welcome, .welcome[open] { translate: 0; scale: 1; }
+@starting-style { .welcome[open] { translate: 0; scale: 1; } }
+
+.pop { animation: pop-in var(--pop-in) var(--ease-out); }
+.pop.leaving { animation: pop-out var(--pop-out) ease forwards; pointer-events: none; }
+@keyframes pop-in { from { opacity: 0; translate: 0 6px; scale: .98; } }
+@keyframes pop-out { to { opacity: 0; translate: 0 6px; scale: .98; } }
 
 /* ---- Narrower windows -------------------------------------------------------- */
 
