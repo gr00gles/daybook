@@ -75,7 +75,7 @@ export async function disconnectGoogle() {
   // Tokens Chrome kept for the extra permissions (Gmail, YouTube, adding events) were revoked too.
   await chrome.identity.clearAllCachedAuthTokens?.().catch(() => {});
   // YouTube's terms require deleting its data once access is removed.
-  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'cache:pkg:gmail', 'event:lastCal', 'yt:subs', 'yt:feed', 'yt:watched']);
+  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'cache:pkg:gmail', 'pkg:thumbs', 'event:lastCal', 'yt:subs', 'yt:feed', 'yt:watched']);
 }
 
 export async function gapi(path) {

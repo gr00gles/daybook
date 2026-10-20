@@ -1,9 +1,11 @@
 // Deliveries: shipping emails spotted among your mail, with a link to the carrier's tracking
 // page when the email carries a tracking number. Everything is read from the subject and the
-// preview text; nothing leaves your computer except the Gmail search below.
-import { esc, safeUrl, cached, relTime, startOfDay, addDays } from './util.js';
+// preview text; nothing leaves your computer except the Gmail search below. For the Google
+// account connected in Daybook, the product picture comes from the email itself.
+import { $, esc, safeUrl, cached, relTime, startOfDay, addDays, local } from './util.js';
 import { gmailApi } from './gauth.js';
 import { icon } from './icons.js';
+import { domainOf, logoUrl } from './companies-store.js';
 
 const CARRIERS = {
   ups: { name: 'UPS', track: (n) => `https://www.ups.com/track?tracknum=${n}` },
@@ -32,6 +34,8 @@ const SENDERS = [
   ['usps', /\busps\b|postal service|informed delivery/i],
   ['dhl', /\bdhl\b/i],
 ];
+
+const CARRIER_DOMAINS = new Set(['ups.com', 'usps.com', 'fedex.com', 'dhl.com', 'dhl.de', 'ontrac.com', 'lasership.com', 'narvar.com', 'aftership.com', 'route.com']);
 
 const RANK = { out: 0, problem: 1, soon: 2, transit: 3, delivered: 4 };
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -125,6 +129,11 @@ function readMail(m) {
   const title = titleOf(subject, from);
   return {
     msgId: m.msgId || '',
+    // Gmail API ids, for the emails Daybook may open (the connected Google account's).
+    apiId: m.api && m.msgId ? m.msgId : '',
+    domain: domainOf(m.fromAddr),
+    from,
+    fromAddr: m.fromAddr || '',
     carrier: found?.carrier || sender,
     number: found?.number || '',
     titleKey: `${sender || from.toLowerCase()}|${title.toLowerCase()}`,
@@ -193,9 +202,13 @@ export function deliveriesFrom(items) {
     const now = present(newest);
     if (!now) continue;
     const withNumber = list.find((p) => p.number);
+    // The store's emails say more about what's in the box than the carrier's do.
+    const store = list.find((p) => p.domain && !CARRIER_DOMAINS.has(p.domain)) || list.find((p) => p.domain);
     out.push({
       ...newest,
       ...now,
+      domain: store?.domain || '',
+      apiIds: list.map((p) => p.apiId).filter(Boolean),
       carrier: withNumber?.carrier || newest.carrier,
       number: withNumber?.number || '',
       href: withNumber ? CARRIERS[withNumber.carrier].track(withNumber.number) : newest.mailUrl,
@@ -204,23 +217,161 @@ export function deliveriesFrom(items) {
   return out.sort((a, b) => RANK[a.state] - RANK[b.state] || b.at - a.at);
 }
 
-export function deliveriesHtml(list, max = 4) {
-  if (!list.length) return '';
-  const shown = list.slice(0, max);
-  return `<div class="deliveries" role="group" aria-label="Deliveries">
-    ${shown
-      .map((d) => {
-        const who = CARRIERS[d.carrier]?.name || '';
-        const tip = [d.title, d.number && `${who} ${d.number}`, `email ${relTime(d.at)}`].filter(Boolean).join(' · ');
-        return `<a class="dl s-${d.state}" href="${esc(d.href)}" title="${esc(tip)}">
-          ${icon('box')}
-          <span class="dl-text"><span class="dl-status">${esc(d.label)}</span><span class="dl-title">${esc(d.title)}</span></span>
-          ${who ? `<span class="dl-carrier">${esc(who)}</span>` : ''}
-        </a>`;
-      })
-      .join('')}
-    ${list.length > max ? `<span class="dl-more">+${list.length - max} more</span>` : ''}
-  </div>`;
+// ---- The Deliveries card ------------------------------------------------------------------
+
+const DAY_MS = 86400e3;
+const dateParts = (t) => ({
+  day: Math.round((t - startOfDay()) / DAY_MS) === 0 ? 'Today' : Math.round((t - startOfDay()) / DAY_MS) === 1 ? 'Tomorrow' : new Date(t).toLocaleDateString(undefined, { weekday: 'short' }),
+  date: new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+});
+
+function thumb(d) {
+  const pic = thumbs.get(d.apiIds?.find((id) => thumbs.get(id)) || '');
+  if (pic) return `<span class="pkg-thumb photo"><img src="${esc(pic)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+  const logo = logoUrl(d.domain || (d.carrier && { ups: 'ups.com', usps: 'usps.com', fedex: 'fedex.com', dhl: 'dhl.com', amazon: 'amazon.com' }[d.carrier]));
+  return logo
+    ? `<span class="pkg-thumb logo"><img src="${esc(logo)}" alt="" width="32" height="32" referrerpolicy="no-referrer"></span>`
+    : `<span class="pkg-thumb">${icon('box')}</span>`;
+}
+
+// Package rows, newest word first. Used by the Deliveries card and by the company pages.
+export function deliveryRows(list, max = 6) {
+  return `<ol class="pkg-list">${list
+    .slice(0, max)
+    .map((d) => {
+      const who = CARRIERS[d.carrier]?.name || '';
+      const when = d.state === 'delivered' ? dateParts(d.at) : d.due != null ? dateParts(d.due) : null;
+      const tip = [d.title, d.number && `${who} ${d.number}`, `email ${relTime(d.at)}`].filter(Boolean).join(' · ');
+      // Who sent it and the tracking number, without saying "UPS · UPS".
+      const sender = d.from && d.from !== d.title && !(who && d.from.toLowerCase().includes(who.toLowerCase())) ? d.from : '';
+      const meta = [sender, who && d.number ? `${who} ${d.number}` : sender ? '' : who].filter(Boolean).join(' · ');
+      return `<li><a class="pkg s-${d.state}" href="${esc(d.href)}" title="${esc(tip)}">
+        ${thumb(d)}
+        <span class="pkg-text">
+          <span class="pkg-status">${esc(d.label)}</span>
+          <span class="pkg-title">${esc(d.title)}</span>
+          ${meta ? `<span class="pkg-meta">${esc(meta)}</span>` : ''}
+        </span>
+        ${
+          when
+            ? `<span class="pkg-when" aria-label="${d.state === 'delivered' ? 'Delivered' : 'Estimated delivery'} ${esc(when.day)} ${esc(when.date)}"><span class="pkg-day">${esc(when.day)}</span><span class="pkg-date">${esc(when.date)}</span></span>`
+            : ''
+        }
+      </a></li>`;
+    })
+    .join('')}</ol>${list.length > max ? `<p class="pkg-more">+${list.length - max} more</p>` : ''}`;
+}
+
+let shown = [];
+
+export function initDeliveries() {
+  loadThumbs().then(() => shown.length && paintCard());
+}
+
+// The newest deliveries from the mail card; repainted whenever the mail is.
+export function renderDeliveries(list) {
+  shown = list;
+  paintCard();
+  findPictures(list);
+}
+
+function paintCard() {
+  const body = $('#deliveries-body');
+  if (!body) return;
+  const coming = shown.filter((d) => d.state !== 'delivered').length;
+  $('#deliveries-count').textContent = coming ? String(coming) : '';
+  $('#card-deliveries').classList.toggle('is-empty', !shown.length);
+  body.innerHTML = shown.length ? deliveryRows(shown) : '<p class="quiet">Nothing on the way. Shipping emails show up here with their delivery dates.</p>';
+}
+
+// ---- Product pictures -------------------------------------------------------------------------
+// The first picture in a shipping email that looks like the product: not a logo, a tracking
+// pixel, a social button or a banner. Remembered per email so each one is opened once.
+
+const THUMBS_KEY = 'pkg:thumbs';
+const thumbs = new Map(); // Gmail message id -> picture URL, or '' when the email has none
+const looking = new Set();
+let thumbsLoaded;
+let allowed = true; // false once Gmail says Daybook may not open emails
+
+const loadThumbs = () =>
+  (thumbsLoaded ||= local.get(THUMBS_KEY).then((saved) => {
+    for (const [id, src] of Object.entries(saved || {})) thumbs.set(id, src);
+  }));
+
+async function findPictures(list) {
+  await loadThumbs();
+  let found = false;
+  for (const d of allowed ? list : []) {
+    const ids = d.apiIds || [];
+    if (!ids.length || ids.some((id) => thumbs.get(id))) continue;
+    // The newest two emails about it that haven't been looked at yet.
+    for (const id of ids.filter((x) => !thumbs.has(x) && !looking.has(x)).slice(0, 2)) {
+      looking.add(id);
+      try {
+        const src = pictureIn(await emailHtml(id), d.title);
+        thumbs.set(id, src);
+        if (src) {
+          found = true;
+          break;
+        }
+      } catch (err) {
+        // No permission yet: don't ask again in this tab. Anything else: try again later.
+        if (err.code === 'needs-google') allowed = false;
+        else console.warn('[daybook] package picture:', err);
+      } finally {
+        looking.delete(id);
+      }
+    }
+  }
+  if (found) paintCard();
+  // Keep the newest 80.
+  local.set(THUMBS_KEY, Object.fromEntries([...thumbs].slice(-80)));
+}
+
+const b64 = (data) => new TextDecoder().decode(Uint8Array.from(atob(data.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
+
+function htmlParts(part, out = []) {
+  if ((part.mimeType || '').toLowerCase() === 'text/html' && !part.filename) out.push(part);
+  for (const p of part.parts || []) htmlParts(p, out);
+  return out;
+}
+
+async function emailHtml(id) {
+  const m = await gmailApi(`/messages/${encodeURIComponent(id)}?format=full`, { method: 'GET', quiet: true });
+  const texts = await Promise.all(
+    htmlParts(m.payload || {}).map(async (p) => {
+      let data = p.body?.data;
+      if (!data && p.body?.attachmentId) data = (await gmailApi(`/messages/${id}/attachments/${p.body.attachmentId}`, { method: 'GET', quiet: true })).data;
+      return data ? b64(data) : '';
+    }),
+  );
+  return texts.join('\n');
+}
+
+const NOT_PRODUCT = /logo|icon|pixel|spacer|blank|beacon|track|open\.|\/o\.gif|badge|social|facebook|twitter|instagram|pinterest|tiktok|youtube|linkedin|app[-_ ]?store|google[-_ ]?play|banner|header|footer|divider|rating|stars?\b|arrow|button|btn|signature|qr/i;
+
+export function pictureIn(html, title = '') {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(html, 'text/html'); // parsing loads no pictures
+  const words = new Set(title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3));
+  let best = null;
+  for (const img of doc.querySelectorAll('img')) {
+    const src = (img.getAttribute('src') || '').trim();
+    if (!/^https:\/\//i.test(src)) continue;
+    const alt = img.getAttribute('alt') || '';
+    const w = parseInt(img.getAttribute('width') || img.style.width, 10) || 0;
+    const h = parseInt(img.getAttribute('height') || img.style.height, 10) || 0;
+    if (NOT_PRODUCT.test(`${src} ${alt} ${img.className}`)) continue;
+    if ((w && w < 48) || (h && h < 48) || (w && h && (w / h > 2.2 || h / w > 2.2))) continue;
+    let score = 0;
+    if (/\/images\/I\//.test(src)) score += 5; // Amazon's product pictures
+    if (alt && alt.toLowerCase().split(/[^a-z0-9]+/).some((x) => words.has(x))) score += 3;
+    if (/product|item|catalog|sku|cdn\.shopify|scene7|\/is\/image\//i.test(src)) score += 2;
+    if (w >= 64 && h >= 64) score += 1;
+    if (score > 0 && (!best || score > best.score)) best = { src, score };
+  }
+  return best?.src || '';
 }
 
 export const deliveryTag = (d) => (d ? `<span class="pkg-tag s-${d.state}">${icon('box')}${esc(d.label)}</span>` : '');
@@ -263,6 +414,8 @@ export function refreshShippingMail(email, force, onData) {
             msgId: m.id,
             subject: header('subject'),
             from: header('from').replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, ''),
+            fromAddr: header('from').match(/<([^>]+)>\s*$/)?.[1] || header('from').match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/)?.[0] || '',
+            api: true,
             snippet: decodeEntities(m.snippet || ''),
             at: Number(m.internalDate) || Date.now(),
             url: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email)}#all/${m.threadId}`,
