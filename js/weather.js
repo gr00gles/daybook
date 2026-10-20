@@ -378,7 +378,7 @@ function drawHourly() {
       <path d="${area}" fill="url(#tempfill)"/>
       <path d="${line}" class="temp-line"/>
       ${kMax > 2 ? label(kMax, tMax, true) : ''}
-      ${kMin > 2 && kMin !== kMax ? label(kMin, tMin, false) : ''}
+      ${kMin > 2 && kMin !== kMax ? label(kMin, tMin, true) : ''}
       <circle cx="${x(0)}" cy="${y(temps[0]).toFixed(1)}" r="4.5" class="temp-now"/>
       ${label(0, temps[0], temps[0] >= (tMin + tMax) / 2 ? false : true)}
       <text x="${padX}" y="${top + plotH + gap - 2}" class="ax cap">${maxPop ? `Chance of rain · peak ${maxPop}%` : 'No rain expected'}</text>
