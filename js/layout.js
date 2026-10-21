@@ -1,26 +1,37 @@
 // Arrange mode: drag cards between and within the board's columns, drag a card's bottom
-// edge to set its height, drag the lines between columns to change their widths, and switch
-// the board between three columns and four.
+// edge to set its height, drag the lines between columns to change their widths, switch
+// the board between three columns and four, and turn fitting the window on or off.
 // The layout is saved under its own key in chrome.storage.sync, apart from Settings:
-//   { v: 1, count: 3 | 4, cols: { day: [card ids], mail: [...], out: [...] }, cols4: { day, mail, out, more },
-//     widths: [fr × 3], widths4: [fr × 4], heights: { id: px } }
+//   { v: 1, rev: 2, count: 3 | 4, fit: false, cols: { day: [card ids], mail: [...], out: [...] },
+//     cols4: { day, mail, out, more }, widths: [fr × 3], widths4: [fr × 4], heights: { id: px } }
 // Three and four columns each keep their own arrangement and widths; heights are shared. With
-// no count saved, windows at least AUTO_FOUR wide get four. Four columns start from the
-// three-column arrangement with YouTube and Notes moved to the fourth.
+// no count saved, windows at least AUTO_FOUR wide get four, arranged as FOUR. Layouts saved
+// before rev 2 keep only their count: the cards moved to new spots that fit the window.
 // A card's height never scrolls: below its natural height it drops whole items (emails, games,
 // events, list rows) from the end until it fits, and grows back as there's room again.
+// While the columns sit side by side, each also fits the window (see fitColumn).
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
 import { $, $$, esc, showPop } from './util.js';
 import { icon } from './icons.js';
 
 const KEY = 'layout';
-const DEFAULT_WIDTHS = { 3: [1.25, 1, 0.95], 4: [1.3, 1, 1, 1] };
-const FOURTH = ['card-youtube', 'card-notes'];
+const REV = 2;
+const DEFAULT_WIDTHS = { 3: [1.1, 1.2, 1], 4: [1, 1.3, 1, 0.9] };
+// Four columns: the day, the month with the small cards, mail, and things to read or watch.
+const FOUR = {
+  day: ['card-today', 'card-notes'],
+  mail: ['card-month', 'card-stocks', 'card-teams'],
+  out: ['card-deliveries', 'card-mail', 'card-area'],
+  more: ['card-youtube', 'card-news'],
+};
 const AUTO_FOUR = 1480;
 const MIN_WIDTH = 0.5;
 const MIN_HEIGHT = 140;
+const FIT_MIN = 140; // the shortest a card with a list gets when fitting the window
+const FIT_BOTTOM = 16; // room kept under the cards
+const FIT_SLACK = 1 / 3; // how much of a window the page may scroll to keep the columns fitted
 
-let layout = { v: 1, count: null, cols: {}, cols4: null, widths: null, widths4: null, heights: {} };
+let layout = { v: 1, rev: REV, count: null, fit: true, cols: {}, cols4: null, widths: null, widths4: null, heights: {} };
 let arranging = false;
 let count = 3; // columns on the board now
 let defaults = null; // where each card sits in newtab.html
@@ -31,6 +42,12 @@ const columns = () => allColumns().filter((col) => !col.hidden);
 const colKey = (col) => [...col.classList].find((c) => c.startsWith('col-'))?.slice(4);
 const cardsIn = (col) => [...col.children].filter((el) => el.matches('.card[id]'));
 const shown = (card) => !card.hidden && card.offsetParent !== null;
+// True while the board shows every column side by side: the lines between them can be
+// dragged, and the columns fit the window.
+const allAcross = () => {
+  const cols = columns().map((c) => c.getBoundingClientRect());
+  return cols.length === count && cols.every((r, i) => i === 0 || (Math.abs(r.top - cols[0].top) < 2 && cols[i - 1].right < r.left));
+};
 const widthsKey = () => (count === 4 ? 'widths4' : 'widths');
 const wantedCount = () => layout.count || (innerWidth >= AUTO_FOUR ? 4 : 3);
 
@@ -60,28 +77,27 @@ function place(n) {
     }
   };
   put(defaults);
-  if (n === 4) {
-    if (!layout.cols4) put(layout.cols);
-    put({ more: FOURTH });
-    put(layout.cols4);
-  } else put(layout.cols);
+  if (n === 4) put(FOUR);
+  put(n === 4 ? layout.cols4 : layout.cols);
   count = n;
   byKey.more.hidden = n !== 4;
   board().dataset.cols = String(n);
   applyWidths();
+  scheduleFit();
 }
 
-// The items a card can drop: entries of its lists, outermost only, in page order.
+// The items a card can drop: entries of its lists, outermost only, in page order. Lists inside
+// [data-keep] (a day's schedule opened under the month) always show whole.
 const itemsOf = (card) =>
-  [...card.querySelectorAll(':scope > :not(.card-head, .card-foot) :is(ol, ul) > li')].filter((li) => !li.parentElement.closest('li'));
+  [...card.querySelectorAll(':scope > :not(.card-head, .card-foot) :is(ol, ul) > li')].filter((li) => !li.parentElement.closest('li, [data-keep]'));
 
 // Shows only the first k items.
 function showFirst(items, k) {
   items.forEach((li, i) => li.toggleAttribute('data-clip', i >= k));
 }
 
-function fitItems(card) {
-  const h = layout.heights[card.id];
+// Shows as many whole items as fit in h pixels (all of them without h).
+function fitItems(card, h) {
   const items = itemsOf(card);
   showFirst(items, items.length);
   if (!h || card.offsetHeight <= h || items.length < 2) return;
@@ -102,40 +118,120 @@ function applyHeight(card) {
   card.classList.toggle('sized', Boolean(h));
   if (h) card.style.setProperty('--card-h', `${h}px`);
   else card.style.removeProperty('--card-h');
-  fitItems(card);
 }
 
-// Cards re-render their lists on every refresh; fit them again after each one.
-const pending = new Set();
-const refit = (card) => {
-  if (!layout.heights[card.id] || pending.has(card)) return;
-  pending.add(card);
-  requestAnimationFrame(() => {
-    pending.delete(card);
-    fitItems(card);
+// ---- Fitting the window ----------------------------------------------------------------
+
+// Back to a card's own height: every item, no height from fitting.
+function release(card) {
+  card.classList.remove('fitted', 'stretched');
+  card.style.removeProperty('--fit-h');
+  card.style.removeProperty('--fit-min');
+  showFirst(itemsOf(card), Infinity);
+}
+
+// How a column's cards can give: their own heights (capped by one set by dragging), which of
+// them can drop items, and the least the column can take with those cut to FIT_MIN.
+function measureColumn(col) {
+  const cards = cardsIn(col).filter(shown);
+  col.classList.add('fits'); // lifts the cards' own scroll limits while measuring
+  cards.forEach(release);
+  const gap = parseFloat(getComputedStyle(col).rowGap) || 0;
+  const all = cards.map((card) => {
+    const cap = layout.heights[card.id] || Infinity;
+    const notes = Boolean(card.querySelector(':scope > textarea'));
+    return { card, cap, notes, flex: notes || itemsOf(card).length > 1, h: Math.min(card.offsetHeight, cap) };
   });
-};
-const refitAll = () => {
-  for (const card of $$('.board .card.sized')) refit(card);
-};
+  const fixed = gap * Math.max(0, cards.length - 1) + all.reduce((sum, x) => sum + (x.flex ? 0 : x.h), 0);
+  const least = fixed + all.reduce((sum, x) => sum + (x.flex ? Math.min(x.h, FIT_MIN) : 0), 0);
+  return { col, cards, all, fixed, least };
+}
+
+// Fits a column into `room` pixels. Cards with lists share what the other cards leave: the
+// shorter ones keep their height, the rest split the remainder and drop whole items to fit.
+// Notes takes whatever is still left (at least FIT_MIN), and the last card reaches the bottom
+// so the columns end on one line.
+function fitColumn({ col, cards, all, fixed }, room) {
+  if (!cards.length) return;
+  const lists = all.filter((x) => x.flex && !x.notes);
+  const notes = all.filter((x) => x.notes);
+  const least = (x) => Math.min(x.h, FIT_MIN);
+  let free = room - fixed - notes.reduce((sum, x) => sum + least(x), 0);
+  let n = lists.length;
+  for (const x of [...lists].sort((a, b) => a.h - b.h)) {
+    const h = Math.min(x.h, free / n);
+    fitItems(x.card, Math.floor(h));
+    free -= h;
+    n--;
+  }
+  const used = () => cards.at(-1).getBoundingClientRect().bottom - col.getBoundingClientRect().top;
+  for (const x of notes) {
+    x.card.classList.add('fitted');
+    x.card.style.setProperty('--fit-h', `${least(x)}px`);
+    x.card.style.setProperty('--fit-h', `${Math.floor(Math.min(x.cap, Math.max(least(x), least(x) + room - used())))}px`);
+  }
+  const last = cards.at(-1);
+  const short = Math.floor(room - used());
+  if (short >= 1) {
+    last.classList.add('stretched');
+    last.style.setProperty('--fit-min', `${last.offsetHeight + short}px`);
+  }
+}
+
+// While the columns sit side by side, they all end on one line: the bottom of the window, or
+// as near it as the fullest column can get with its lists cut to FIT_MIN, when that's within
+// FIT_SLACK of a window (the page scrolls that little). Further than that, cutting the lists
+// wouldn't spare much scrolling, so every card keeps its full height. A height set by
+// dragging still caps a card.
+function fitBoard() {
+  const cols = columns();
+  const measured = layout.fit !== false && allAcross() ? cols.map(measureColumn) : [];
+  const top = (col) => col.getBoundingClientRect().top + scrollY;
+  const bottom = Math.max(innerHeight - FIT_BOTTOM, ...measured.map((m) => top(m.col) + m.least));
+  if (measured.length && bottom <= innerHeight * (1 + FIT_SLACK)) {
+    for (const m of measured) fitColumn(m, bottom - top(m.col));
+    return;
+  }
+  for (const col of cols) {
+    col.classList.remove('fits');
+    for (const card of cardsIn(col)) {
+      release(card);
+      fitItems(card, layout.heights[card.id]);
+    }
+  }
+}
+
+// Cards re-render their lists on every refresh, and the window and the band above change
+// size; fit again once per frame after any of it.
+let fitting = 0;
+function scheduleFit() {
+  if (!fitting) fitting = requestAnimationFrame(() => {
+    fitting = 0;
+    fitBoard();
+  });
+}
 function watchCards() {
-  for (const card of $$('.board .card[id]')) new MutationObserver(() => refit(card)).observe(card, { childList: true, subtree: true, characterData: true });
+  for (const card of $$('.board .card[id]')) new MutationObserver(scheduleFit).observe(card, { childList: true, subtree: true, characterData: true });
   let width = board().offsetWidth;
   new ResizeObserver(() => {
     if (board().offsetWidth === width) return;
     width = board().offsetWidth;
-    refitAll();
+    scheduleFit();
   }).observe(board());
+  new ResizeObserver(scheduleFit).observe($('.sky'));
+  addEventListener('resize', scheduleFit);
+  document.fonts?.ready.then(scheduleFit);
 }
 
 // Runs before the cards render, so a saved layout doesn't jump into place.
 export async function applyLayout() {
   try {
     const saved = (await chrome.storage.sync.get(KEY))[KEY];
-    if (saved?.v === 1)
+    if (saved?.v === 1) layout.count = [3, 4].includes(saved.count) ? saved.count : null;
+    if (saved?.v === 1 && saved.rev === REV)
       layout = {
-        v: 1,
-        count: [3, 4].includes(saved.count) ? saved.count : null,
+        ...layout,
+        fit: saved.fit !== false,
         cols: saved.cols || {},
         cols4: saved.cols4 || null,
         widths: saved.widths?.length === 3 ? saved.widths : null,
@@ -151,8 +247,7 @@ export async function applyLayout() {
   addEventListener('resize', () => {
     if (wantedCount() === count) return;
     place(wantedCount());
-    refitAll();
-    paintCount();
+    paintBar();
     placeGutters();
   });
 }
@@ -220,6 +315,7 @@ function startMove(e, card) {
     () => {
       card.classList.remove('dragging');
       if (moved) save();
+      scheduleFit();
       placeGutters();
     },
   );
@@ -247,6 +343,7 @@ function keyMove(e, card) {
   e.currentTarget.focus();
   card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   save();
+  scheduleFit();
   placeGutters();
 }
 
@@ -259,6 +356,7 @@ function startResize(e, card) {
     (ev) => {
       layout.heights[card.id] = Math.max(MIN_HEIGHT, Math.round(ev.clientY - top));
       applyHeight(card);
+      fitBoard();
     },
     () => {
       save();
@@ -270,17 +368,12 @@ function startResize(e, card) {
 function resetHeight(card) {
   delete layout.heights[card.id];
   applyHeight(card);
+  fitBoard();
   save();
   placeGutters();
 }
 
 // ---- Column widths -------------------------------------------------------------------
-
-// The lines between columns only make sense while the board shows them all side by side.
-const allAcross = () => {
-  const cols = columns().map((c) => c.getBoundingClientRect());
-  return cols.length === count && cols.every((r, i) => i === 0 || (Math.abs(r.top - cols[0].top) < 2 && cols[i - 1].right < r.left));
-};
 
 function placeGutters() {
   const b = board();
@@ -319,7 +412,7 @@ function startWiden(e, i) {
     },
     () => {
       g.classList.remove('dragging');
-      refitAll();
+      scheduleFit();
       save();
     },
   );
@@ -329,17 +422,23 @@ function startWiden(e, i) {
 
 function setCount(n) {
   layout.count = n;
-  if (n !== count) {
-    place(n);
-    refitAll();
-  }
-  paintCount();
+  if (n !== count) place(n);
+  paintBar();
   save();
   placeGutters();
 }
 
-function paintCount() {
+function setFit(on) {
+  layout.fit = on;
+  fitBoard();
+  paintBar();
+  save();
+  placeGutters();
+}
+
+function paintBar() {
   for (const b of $$('#arrange-bar [data-cols]')) b.setAttribute('aria-pressed', String(Number(b.dataset.cols) === count));
+  $('#arrange-bar [data-arrange="fit"]')?.setAttribute('aria-pressed', String(layout.fit !== false));
 }
 
 // ---- Arrange mode --------------------------------------------------------------------
@@ -369,12 +468,14 @@ function addControls() {
       const items = itemsOf(card);
       if (items.length) {
         const k = Math.min(items.length, Math.max(1, items.filter((li) => !li.hasAttribute('data-clip')).length + d));
+        release(card);
         showFirst(items, k);
         layout.heights[card.id] = card.offsetHeight;
       } else {
         layout.heights[card.id] = Math.max(MIN_HEIGHT, (layout.heights[card.id] || card.offsetHeight) + d * 40);
       }
       applyHeight(card);
+      fitBoard();
       save();
     });
   }
@@ -387,7 +488,7 @@ function addControls() {
       g.addEventListener('dblclick', () => {
         layout[widthsKey()] = null;
         applyWidths();
-        refitAll();
+        scheduleFit();
         placeGutters();
         save();
       });
@@ -400,7 +501,7 @@ function setArranging(on) {
   document.body.classList.toggle('arranging', on);
   $('#arrange-btn').setAttribute('aria-pressed', String(on));
   if (on) addControls();
-  paintCount();
+  paintBar();
   showPop($('#arrange-bar'), on);
   placeGutters();
 }
@@ -419,6 +520,7 @@ export function initLayout() {
     <span class="cols-pick" role="group" aria-label="Columns">Columns
       <button type="button" data-cols="3" aria-pressed="false">3</button><button type="button" data-cols="4" aria-pressed="false">4</button>
     </span>
+    <button class="btn small fit-pick" type="button" data-arrange="fit" aria-pressed="true" title="Cards share the height of the window, so the page doesn’t scroll">Fit to window</button>
     <button class="btn small" type="button" data-arrange="reset">Reset layout</button>
     <button class="btn small primary" type="button" data-arrange="done">Done</button>`;
   bar.addEventListener('click', (e) => {
@@ -426,6 +528,7 @@ export function initLayout() {
     const cols = e.target.closest('[data-cols]')?.dataset.cols;
     if (what === 'done') setArranging(false);
     if (what === 'reset') resetLayout();
+    if (what === 'fit') setFit(layout.fit === false);
     if (cols) setCount(Number(cols));
   });
   document.addEventListener('keydown', (e) => {

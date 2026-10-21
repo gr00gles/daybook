@@ -15,10 +15,6 @@
       <p class="clock"><span id="clock-time"></span><span class="ampm" id="clock-ampm"></span></p>
       <p class="greeting" id="greeting">Hello</p>
       <p class="date-line"><span id="date-long"></span><span class="date-meta" id="date-meta"></span></p>
-      <div class="when-extra">
-        <p class="holiday-line" id="holiday-line" hidden></p>
-        <div class="next-up" id="next-up" hidden></div>
-      </div>
     </section>
 
     <section class="finder">
@@ -32,6 +28,10 @@
         <div class="ask pop" id="ask" role="region" aria-label="Answer" hidden></div>
         <div class="engines" id="engines" role="radiogroup" aria-label="Search with"></div>
       </form>
+      <div class="sky-line">
+        <p class="holiday-line" id="holiday-line" hidden></p>
+        <div class="next-up" id="next-up" hidden></div>
+      </div>
       <nav class="shortcuts" id="shortcuts" aria-label="Shortcuts" data-section="shortcuts"></nav>
     </section>
 
@@ -74,6 +74,16 @@
       </footer>
     </section>
 
+    <section class="card" id="card-notes" data-section="notes" aria-labelledby="notes-h">
+      <header class="card-head">
+        <h2 id="notes-h">Notes</h2>
+        <span class="stamp" id="notes-state"></span>
+      </header>
+      <textarea id="notes" class="notes" maxlength="6000" placeholder="Jot something down. It syncs with your Chrome profile." aria-labelledby="notes-h"></textarea>
+    </section>
+  </div>
+
+  <div class="col col-mail">
     <section class="card" id="card-month" data-section="calendar" aria-labelledby="month-title">
       <header class="card-head month-head">
         <h2 id="month-title">Month</h2>
@@ -86,44 +96,7 @@
       </header>
       <div class="card-body" id="month-body"></div>
     </section>
-  </div>
 
-  <div class="col col-mail">
-    <section class="card" id="card-deliveries" data-section="packages" aria-labelledby="deliveries-h">
-      <header class="card-head">
-        <h2 id="deliveries-h">Deliveries <span class="head-count" id="deliveries-count"></span></h2>
-      </header>
-      <div class="card-body" id="deliveries-body"><p class="quiet">Looking for shipping emails…</p></div>
-    </section>
-
-    <section class="card" id="card-mail" data-section="mail" aria-labelledby="mail-h">
-      <header class="card-head">
-        <h2 id="mail-h">Unread <span class="head-count" id="mail-count"></span></h2>
-        <span class="stamp" id="mail-updated"></span>
-      </header>
-      <div class="card-body" id="mail-body"><p class="quiet">Checking your inboxes…</p></div>
-      <footer class="card-foot"><div class="foot-links" id="mail-links"></div></footer>
-    </section>
-
-    <section class="card" id="card-youtube" data-section="youtube" aria-labelledby="yt-h">
-      <header class="card-head">
-        <h2 id="yt-h">YouTube <span class="head-count" id="yt-count"></span></h2>
-        <span class="stamp" id="yt-updated"></span>
-      </header>
-      <div class="card-body" id="yt-body"><p class="quiet">Checking your subscriptions…</p></div>
-      <footer class="card-foot"><div class="foot-links" id="yt-foot"></div></footer>
-    </section>
-
-    <section class="card" id="card-notes" data-section="notes" aria-labelledby="notes-h">
-      <header class="card-head">
-        <h2 id="notes-h">Notes</h2>
-        <span class="stamp" id="notes-state"></span>
-      </header>
-      <textarea id="notes" class="notes" maxlength="6000" placeholder="Jot something down. It syncs with your Chrome profile." aria-labelledby="notes-h"></textarea>
-    </section>
-  </div>
-
-  <div class="col col-out">
     <section class="card" id="card-stocks" data-section="stocks" aria-labelledby="stocks-h" hidden>
       <header class="card-head">
         <h2 id="stocks-h">Markets</h2>
@@ -144,6 +117,33 @@
       <p class="credit">Schedules by <a href="https://www.espn.com/">ESPN</a></p>
     </section>
 
+    <section class="card" id="card-news" data-section="news" aria-labelledby="news-h">
+      <header class="card-head">
+        <h2 id="news-h">Headlines</h2>
+        <span class="stamp" id="news-updated"></span>
+      </header>
+      <div class="tabs" id="news-tabs" role="tablist" aria-label="Headline topics"></div>
+      <div class="card-body" id="news-body"><p class="quiet">Loading headlines…</p></div>
+    </section>
+  </div>
+
+  <div class="col col-out">
+    <section class="card" id="card-deliveries" data-section="packages" aria-labelledby="deliveries-h">
+      <header class="card-head">
+        <h2 id="deliveries-h">Deliveries <span class="head-count" id="deliveries-count"></span></h2>
+      </header>
+      <div class="card-body" id="deliveries-body"><p class="quiet">Looking for shipping emails…</p></div>
+    </section>
+
+    <section class="card" id="card-mail" data-section="mail" aria-labelledby="mail-h">
+      <header class="card-head">
+        <h2 id="mail-h">Unread <span class="head-count" id="mail-count"></span></h2>
+        <span class="stamp" id="mail-updated"></span>
+      </header>
+      <div class="card-body" id="mail-body"><p class="quiet">Checking your inboxes…</p></div>
+      <footer class="card-foot"><div class="foot-links" id="mail-links"></div></footer>
+    </section>
+
     <section class="card" id="card-area" data-section="area" aria-labelledby="area-h">
       <header class="card-head">
         <h2 id="area-h">Around you</h2>
@@ -154,13 +154,13 @@
       <p class="credit">Events by <a href="https://www.ticketmaster.com/">Ticketmaster</a></p>
     </section>
 
-    <section class="card" id="card-news" data-section="news" aria-labelledby="news-h">
+    <section class="card" id="card-youtube" data-section="youtube" aria-labelledby="yt-h">
       <header class="card-head">
-        <h2 id="news-h">Headlines</h2>
-        <span class="stamp" id="news-updated"></span>
+        <h2 id="yt-h">YouTube <span class="head-count" id="yt-count"></span></h2>
+        <span class="stamp" id="yt-updated"></span>
       </header>
-      <div class="tabs" id="news-tabs" role="tablist" aria-label="Headline topics"></div>
-      <div class="card-body" id="news-body"><p class="quiet">Loading headlines…</p></div>
+      <div class="card-body" id="yt-body"><p class="quiet">Checking your subscriptions…</p></div>
+      <footer class="card-foot"><div class="foot-links" id="yt-foot"></div></footer>
     </section>
   </div>
 
