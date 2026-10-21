@@ -194,7 +194,7 @@ export function refreshArea(S, force = false) {
     $('#card-area .credit').hidden = !key;
     if (!key) {
       $('#area-updated').textContent = '';
-      body.innerHTML = `<div class="notice setup"><p>Add a free Ticketmaster key to list concerts, shows, festivals and games nearby.</p><button class="btn small primary" type="button" data-open-settings="area">Add a key</button></div>${searches(loc.name)}`;
+      body.innerHTML = `<p class="ae-key">A free Ticketmaster key lists concerts, shows and games nearby. <button class="linklike" type="button" data-open-settings="area">Add a key</button></p>${searches(loc.name)}`;
       return;
     }
     const lat = (+loc.lat).toFixed(2);

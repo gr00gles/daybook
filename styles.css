@@ -5,9 +5,10 @@
 
 /* Layout: one slim band (the clock, search and today's weather) on a full-bleed backdrop whose
    light follows the real sun (data-phase on <html>), over a board of glass panels in three
-   columns (Today + Month · Deliveries + Unread + YouTube + Notes · Markets + Teams + Around
-   you + Headlines) or four, with YouTube + Notes in the fourth. Cards can be moved and resized,
-   and the board switched between three and four columns (js/layout.js). */
+   columns (Today + Notes · Month + Markets + Teams + Headlines · Deliveries + Unread + Around
+   you + YouTube) or four (Today + Notes · Month + Markets + Teams · Deliveries + Unread +
+   Around you · YouTube + Headlines) that fit the window. Cards can be moved and resized, and
+   the board switched between three and four columns (js/layout.js). */
 :root {
   /* Solid surfaces: dialogs, inputs, and rings drawn around marks on the glass. */
   --bg: #e6ebf2;
@@ -198,14 +199,13 @@ svg { flex: none; }
 #now-weather > .btn { justify-self: start; }
 #now-weather > .notice { margin: 0; max-width: 300px; }
 
-/* The clock, with the greeting and the date beside it; the next holiday and what's next on
-   one line under them. */
+/* The clock, with the greeting and the date beside it. */
 .when {
   grid-area: when;
   min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: "clock greeting" "clock date" "extra extra";
+  grid-template-areas: "clock greeting" "clock date";
   column-gap: 18px;
 }
 .clock {
@@ -250,8 +250,9 @@ svg { flex: none; }
 }
 #date-long { text-wrap: balance; }
 .date-meta { font-size: 12.5px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
-.when-extra { grid-area: extra; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; }
-.when-extra:not(:has(> :not([hidden]))) { display: none; }
+/* The next holiday and what's next, on one line under the search box. */
+.sky-line { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 10px; margin-top: 10px; }
+.sky-line:not(:has(> :not([hidden]))) { display: none; }
 .holiday-line { margin: 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
 
 /* Holidays: each wears its own color (--hol) and emblem, on a sliver of tinted glass. */
@@ -768,16 +769,16 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .board {
   max-width: var(--page-max);
   margin: 0 auto;
-  padding-block: 12px 44px; /* room above for the grips in arrange mode */
+  padding-block: 12px 16px; /* room above for the grips in arrange mode */
   padding-left: var(--gutter);
   padding-right: var(--gutter-end);
   display: grid;
-  grid-template-columns: var(--board-cols, minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.95fr));
+  grid-template-columns: var(--board-cols, minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1fr));
   gap: 16px;
   align-items: start;
   position: relative;
 }
-.board[data-cols="4"] { grid-template-columns: var(--board-cols, minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)); }
+.board[data-cols="4"] { grid-template-columns: var(--board-cols, minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.9fr)); }
 .col { display: grid; gap: 16px; align-content: start; min-width: 0; }
 
 .card {
@@ -1103,7 +1104,7 @@ a.chip:hover { background: var(--fill-2); }
   align-items: stretch;
   gap: 3px;
   min-width: 0;
-  min-height: 68px;
+  min-height: 60px;
   padding: 4px 4px 5px;
   border: 0;
   border-radius: 10px;
@@ -1156,7 +1157,6 @@ a.chip:hover { background: var(--fill-2); }
 .mday.hol:not(.sel) { background: color-mix(in srgb, var(--hol) 7%, transparent); }
 .mday.hol:not(.sel):hover { background: color-mix(in srgb, var(--hol) 12%, transparent); }
 .mdetail-hol { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
-.mhint { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
 .mdetail { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hair); }
 .mdetail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .mdetail-head h3 { flex: 1; margin: 0; font: 600 16px var(--font-display); letter-spacing: -0.01em; }
@@ -1655,6 +1655,7 @@ a.chip:hover { background: var(--fill-2); }
 .ae-tag.k-film { --k: var(--cat-1); }
 .ae-more { font-size: 11.5px; color: var(--muted); }
 .ae-toggle { margin-top: 8px; font-size: 13px; }
+.ae-key { margin: 0; font-size: 13.5px; color: var(--ink-2); }
 .ae-search { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .ae-search .chip { padding: 5px 12px 5px 10px; font-size: 12.5px; color: var(--ink-2); }
 .ae-search .chip:hover { color: var(--ink); }
@@ -2117,8 +2118,27 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 [data-clip] { display: none !important; }
 .card.sized:has(> textarea) { display: flex; flex-direction: column; height: var(--card-h); }
 .card.sized > textarea { flex: 1 1 auto; min-height: 0; resize: none; }
+/* Fitting the window (js/layout.js): lists don't scroll inside a card that fits, Notes takes the
+   height it's given, and the last card in a column reaches the bottom. */
+.col.fits .upcoming, .col.fits .mail-list { max-height: none; overflow: visible; }
+.col.fits .upcoming.scrolls { mask-image: none; padding-bottom: 0; }
+.card.fitted:has(> textarea) { display: flex; flex-direction: column; height: var(--fit-h); }
+.card.fitted > textarea { flex: 1 1 auto; min-height: 48px; resize: none; }
+.card.stretched { min-height: var(--fit-min); }
+/* Headings whose items were all dropped go with them. A day in Today's Coming up shows whole
+   or not at all, and the days after it go too (items go from the end), even ones with only
+   all-day events. */
+.ev-list:has(> li[data-clip]) ~ .upcoming,
+.upcoming:has(> .day:first-of-type li[data-clip]),
+.day:has(li[data-clip]),
+.day:has(li[data-clip]) ~ .day,
+.tm-news-wrap:has(li[data-clip]):not(:has(li:not([data-clip]))),
+.ae-list:has(> li[data-clip]):not(:has(> li:not([data-clip]))),
+.ae-day:has(+ .ae-list > li[data-clip]):not(:has(+ .ae-list > li:not([data-clip]))) { display: none; }
 .card-move, .card-size, .col-gutter { display: none; }
 /* Edit mode: each pane gets a soft accent rim, a grip on top and a handle on its bottom edge. */
+/* Room to scroll the bottom of the cards clear of the bar. */
+.arranging .board { padding-bottom: 88px; }
 .arranging .board .card {
   outline: 1.5px dashed color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: 4px;
@@ -2172,7 +2192,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 .arranging .col-gutter {
   position: absolute;
   top: 12px;
-  bottom: 44px;
+  bottom: 88px;
   z-index: 3;
   display: block;
   width: 14px;
@@ -2223,6 +2243,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 .cols-pick button:first-of-type { margin-left: 6px; }
 .cols-pick button:hover { background: color-mix(in srgb, var(--surface) 14%, transparent); }
 .cols-pick button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+.arrange-bar .fit-pick[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
 /* A column with no cards is a drop target while arranging. */
 .arranging .board > .col:not([hidden]):not(:has(> .card:not([hidden]))) {
   min-height: 160px;

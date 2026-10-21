@@ -95,13 +95,13 @@ function bar({ e, c0, span, lane, before, after }) {
 }
 
 function detail(events, now) {
-  if (selected === null) return '<p class="mhint">Click a day to see its schedule.</p>';
+  if (selected === null) return '';
   const list = dayEvents(events, selected);
   const allDay = list.filter((e) => e.allDay);
   const timed = list.filter((e) => !e.allDay);
   const title = new Date(selected).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const hols = holidays(selected, list);
-  return `<section class="mdetail" aria-live="polite">
+  return `<section class="mdetail" aria-live="polite" data-keep>
     <header class="mdetail-head"><h3>${esc(title)}</h3><button class="btn small" type="button" data-month="add">${icon('plus')}Add event</button><button class="icon-btn small" type="button" data-month="close" aria-label="Close day">${icon('close')}</button></header>
     ${hols.length ? `<p class="mdetail-hol">${hols.map((h) => holidayBadge(h)).join('')}</p>` : ''}
     ${allDayChips(allDay)}
@@ -133,7 +133,7 @@ export function renderMonth() {
     for (let c = 0; c < 7; c++) cells.push(cell(addDays(ws, c), events, now, week, c));
     rows.push(`<div class="mweek" style="--lanes: ${week.lanes}">${cells.join('')}${week.bars.map(bar).join('')}</div>`);
   }
-  body.innerHTML = `<div class="mgrid" role="group" aria-label="${esc($('#month-title').textContent)}"><div class="mweek mhead">${weekdayLabels()}</div>${rows.join('')}</div>${detail(events, now)}`;
+  body.innerHTML = `<div class="mgrid" role="group" aria-label="${esc($('#month-title').textContent)}" title="Click a day to see its schedule. Double-click to add an event."><div class="mweek mhead">${weekdayLabels()}</div>${rows.join('')}</div>${detail(events, now)}`;
 }
 
 export function initMonth(S) {
