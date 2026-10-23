@@ -69,6 +69,8 @@ export const DEFAULTS = {
   youtube: { hideShorts: true },
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
+  // 17TRACK key for live tracking; whether shipping emails count; packages added by hand ({ number, name, added }).
+  packages: { trackKey: '', fromMail: true, tracked: [] },
   area: { key: '', radius: 25, days: 14, kinds: ['music', 'arts', 'other'] }, // Ticketmaster key; radius in miles or km by units
   holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
   teams: { list: [], calendar: true, news: true }, // teams you follow; the card stays hidden without one
