@@ -13,15 +13,31 @@ export const LIST = `${SITE}vacancyTable.cfm`;
 const KEEP = 14; // days of postings kept; Settings offers up to this many
 const SHOWN = 8;
 
-// How far back to look: [days, label in Settings, words for a sentence].
+// When they were posted: [days back, label in Settings, words for a sentence]. -1 is the site's
+// Yesterday's Postings, and 0 its Date From and Date To.
 export const JOB_DAYS = [
-  [1, 'Today only', 'today'],
+  [1, 'Today’s postings', 'today'],
+  [-1, 'Yesterday’s postings', 'yesterday'],
   [2, 'Today and yesterday', 'since yesterday'],
   [3, 'The last 3 days', 'in the last 3 days'],
   [7, 'The last week', 'in the last week'],
   [14, 'The last two weeks', 'in the last two weeks'],
+  [0, 'Between two dates', ''],
 ];
-export const daysText = (n) => JOB_DAYS.find(([d]) => d === n)?.[2] || `in the last ${n} days`;
+
+// The first and last day (YYYY-MM-DD) postings are shown from.
+export function windowOf(J) {
+  const day = (n) => isoDay(addDays(Date.now(), n));
+  if (J.days === 0) return [J.from || day(-KEEP), J.to || day(0)];
+  if (J.days === -1) return [day(-1), day(-1)];
+  return [day(1 - J.days), day(0)];
+}
+
+export function whenText(J) {
+  if (J.days !== 0) return JOB_DAYS.find(([d]) => d === J.days)?.[2] || `in the last ${J.days} days`;
+  const [from, to] = windowOf(J);
+  return from === to ? `on ${shortDate(from)}` : `posted ${shortDate(from)} to ${shortDate(to)}`;
+}
 
 // What a rule can ask of a field. Several values separated by commas match any of them.
 export const RULE_OPS = {
@@ -247,7 +263,29 @@ export function onDetails(fn) {
   });
 }
 
-export const salaryLabel = (info) => Object.keys(info || {}).find((l) => /salary/i.test(l));
+export function salaryLabel(info) {
+  const labels = Object.keys(info || {});
+  return labels.find((l) => /salary range/i.test(l)) || labels.find((l) => /salary/i.test(l) && !/grade/i.test(l));
+}
+
+// Fields on a posting's page, found by what their labels say.
+const DETAIL = {
+  employment: /employment type/i,
+  jclass: /jurisdiction/i,
+  category: /occupational/i,
+  county: /^county$/i,
+  flextime: /flex/i,
+  compressed: /compress/i,
+  telecommuting: /telecommut/i,
+  helps: /ny ?helps/i,
+  b55: /55-?b/i,
+  internship: /intern/i,
+};
+function detail(job, key) {
+  const info = job.info || {};
+  const label = key === 'salary' ? salaryLabel(info) : Object.keys(info).find((l) => DETAIL[key].test(l));
+  return label ? info[label] : '';
+}
 
 // "From $55817 to $67990 Annually" as "$55,817–$67,990"; hourly pay says so.
 export function salaryText(job) {
@@ -257,23 +295,123 @@ export function salaryText(job) {
   return amounts.length ? `${amounts.slice(0, 2).map(money).join('–')}${/hour/i.test(raw) ? ' an hour' : ''}` : '';
 }
 
-// How many of `jobs` rules leave out because their pages are still to be read, or couldn't be.
-// Only rules on fields from the postings' pages need them.
+// Why rules may be leaving postings out: pages still to be read, pages the site wouldn't give,
+// or a field none of the pages read so far has (which would mean the site changed them). Only
+// options and rules about fields on the postings' pages need them.
+const FIELD_WORDS = {
+  salary: 'salary', employment: 'employment type', jclass: 'jurisdictional class', category: 'occupational category',
+  flextime: 'flextime', compressed: 'compressed workweek', telecommuting: 'telecommuting',
+};
 function unread(jobs, data, J, details) {
   const onList = (f) => f === 'any' || data.columns.some((c) => c.label.toLowerCase() === f.toLowerCase());
-  if (!activeRules(J).some((r) => !onList(r.field))) return { waiting: 0, failed: 0 };
+  const needs = searchTests(J.search).map((t) => t.needs).filter(Boolean);
+  if (!needs.length && !activeRules(J).some((r) => !onList(r.field))) return { waiting: 0, failed: 0, absent: [] };
   const missing = jobs.filter((j) => !j.info);
   const failed = missing.filter((j) => details[j.id]?.error).length;
-  return { waiting: missing.length - failed, failed };
+  const read = jobs.filter((j) => j.info);
+  const absent = read.length >= 5 ? needs.filter((k) => FIELD_WORDS[k] && read.every((j) => !detail(j, k))) : [];
+  return { waiting: missing.length - failed, failed, absent: [...new Set(absent)] };
 }
 
-const unreadText = ({ waiting, failed }) =>
+const unreadText = ({ waiting, failed, absent }) =>
   [
     waiting && `Reading ${waiting} more ${waiting === 1 ? 'posting' : 'postings'} for your rules…`,
     failed && `StateJobsNY wouldn’t give the ${failed === 1 ? 'page of 1 posting' : `pages of ${failed} postings`}, so your rules leave ${failed === 1 ? 'it' : 'them'} out for now.`,
+    absent.length && `Daybook couldn’t find the ${absent.map((k) => FIELD_WORDS[k]).join(' or ')} on the postings’ pages, so ${absent.length === 1 ? 'that option leaves' : 'those options leave'} them all out. StateJobsNY may have changed its pages.`,
   ]
     .filter(Boolean)
     .join(' ');
+
+// ---- The site's search ----------------------------------------------------------------
+// Settings → NYS jobs has every option of StateJobsNY's own search (public/search.cfm), applied
+// here to the postings Daybook has read, along with any rules of your own.
+
+export const CATEGORIES = [
+  'Clerical, Secretarial, Office Aide', 'Financial, Accounting, Auditing', 'Education, Teaching', 'Skilled Craft, Apprenticeship, Maintenance',
+  'Health Care, Human/Social Services', 'I.T. Engineering, Sciences', 'Administrative or General Management', 'Enforcement or Protective Services',
+  'Legal', 'Other Professional Careers',
+];
+
+// The site's regions and their counties, from its region map (assets/help/regionMapText.cfm).
+export const REGIONS = {
+  'Capital/Saratoga': ['Albany', 'Columbia', 'Fulton', 'Greene', 'Montgomery', 'Rensselaer', 'Saratoga', 'Schenectady', 'Schoharie', 'Warren', 'Washington'],
+  'Eastern Adirondacks': ['Clinton', 'Essex', 'Franklin', 'Hamilton'],
+  'Western Adirondacks': ['Herkimer', 'Jefferson', 'Lewis', 'Oneida', 'Oswego', 'St. Lawrence'],
+  'Central New York': ['Broome', 'Cayuga', 'Chenango', 'Cortland', 'Madison', 'Onondaga', 'Otsego', 'Tioga', 'Tompkins'],
+  'Finger Lakes': ['Chemung', 'Genesee', 'Livingston', 'Monroe', 'Ontario', 'Schuyler', 'Seneca', 'Steuben', 'Wayne', 'Yates'],
+  'Western New York': ['Allegany', 'Cattaraugus', 'Chautauqua', 'Erie', 'Niagara', 'Orleans', 'Wyoming'],
+  'Hudson Valley': ['Delaware', 'Dutchess', 'Orange', 'Putnam', 'Sullivan', 'Ulster'],
+  'Westchester/Rockland': ['Rockland', 'Westchester'],
+  'Long Island': ['Nassau', 'Suffolk'],
+  'New York City': ['Bronx', 'Kings', 'New York', 'Queens', 'Richmond'],
+  'Region Not Provided': [],
+  'Outside NY': [],
+};
+const BOROUGHS = { manhattan: 'new york', brooklyn: 'kings', 'staten island': 'richmond', 'saint lawrence': 'st. lawrence', 'st lawrence': 'st. lawrence' };
+const REGION_OF = new Map(Object.entries(REGIONS).flatMap(([r, counties]) => counties.map((c) => [c.toLowerCase(), r])));
+
+// The regions a posting's county (or counties) are in.
+export function regionsOf(county) {
+  const parts = String(county || '')
+    .split(/[,;/]|\band\b/)
+    .map((c) => norm(c))
+    .filter(Boolean);
+  if (!parts.length) return ['Region Not Provided'];
+  return [...new Set(parts.map((c) => REGION_OF.get(BOROUGHS[c] || c) || (/outside|out of state/.test(c) ? 'Outside NY' : 'Region Not Provided')))];
+}
+
+export const FLEX = { flextime: 'Flextime Allowed', compressed: 'Compressed Workweek Allowed', telecommuting: 'Telecommuting Allowed' };
+export const YES_NO = { helps: 'NY HELPS', b55: '55-b/c Eligible', internship: 'Internship' };
+export const GRADE_OPS = { gt: 'Greater Than', lt: 'Less Than', eq: 'Equal To' };
+// Values the site's lists start with; the postings' own are added as their pages are read.
+export const CLASSES = ['Competitive Class', 'Non-competitive Class', 'Exempt Class', 'Labor Class'];
+export const EMPLOYMENT = ['Full-Time', 'Part-Time'];
+
+const same = (a, b) => norm(a).replace(/[^a-z0-9]/g, '') === norm(b).replace(/[^a-z0-9]/g, '');
+
+// NY HELPS, 55-b/c and internships: a Yes or No on the posting's page when it has one, or else
+// whether the posting mentions it anywhere.
+const MENTION = { helps: /ny ?helps/i, b55: /55-?[bc]\b/i, internship: /\bintern(ship)?s?\b/i };
+function yes(job, key) {
+  const v = detail(job, key);
+  if (/^(yes|no)\b/i.test(v)) return /^y/i.test(v);
+  return MENTION[key].test([job.title, ...Object.values(job.cells || {}), ...Object.values(job.info || {})].join(' '));
+}
+
+// Each option that's set, as a test of a posting; `needs` names a field from the posting's page.
+export function searchTests(s = {}) {
+  const tests = [];
+  const words = norm(s.keyword).split(' ').filter(Boolean);
+  if (words.length) {
+    tests.push({
+      test: (j) => {
+        const text = fieldText(j, 'any').join(' ');
+        return words.every((w) => text.includes(w));
+      },
+    });
+  }
+  if (norm(s.title)) tests.push({ test: (j) => norm(j.title).includes(norm(s.title)) });
+  if (s.jclass) tests.push({ needs: 'jclass', test: (j) => same(detail(j, 'jclass'), s.jclass) });
+  if (s.agency) tests.push({ test: (j) => same(j.agency, s.agency) });
+  for (const k of Object.keys(YES_NO)) if (s[k]) tests.push({ needs: 'page', test: (j) => yes(j, k) === (s[k] === 'yes') });
+  for (const k of s.flex || []) if (FLEX[k]) tests.push({ needs: k, test: (j) => /^y/i.test(detail(j, k)) });
+  if (s.categories?.length) tests.push({ needs: 'category', test: (j) => s.categories.some((c) => same(detail(j, 'category'), c)) });
+  if (s.regions?.length) tests.push({ test: (j) => regionsOf(j.county || detail(j, 'county')).some((r) => s.regions.includes(r)) });
+  if (s.employment) tests.push({ needs: 'employment', test: (j) => same(detail(j, 'employment'), s.employment) });
+  const grade = numberIn(s.grade);
+  if (!Number.isNaN(grade)) {
+    tests.push({
+      test: (j) => {
+        const n = numberIn(j.grade);
+        return !Number.isNaN(n) && { gt: n > grade, lt: n < grade, eq: n === grade }[s.gradeOp || 'gt'];
+      },
+    });
+  }
+  // A salary compares where its range starts: what new State hires are paid.
+  const salary = numberIn(s.salary);
+  if (!Number.isNaN(salary)) tests.push({ needs: 'salary', test: (j) => numberIn(detail(j, 'salary')) >= salary });
+  return tests;
+}
 
 // ---- Rules ---------------------------------------------------------------------------
 
@@ -309,12 +447,16 @@ function passes(job, rule) {
   return { min: n >= limit, max: n <= limit, over: n > limit, under: n < limit }[rule.op] ?? true;
 }
 
-// The postings from the last J.days days, and with `rules`, only those passing every rule.
+// The postings from the days Settings asks for, and with `rules`, only those matching every
+// option of the search and passing every rule.
 export function pick(jobs, J, { rules = true } = {}) {
-  const since = isoDay(addDays(Date.now(), -(J.days - 1)));
-  const use = rules ? activeRules(J) : [];
-  return jobs.filter((j) => j.posted >= since && use.every((r) => passes(j, r)));
+  const [from, to] = windowOf(J);
+  const tests = rules ? [...searchTests(J.search), ...activeRules(J).map((r) => ({ test: (j) => passes(j, r) }))] : [];
+  return jobs.filter((j) => j.posted >= from && j.posted <= to && tests.every((t) => t.test(j)));
 }
+
+// How many options and rules are narrowing the list.
+export const ruleCount = (J) => searchTests(J.search).length + activeRules(J).length;
 
 // The fields rules can use: the list's columns except the dates (Posted has its own setting),
 // or the usual ones before the list has loaded; then, A to Z, the details on the postings'
@@ -339,10 +481,11 @@ export function ruleFields(data, details = {}) {
   return fields;
 }
 
-// The NYS jobs part of Settings: how far back to look, and the rules, with how many of the
-// postings Daybook has pass them.
+// The NYS jobs part of Settings: the options of StateJobsNY's own search, in its order, then
+// rules of your own, with how many of the postings Daybook has match them all.
 export async function mountJobs(el, draft, changed) {
   const J = draft.jobs;
+  const s = J.search;
   const data = (await local.get('cache:jobs'))?.data;
   const details = await loadDetails();
   if (!el.isConnected) return;
@@ -354,24 +497,75 @@ export async function mountJobs(el, draft, changed) {
       : ['min', 'max', 'over', 'under'].includes(r.op)
         ? '14'
         : { title: 'analyst, engineer', agency: 'Health, Parks', county: 'Albany, Saratoga' }[r.field.toLowerCase()] || 'analyst';
-  const option = (value, label, current) => `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`;
+  const option = (value, label, current) => `<option value="${esc(value)}"${String(value) === String(current) ? ' selected' : ''}>${esc(label)}</option>`;
+  const select = (key, any, options) =>
+    `<select data-s="${key}">${option('', any, s[key])}${options.map((o) => (Array.isArray(o) ? option(o[0], o[1], s[key]) : option(o, o, s[key]))).join('')}</select>`;
+  const field = (label, control) => `<label class="field"><span>${label}</span>${control}</label>`;
+  const text = (key, placeholder) => `<input type="text" data-s="${key}" value="${esc(s[key])}" placeholder="${esc(placeholder)}" spellcheck="false" autocomplete="off">`;
+  const boxes = (key, list, title = () => '') =>
+    list
+      .map(([value, label]) => `<label class="check"${title(value) ? ` title="${esc(title(value))}"` : ''}><input type="checkbox" data-s-list="${key}" value="${esc(value)}"${s[key].includes(value) ? ' checked' : ''}><span>${esc(label)}</span></label>`)
+      .join('');
+  // The site's choices, then any others the postings' pages have used.
+  const choices = (start, key) => {
+    const seen = new Map(start.map((v) => [norm(v), v]));
+    for (const j of jobs) {
+      const v = detail(j, key);
+      if (v && !seen.has(norm(v))) seen.set(norm(v), v);
+    }
+    return [...seen.values()];
+  };
+  const agencies = [...new Map(jobs.filter((j) => j.agency).map((j) => [j.agency, agencyName(j.agency)]))].sort((a, b) => a[1].localeCompare(b[1]));
+  if (s.agency && !agencies.some(([a]) => a === s.agency)) agencies.unshift([s.agency, agencyName(s.agency)]);
 
   const paintCount = () => {
     const box = el.querySelector('.jr-count');
     if (!data?.jobs) {
-      box.textContent = 'Once the card has loaded the postings, this shows how many pass.';
+      box.textContent = 'Once the card has loaded the postings, this shows how many match.';
       return;
     }
     const recent = pick(jobs, J, { rules: false });
     const kept = pick(jobs, J).length;
     const note = unreadText(unread(recent, data, J, details));
-    box.textContent = activeRules(J).length
-      ? `${kept} of the ${recent.length} postings ${daysText(J.days)} pass ${activeRules(J).length === 1 ? 'this rule' : 'these rules'}.${note ? ` ${note}` : ''}`
-      : `${recent.length} postings ${daysText(J.days)}. Add a rule to see fewer.`;
+    box.textContent = ruleCount(J)
+      ? `${kept} of the ${recent.length} postings ${whenText(J)} match.${note ? ` ${note}` : ''}`
+      : `${recent.length} postings ${whenText(J)}. Set an option or add a rule to see fewer.`;
   };
 
   const paint = () => {
-    el.innerHTML = `<label class="field jr-days"><span>Posted</span><select data-r-days>${JOB_DAYS.map(([n, l]) => option(String(n), l, String(J.days))).join('')}</select></label>
+    el.innerHTML = `<h4>Search for vacancies</h4>
+      <div class="grid2">
+        ${field('Containing the keyword', text('keyword', 'Any word in the posting'))}
+        ${field('With the title', text('title', 'analyst'))}
+        ${field('In the jurisdictional class', select('jclass', 'Any jurisdictional class', choices(CLASSES, 'jclass')))}
+        ${field('In which NYS agency', select('agency', 'Any agency', agencies))}
+        ${Object.entries(YES_NO).map(([k, label]) => field(label, select(k, '--', [['yes', 'Yes'], ['no', 'No']]))).join('')}
+      </div>
+      <h4>Restrict by date posted</h4>
+      <div class="grid2">
+        ${field('Posted', `<select data-r-days>${JOB_DAYS.map(([n, l]) => option(n, l, J.days)).join('')}</select>`)}
+      </div>
+      <div class="grid2 jr-dates"${J.days === 0 ? '' : ' hidden'}>
+        ${field('Date from', `<input type="date" data-r-date="from" value="${esc(J.from)}">`)}
+        ${field('Date to', `<input type="date" data-r-date="to" value="${esc(J.to)}">`)}
+      </div>
+      <h4>Flexibility in the workplace</h4>
+      <div class="topics">${boxes('flex', Object.entries(FLEX))}</div>
+      <h4>Include occupational categories</h4>
+      <div class="topics wide">${boxes('categories', choices(CATEGORIES, 'category').map((c) => [c, c]))}</div>
+      <h4>Include regions</h4>
+      <div class="topics">${boxes('regions', Object.keys(REGIONS).map((r) => [r, r]), (r) => REGIONS[r].join(', '))}</div>
+      <h4>Other requirements</h4>
+      <div class="grid2">
+        ${field('Employment type', select('employment', 'Full/Part Time', choices(EMPLOYMENT, 'employment')))}
+        <div class="field"><span>Salary grade</span><div class="jr-pair">
+          <select data-s="gradeOp" aria-label="Compare the grade">${Object.entries(GRADE_OPS).map(([k, l]) => option(k, l, s.gradeOp)).join('')}</select>
+          <select data-s="grade" aria-label="Grade level">${option('', 'Any grade level', s.grade)}${Array.from({ length: 38 }, (_, i) => option(i + 1, `Grade ${i + 1}`, s.grade)).join('')}</select>
+        </div></div>
+        ${field('Minimum salary', `<input type="text" inputmode="numeric" data-s="salary" value="${esc(s.salary)}" placeholder="60000" autocomplete="off">`)}
+      </div>
+      <p class="hint">Ticking nothing in a list includes all of it. A salary compares where its range starts, which is what new State hires are paid.</p>
+      <h4>More rules</h4>
       <div class="jr-rules">${J.rules
         .map(
           (r, i) => `<div class="jr-rule">
@@ -391,8 +585,17 @@ export async function mountJobs(el, draft, changed) {
 
   const edit = (e) => {
     const t = e.target;
-    if (t.matches('[data-r-days]')) J.days = Number(t.value);
-    else if (t.dataset.r) J.rules[Number(t.dataset.r)][t.dataset.k] = t.value;
+    if (t.matches('[data-r-days]')) {
+      J.days = Number(t.value);
+      el.querySelector('.jr-dates').hidden = J.days !== 0;
+    } else if (t.dataset.rDate) J[t.dataset.rDate] = t.value;
+    else if (t.dataset.s) s[t.dataset.s] = t.value.trim();
+    else if (t.dataset.sList) {
+      const set = new Set(s[t.dataset.sList]);
+      if (t.checked) set.add(t.value);
+      else set.delete(t.value);
+      s[t.dataset.sList] = [...set];
+    } else if (t.dataset.r) J.rules[Number(t.dataset.r)][t.dataset.k] = t.value;
     else return;
     changed();
     // A new field or test changes the value's example; typing a value only changes the count.
@@ -469,7 +672,7 @@ async function render() {
   const { S, data, meta } = card;
   const body = $('#jobs-body');
   const J = S.jobs;
-  const rules = activeRules(J).length;
+  const rules = ruleCount(J);
   $('#jobs-updated').textContent = meta.error && data ? "couldn't refresh" : data ? updatedText(meta.at) : '';
   $('#jobs-filter').textContent = rules ? `${rules} ${rules === 1 ? 'rule' : 'rules'}` : '';
   if (!data) {
@@ -486,7 +689,7 @@ async function render() {
   $('#jobs-count').textContent = jobs.length || '';
   paintLinks(jobs.length);
   body.innerHTML = `${
-    jobs.length ? list(jobs.slice(0, SHOWN)) : `<p class="quiet${note ? '' : ' is-empty'}">No new postings${rules ? ' pass your rules' : ''} ${esc(daysText(J.days))}.</p>`
+    jobs.length ? list(jobs.slice(0, SHOWN)) : `<p class="quiet${note ? '' : ' is-empty'}">No new postings${rules ? ' match your rules' : ''} ${esc(whenText(J))}.</p>`
   }${note ? `<p class="quiet jb-note">${esc(note)}</p>` : ''}`;
 }
 

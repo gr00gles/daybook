@@ -6,7 +6,7 @@ import { $, esc, updatedText, errorText } from './util.js';
 import { loadSettings } from './settings.js';
 import { icon } from './icons.js';
 import {
-  loadJobs, pick, activeRules, JOB_DAYS, daysText, postingUrl, agencyName, numberIn, shortDate, loadDetails, withDetails, ensureDetails, onDetails, salaryText,
+  loadJobs, pick, ruleCount, JOB_DAYS, whenText, postingUrl, agencyName, numberIn, shortDate, loadDetails, withDetails, ensureDetails, onDetails, salaryText,
 } from './jobs.js';
 
 const S = await loadSettings();
@@ -19,10 +19,13 @@ const view = { q: '', days: S.jobs.days, rules: true, sort: null, dir: -1 };
 let data = null;
 let details = {};
 
-const rules = activeRules(S.jobs).length;
+const rules = ruleCount(S.jobs);
 $('#jp-rules-wrap').hidden = !rules;
 $('#jp-rules-label').textContent = `Only postings that pass my ${rules === 1 ? 'rule' : `${rules} rules`}`;
-$('#jp-days').innerHTML = JOB_DAYS.map(([n, l]) => `<option value="${n}"${n === view.days ? ' selected' : ''}>${esc(l)}</option>`).join('');
+// Dates set in Settings are one more choice here.
+$('#jp-days').innerHTML = JOB_DAYS.filter(([n]) => n || view.days === 0)
+  .map(([n, l]) => `<option value="${n}"${n === view.days ? ' selected' : ''}>${esc(n ? l : 'Your dates in Settings')}</option>`)
+  .join('');
 
 // The site's columns (or the ones Daybook could make out when the table had no headings), with
 // the salary and employment type from the postings' pages after the grade, once some are read.
@@ -84,7 +87,7 @@ function paint() {
     const cmp = sorter(by, view.dir);
     shown = [...shown].sort((a, b) => cmp(a, b) || Number(b.id) - Number(a.id));
   }
-  const when = daysText(view.days);
+  const when = whenText(J);
   const passing = view.rules && rules ? ' that pass your rules' : '';
   $('#jp-status').textContent = words.length
     ? `${shown.length} of ${base.length} postings ${when}${passing} match`
