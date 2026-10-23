@@ -21,17 +21,16 @@
       <form class="search" id="search-form" role="search">
         <label class="search-box">
           <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.4-4.4"/></svg>
-          <input id="search-input" type="search" placeholder="Search Google" autocomplete="off" spellcheck="false" aria-label="Search">
-          <kbd title="Press / to search">/</kbd>
+          <input id="search-input" type="search" placeholder="Search Google" autocomplete="off" spellcheck="false" aria-label="Search" aria-keyshortcuts="/" title="Press / to search">
+          <span class="flip" id="flip" hidden>
+            <span class="next-up" id="next-up" hidden></span>
+            <span class="holiday-line" id="holiday-line" hidden></span>
+          </span>
         </label>
         <div class="places pop" id="places" hidden></div>
         <div class="ask pop" id="ask" role="region" aria-label="Answer" hidden></div>
         <div class="engines" id="engines" role="radiogroup" aria-label="Search with"></div>
       </form>
-      <div class="sky-line">
-        <p class="holiday-line" id="holiday-line" hidden></p>
-        <div class="next-up" id="next-up" hidden></div>
-      </div>
       <nav class="shortcuts" id="shortcuts" aria-label="Shortcuts" data-section="shortcuts"></nav>
     </section>
 
@@ -39,7 +38,6 @@
       <section class="now-weather" aria-label="Weather now" data-section="weather">
         <button class="nw-alert" id="nw-alert" type="button" hidden></button>
         <div id="now-weather"></div>
-        <div class="nw-sky"><div class="suntrack" id="suntrack"></div><div class="moon" id="moon"></div></div>
         <div class="wx-pop pop" id="wx-pop" role="dialog" aria-labelledby="wx-pop-h" hidden>
           <header class="wx-pop-head">
             <h2 id="wx-pop-h">This week</h2>
@@ -47,6 +45,7 @@
             <span class="stamp" id="weather-updated"></span>
             <button class="icon-btn small" type="button" id="wx-pop-close" aria-label="Close"></button>
           </header>
+          <div class="nw-sky"><div class="suntrack" id="suntrack"></div><div class="moon" id="moon"></div></div>
           <div class="wx-alerts" id="wx-alerts" data-section="alerts"></div>
           <div id="weather-body"><p class="quiet">Getting the forecast…</p></div>
         </div>

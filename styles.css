@@ -250,10 +250,44 @@ svg { flex: none; }
 }
 #date-long { text-wrap: balance; }
 .date-meta { font-size: 12.5px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
-/* The next holiday and what's next, on one line under the search box. */
-.sky-line { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 10px; margin-top: 10px; }
-.sky-line:not(:has(> :not([hidden]))) { display: none; }
-.holiday-line { margin: 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+/* The next holiday and what's next, sharing a bubble at the end of the search box: the faces
+   sit on top of each other and flip over, the one going tipping away before the next tips in.
+   The bubble steps aside while you type. */
+.flip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 64%;
+  display: grid;
+  perspective: 480px;
+  margin-right: -4px;
+  cursor: default;
+}
+.flip[hidden], .search-box:has(input:not(:placeholder-shown)) .flip { display: none; }
+.flip > * {
+  grid-area: 1 / 1;
+  justify-self: end;
+  align-self: center;
+  min-width: 0;
+  max-width: 100%;
+  transform: rotateX(90deg);
+  transform-origin: 50% 50%;
+  opacity: 0;
+  backface-visibility: hidden;
+  pointer-events: none;
+  transition: transform .3s cubic-bezier(.5, 0, .9, .5), opacity .2s ease-in .1s;
+}
+.flip > .shown {
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+  transition: transform .42s var(--ease-out) .26s, opacity .16s ease-out .26s;
+}
+.flip > .gone { transform: rotateX(-90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .flip > *, .flip > .shown, .flip > .gone { transform: none; transition: opacity .25s ease; }
+}
+.holiday-line { display: flex; margin: 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+.flip .hol-badge { white-space: nowrap; }
 
 /* Holidays: each wears its own color (--hol) and emblem, on a sliver of tinted glass. */
 .hol-badge {
@@ -290,15 +324,16 @@ svg { flex: none; }
 .hol-hat { position: absolute; left: -10px; top: -15px; width: 30px; height: 25px; transform: rotate(-22deg); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .25)); pointer-events: none; }
 
 /* What's next, on one line: Now or Next, the event, when (and when to leave), and Join. A long
-   title wraps rather than being cut short. */
+   title is cut short to fit the search box. */
 .next-up {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  min-height: 34px;
-  padding: 4px 14px 4px 12px;
-  border-radius: 17px;
+  min-height: 32px;
+  padding: 3px 14px 3px 12px;
+  border-radius: 16px;
+  white-space: nowrap;
   background: var(--glass-strong);
   -webkit-backdrop-filter: var(--blur);
   backdrop-filter: var(--blur);
@@ -308,7 +343,7 @@ svg { flex: none; }
 .next-up:has(> .join) { padding-right: 4px; }
 .nu-label { font-size: 10.5px; font-weight: 750; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
 .next-up.soon .nu-label { color: var(--now); }
-.nu-title { font-size: 13.5px; font-weight: 650; line-height: 1.3; overflow-wrap: break-word; min-width: 0; }
+.nu-title { font-size: 13.5px; font-weight: 650; line-height: 1.3; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .nu-when { color: var(--ink-2); white-space: nowrap; }
 .nu-leave { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
 .next-up .join { margin-left: 2px; padding-block: 4px; }
@@ -663,11 +698,12 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .nw-hours .wx-icon { width: 19px; height: 19px; }
 .nh-temp { font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .nh-pop { min-height: 1em; font-size: 10.5px; font-weight: 600; line-height: 1; color: var(--rain); font-variant-numeric: tabular-nums; }
-.nw-sky { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 7px; border-top: 1px solid var(--hair); }
-.nw-sky .moon-sub { display: none; }
-.nw-sky .moon { gap: 7px; }
-.nw-sky .moon-disc { width: 18px; height: 18px; }
-.nw-sky .moon-name { font-size: 12px; font-weight: 500; color: var(--muted); }
+/* The sun's day and the moon, at the top of the week bubble (or, without the weather, where it
+   would be). */
+.nw-sky { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.wx-pop .nw-sky { margin: -2px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--hair); }
+.wx-pop .suntrack { flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; }
+.now-weather > .nw-sky .moon-sub { display: none; }
 .nw-sky:has(> .suntrack:empty):has(> .moon:empty) { display: none; }
 .suntrack { flex: 1; min-width: 150px; display: flex; align-items: center; gap: 10px; }
 .suntrack .sunline { flex: 1; }
@@ -740,12 +776,11 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .wx-icon .i-moon { stroke: var(--ink-2); }
 .wx-icon .i-rain { stroke: var(--rain); }
 
-/* Arrange, refresh and settings: a slim rail at the end of the band. */
+/* Arrange, refresh and settings, side by side at the end of the band. */
 .toolbar {
   display: flex;
-  flex-direction: column;
   gap: 2px;
-  margin-right: -6px;
+  margin: -2px -6px 0 0;
 }
 .icon-btn {
   display: grid;
@@ -2450,7 +2485,7 @@ dialog[open]::backdrop { opacity: 1; }
   .sky-inner { grid-template-columns: minmax(0, 1fr); grid-template-areas: "when" "end" "finder"; gap: 16px; }
   .sky-end { justify-self: stretch; }
   .now-weather { flex: 1; }
-  .nw-sky { flex-wrap: wrap; row-gap: 4px; }
+  .nw-sky { flex-wrap: wrap; row-gap: 8px; }
   .suntrack { min-width: min(100%, 220px); }
   .wx-pop { left: 0; right: auto; transform-origin: top left; }
   .board, .board[data-cols="4"], .col-out, .board[data-cols="4"] .col-out { grid-template-columns: minmax(0, 1fr); }

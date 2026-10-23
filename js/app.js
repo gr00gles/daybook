@@ -32,9 +32,13 @@ if (S.theme !== 'system') document.documentElement.dataset.theme = S.theme;
 for (const [section, on] of Object.entries(S.show)) {
   for (const el of $$(`[data-section="${section}"]`)) el.toggleAttribute('hidden', !on);
 }
-// The moon sits under the current weather but has its own switch. Without the weather, the
-// hemisphere (which way the moon is lit) comes from the city in Settings or the last location fix.
-if (S.show.sky && !S.show.weather) $('.now-weather').hidden = false;
+// The sun's day and the moon are in the week bubble, but the moon has its own switch: without
+// the weather, it sits where the weather would be, and the hemisphere (which way the moon is
+// lit) comes from the city in Settings or the last location fix.
+if (S.show.sky && !S.show.weather) {
+  $('.now-weather').hidden = false;
+  $('.now-weather').append($('.nw-sky'));
+}
 // Headlines can be a card, a ticker under the top band, or both.
 const newsCard = S.show.news && S.news.style !== 'ticker';
 const newsTicker = S.show.news && S.news.style !== 'card';
@@ -87,13 +91,58 @@ function renderNextUp() {
   const trip = mode === 'next' ? tripInfo(e)?.leave : null;
   const leave = trip && trip.at - Date.now() < 90 * 60e3 ? leaveText(trip, (ms) => fmtTime(ms, S.clock24)) : null;
   el.hidden = false;
-  el.className = `next-up${mode === 'now' || mins <= 15 || leave?.level ? ' soon' : ''}`;
+  el.classList.toggle('soon', Boolean(mode === 'now' || mins <= 15 || leave?.level));
   el.innerHTML = `<span class="nu-label">${mode === 'now' ? 'Now' : 'Next'}</span>
     <span class="cal-dot" style="--c: ${colorVar(e.color)}"></span>
     <span class="nu-title">${esc(e.title)}</span>
     <span class="nu-when">${when}</span>
     ${leave ? `<span class="nu-leave${leave.level ? ` ${leave.level}` : ''}" title="About ${trip.mins} min drive">${icon('car')}${esc(leave.text)}</span>` : ''}
     ${e.join ? `<a class="join" href="${esc(safeUrl(e.join))}">${icon('video')}<span>Join</span></a>` : ''}`;
+}
+
+// ---- The bubble in the search box ------------------------------------------------------
+// What's next and the coming holiday share a bubble at the end of the search box, flipping
+// over to the other every few seconds. It holds still under the pointer, and stays on what's
+// next when that's soon. Each one shows or hides itself (renderNextUp, renderHoliday).
+
+const FLIP_EVERY = 6000;
+
+function initFlip() {
+  const box = $('#flip');
+  let held = false;
+  const faces = () => [...box.children].filter((f) => !f.hidden);
+  const show = (face) => {
+    for (const f of box.children) {
+      if (f === face) f.classList.add('shown');
+      else if (f.classList.contains('shown')) {
+        f.classList.replace('shown', 'gone');
+        setTimeout(() => f.classList.remove('gone'), 700);
+      }
+    }
+  };
+  // After either changes: hide the bubble with nothing to show, and keep one face up.
+  const settle = () => {
+    const list = faces();
+    // Set only on a change: setting it at all is a mutation, which would call this again.
+    if (box.hidden !== !list.length) box.hidden = !list.length;
+    for (const f of box.children) if (f.hidden) f.classList.remove('shown', 'gone');
+    const soon = list.find((f) => f.classList.contains('soon'));
+    if (soon && !soon.classList.contains('shown')) show(soon);
+    else if (list.length && !list.some((f) => f.classList.contains('shown'))) show(list[0]);
+  };
+  new MutationObserver(settle).observe(box, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
+  const hold = (on) => () => (held = on || box.matches(':hover, :focus-within'));
+  box.addEventListener('pointerenter', hold(true));
+  box.addEventListener('pointerleave', hold(false));
+  box.addEventListener('focusin', hold(true));
+  box.addEventListener('focusout', () => setTimeout(hold(false)));
+  setInterval(() => {
+    const list = faces();
+    const at = list.findIndex((f) => f.classList.contains('shown'));
+    if (held || document.hidden || list.length < 2 || list[at]?.classList.contains('soon')) return;
+    show(list[(at + 1) % list.length]);
+  }, FLIP_EVERY);
+  settle();
 }
 
 let lastMinute = -1;
@@ -331,6 +380,7 @@ $('#refresh-btn').addEventListener('click', (e) => {
 });
 
 initSearch();
+initFlip();
 initLayout();
 if (S.show.mail && S.show.packages) initDeliveries();
 else $('#card-deliveries').hidden = true;
