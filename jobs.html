@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-phase="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NYS jobs</title>
+<link rel="icon" href="icons/icon32.png">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="js/jobs-page.js"></script>
+</head>
+<body class="co-body">
+<header class="co-top">
+  <a class="co-back" href="newtab.html" id="jp-back">Daybook</a>
+  <h1>NYS jobs</h1>
+</header>
+<main class="jp-main">
+  <div class="jp-tools">
+    <label class="search-box co-search jp-search">
+      <input id="jp-q" type="search" placeholder="Search these postings" autocomplete="off" spellcheck="false" aria-label="Search these postings">
+    </label>
+    <label class="field inline"><span>Posted</span><select id="jp-days"></select></label>
+    <label class="check" id="jp-rules-wrap" hidden><input type="checkbox" id="jp-rules" checked><span id="jp-rules-label"></span></label>
+    <a class="foot-link" href="newtab.html#settings-jobs" id="jp-edit">Edit rules</a>
+  </div>
+  <section class="card jp-card" aria-labelledby="jp-status">
+    <header class="card-head">
+      <h2 id="jp-status">Loading postings…</h2>
+      <span class="stamp" id="jp-updated"></span>
+    </header>
+    <div class="jp-scroll" id="jp-body"></div>
+    <p class="credit">Vacancies from <a href="https://statejobs.ny.gov/public/vacancyTable.cfm">StateJobsNY</a>. Click a title to open the posting.</p>
+  </section>
+</main>
+</body>
+</html>

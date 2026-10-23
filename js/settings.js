@@ -67,7 +67,7 @@ export const DEFAULTS = {
   area: { key: '', radius: 25, days: 14, kinds: ['music', 'arts', 'other'] }, // Ticketmaster key; radius in miles or km by units
   holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
   teams: { list: [], calendar: true, news: true }, // teams you follow; the card stays hidden without one
-  jobs: { days: 3, keywords: '', counties: '' }, // StateJobsNY; keywords and counties are comma-separated, empty for all
+  jobs: { days: 3, rules: [] }, // StateJobsNY; each rule is { field: a column on the site or 'any', op, value }
   show: {
     weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true, youtube: true,
     alerts: true, sky: true, travel: true, packages: true, stocks: true, companies: true, teams: true, area: true, jobs: true,
@@ -96,7 +96,13 @@ function migrate(saved) {
 
 export async function loadSettings() {
   const { settings } = await chrome.storage.sync.get('settings');
-  return merge(structuredClone(DEFAULTS), migrate(settings));
+  const s = merge(structuredClone(DEFAULTS), migrate(settings));
+  // NYS jobs started with a words box and a counties box; those are rules now.
+  const { keywords, counties, ...jobs } = s.jobs;
+  if (keywords) jobs.rules = [{ field: 'any', op: 'has', value: keywords }, ...jobs.rules];
+  if (counties) jobs.rules = [...jobs.rules, { field: 'County', op: 'has', value: counties }];
+  s.jobs = jobs;
+  return s;
 }
 
 export const saveSettings = (s) => chrome.storage.sync.set({ settings: s });
