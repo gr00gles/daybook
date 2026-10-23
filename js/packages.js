@@ -1,9 +1,12 @@
 // Deliveries: shipping emails spotted among your mail, with a link to the carrier's tracking
 // page when the email carries a tracking number. Everything is read from the subject and the
 // preview text; nothing leaves your computer except the Gmail search below. For the Google
-// account connected in Daybook, the product picture comes from the email itself.
+// account connected in Daybook, the product picture comes from the email itself. With a
+// 17TRACK key (tracking.js), the status and delivery day of each package with a tracking
+// number come from the carrier instead, and packages added by hand in Settings join them.
 import { $, esc, safeUrl, cached, relTime, startOfDay, addDays, local } from './util.js';
 import { setTicker } from './ticker.js';
+import { loadTracking, refreshTracking, onTracking, trackedState, carrierOf } from './tracking.js';
 import { gmailApi } from './gauth.js';
 import { icon } from './icons.js';
 import { domainOf, logoUrl } from './companies-store.js';
@@ -247,7 +250,10 @@ export function deliveryRows(list, max = 6) {
       const tip = [d.title, d.number && `${who} ${d.number}`, `email ${relTime(d.at)}`].filter(Boolean).join(' · ');
       // Who sent it and the tracking number, without saying "UPS · UPS".
       const sender = d.from && d.from !== d.title && !(who && d.from.toLowerCase().includes(who.toLowerCase())) ? d.from : '';
-      const meta = [sender, who && d.number ? `${who} ${d.number}` : sender ? '' : who].filter(Boolean).join(' · ');
+      // From 17TRACK: the carrier's latest word on it, and where.
+      const meta = d.event?.text
+        ? [who, d.event.text, d.event.place].filter(Boolean).join(' · ')
+        : [sender, who && d.number ? `${who} ${d.number}` : sender ? '' : who].filter(Boolean).join(' · ');
       return `<li><a class="pkg s-${d.state}" href="${esc(d.href)}" title="${esc(tip)}">
         ${thumb(d)}
         <span class="pkg-text">
@@ -266,16 +272,78 @@ export function deliveryRows(list, max = 6) {
 }
 
 let shown = [];
+let settingsRef = null;
+let fromMail = []; // the deliveries the mail card found, last time it drew
+let live = {}; // what 17TRACK last said, by tracking number
+let trackStatus = {}; // how the last check went: { at, error, keyRejected }
 
-export function initDeliveries() {
+// The new tab passes its settings; the Companies page uses the email side only.
+export function initDeliveries(S) {
   loadThumbs().then(() => shown.length && paintCard());
+  if (!S) return;
+  settingsRef = S;
+  const reload = async () => {
+    live = await loadTracking();
+    trackStatus = (await local.get('track:status')) || {};
+    compose();
+  };
+  reload();
+  onTracking(reload);
 }
 
 // The newest deliveries from the mail card; repainted whenever the mail is.
 export function renderDeliveries(list) {
-  shown = list;
-  paintCard();
+  fromMail = list;
+  if (settingsRef) compose();
+  else {
+    shown = list;
+    paintCard();
+  }
   findPictures(list);
+}
+
+// An email's package, with what 17TRACK says about it in place of what the email said.
+function withLive(d) {
+  const t = d.number && trackedState(live[d.number]);
+  if (!t) return d;
+  const at = t.event?.at || d.at;
+  if (t.state === 'delivered' && Date.now() - at > 2 * DAY_MS) return null;
+  return { ...d, state: t.state, label: t.label, due: t.due, event: t.event, at };
+}
+
+// A package added in Settings, as the card shows it.
+function added(p) {
+  const raw = live[p.number];
+  const t = trackedState(raw);
+  const carrier = carrierOf(p.number, raw?.carrier);
+  const at = t?.event?.at || p.added || Date.now();
+  if (t?.state === 'delivered' && Date.now() - at > 2 * DAY_MS) return null;
+  return {
+    title: p.name || `${CARRIERS[carrier]?.name || 'Package'} ${p.number}`,
+    number: p.number,
+    carrier,
+    href: CARRIERS[carrier] ? CARRIERS[carrier].track(p.number) : `https://t.17track.net/en#nums=${encodeURIComponent(p.number)}`,
+    domain: '',
+    apiIds: [],
+    from: '',
+    at,
+    state: t?.state || 'transit',
+    label: t?.label || (raw?.error ? 'Can’t track' : !settingsRef.packages.trackKey ? 'Tracking' : trackStatus.keyRejected ? 'Key not accepted' : 'Checking…'),
+    due: t?.due ?? null,
+    event: t?.event || (raw?.error ? { text: raw.error } : null),
+  };
+}
+
+// The card's list: the email packages (unless that's off) and the ones added by hand, with
+// 17TRACK's news on each; and the tracking numbers still on their way go to 17TRACK.
+function compose() {
+  const P = settingsRef.packages;
+  const mail = P.fromMail === false ? [] : fromMail;
+  const list = mail.map(withLive).filter(Boolean);
+  for (const p of P.tracked || []) if (!list.some((d) => d.number === p.number)) list.push(added(p));
+  shown = list.filter(Boolean).sort((a, b) => RANK[a.state] - RANK[b.state] || b.at - a.at);
+  paintCard();
+  if (P.trackKey) refreshTracking(P.trackKey, [...(P.tracked || []).map((p) => p.number), ...mail.filter((d) => d.number && d.state !== 'delivered').map((d) => d.number)]);
 }
 
 function paintCard() {
@@ -284,7 +352,12 @@ function paintCard() {
   const coming = shown.filter((d) => d.state !== 'delivered').length;
   $('#deliveries-count').textContent = coming ? String(coming) : '';
   $('#card-deliveries').classList.toggle('is-empty', !shown.length);
-  body.innerHTML = shown.length ? deliveryRows(shown) : '<p class="quiet">Nothing on the way. Shipping emails show up here with their delivery dates.</p>';
+  const none = settingsRef?.packages.fromMail === false ? 'Nothing being tracked. Add a tracking number in Settings → Package tracking.' : 'Nothing on the way. Shipping emails show up here with their delivery dates.';
+  const keyNote =
+    settingsRef?.packages.trackKey && trackStatus.keyRejected
+      ? `<div class="notice warn"><p>${esc(trackStatus.error)}, so packages aren’t being tracked live.</p><button class="btn small" type="button" data-open-settings="packages">Check it in Settings</button></div>`
+      : '';
+  body.innerHTML = (shown.length ? deliveryRows(shown) : `<p class="quiet">${none}</p>`) + keyNote;
   setTicker(
     'deliveries',
     shown.map((d) => {

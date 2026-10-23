@@ -12,6 +12,7 @@ import { loadAi, saveAi, CLAUDE_MODELS } from './ask.js';
 import { AREA_KINDS } from './area.js';
 import { mountJobs } from './jobs.js';
 import { TICKER_CARDS, TICKER_MODES } from './ticker.js';
+import { mountTracking } from './tracking.js';
 
 let draft;
 let aiDraft;
@@ -139,6 +140,15 @@ function build() {
       <label class="field"><span>TomTom key for live traffic (optional)</span><input id="s-tomtom" type="text" data-path="travel.tomtomKey" value="${esc(d.travel.tomtomKey)}" placeholder="Paste your TomTom API key" spellcheck="false" autocomplete="off"></label>
     </div>
     <p class="hint">To get a TomTom key, sign up free at <a href="https://developer.tomtom.com/" target="_blank" rel="noopener">developer.tomtom.com</a> and copy the key from your dashboard.</p>
+  </section>
+
+  <section id="set-packages">
+    <h3>Package tracking</h3>
+    <p class="hint">Live status and delivery days for your packages, straight from the carrier, through <a href="https://api.17track.net/" target="_blank" rel="noopener">17TRACK</a>: it follows USPS, UPS, FedEx, DHL, Amazon and thousands of other carriers. It needs a free key: sign up at <a href="https://api.17track.net/" target="_blank" rel="noopener">api.17track.net</a>, then in its dashboard open <strong>Settings → Security</strong> and copy the <strong>Access Key</strong>. The free plan covers 100 new tracking numbers a month; checking on them again doesn’t count. Daybook sends 17TRACK only the tracking numbers.</p>
+    <label class="field"><span>17TRACK key</span><input id="s-17track" type="text" data-path="packages.trackKey" value="${esc(d.packages.trackKey)}" placeholder="Paste your 17TRACK Access Key" spellcheck="false" autocomplete="off"></label>
+    <div class="trk-mail">${check('packages.fromMail', 'Find packages in shipping emails too', d.packages.fromMail)}</div>
+    <h4>Packages you’re tracking</h4>
+    <div id="sheet-tracking"></div>
   </section>
 
   <section id="set-stocks">
@@ -286,6 +296,7 @@ function mountAll() {
   mountLocation($('#sheet-location'), draft, queueSave);
   mountTeams($('#sheet-teams'), draft, queueSave);
   mountJobs($('#sheet-jobs'), draft, queueSave);
+  mountTracking($('#sheet-tracking'), draft, queueSave);
   paintGroups();
 }
 
@@ -323,7 +334,7 @@ function wire(dlg) {
   wired = true;
   const onEdit = (e) => {
     const el = e.target;
-    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-jobs')) return;
+    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-jobs, #sheet-tracking')) return;
     if (el.dataset.ai) {
       // Saved straight to this computer; the search box picks it up without a reload.
       aiDraft[el.dataset.ai] = el.value.trim();
