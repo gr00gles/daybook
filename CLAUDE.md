@@ -7,3 +7,4 @@ Unpacked Manifest V3 Chrome extension that replaces the new tab page. The reposi
 - No build step and no remote code: plain ES modules in js/, fonts in fonts/, ical.js in lib/. Extension CSP forbids inline scripts and event-handler attributes.
 - Gmail is read from the cookie-authenticated Atom feed in background.js; Google Calendar through chrome.identity.getAuthToken; Outlook through Microsoft Graph with auth code + PKCE (js/msauth.js).
 - Keep personal data out of the code; each user's settings live in chrome.storage.
+- When a change is finished and pushed, open a pull request and squash-merge it into main without asking; the owner pulls main in GitHub Desktop.
