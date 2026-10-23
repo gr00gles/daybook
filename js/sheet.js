@@ -10,7 +10,7 @@ import { groupList, openGroupEditor } from './sites.js';
 import { mountTeams } from './teams.js';
 import { loadAi, saveAi, CLAUDE_MODELS } from './ask.js';
 import { AREA_KINDS } from './area.js';
-import { JOB_DAYS } from './jobs.js';
+import { mountJobs } from './jobs.js';
 
 let draft;
 let aiDraft;
@@ -181,13 +181,9 @@ function build() {
   </section>
 
   <section id="set-jobs">
-    <h3>State jobs</h3>
-    <p class="hint">New vacancies open to the general public on <a href="https://statejobs.ny.gov/public/search.cfm" target="_blank" rel="noopener">StateJobsNY</a>, New York State’s jobs site, newest first. Leave the boxes empty to see every new posting, or separate several words or counties with commas.</p>
-    <div class="grid2">
-      <label class="field"><span>Words in the title or agency</span><input id="s-jobs-keywords" type="text" data-path="jobs.keywords" value="${esc(d.jobs.keywords)}" placeholder="analyst, engineer, parks" spellcheck="false" autocomplete="off"></label>
-      <label class="field"><span>Counties</span><input id="s-jobs-counties" type="text" data-path="jobs.counties" value="${esc(d.jobs.counties)}" placeholder="Albany, Saratoga" spellcheck="false" autocomplete="off"></label>
-      <label class="field"><span>Posted</span><select id="s-jobs-days" data-path="jobs.days" data-type="number">${JOB_DAYS.map(([n, l]) => opt(n, l, d.jobs.days)).join('')}</select></label>
-    </div>
+    <h3>NYS jobs</h3>
+    <p class="hint">New vacancies open to the general public on <a href="https://statejobs.ny.gov/public/search.cfm" target="_blank" rel="noopener">StateJobsNY</a>, New York State’s jobs site. Rules narrow them down by any column the site lists: a posting shows when it passes every rule, and values separated by commas match any of them, as in <em>County contains Albany, Saratoga</em> or <em>Grade is at least 14</em>.</p>
+    <div id="sheet-jobs"></div>
   </section>
 
   <section id="set-sections">
@@ -204,7 +200,7 @@ function build() {
       ${check('show.stocks', 'Stocks', d.show.stocks)}
       ${check('show.teams', 'Teams', d.show.teams)}
       ${check('show.area', 'Area events', d.show.area)}
-      ${check('show.jobs', 'State jobs', d.show.jobs)}
+      ${check('show.jobs', 'NYS jobs', d.show.jobs)}
       ${check('show.notes', 'Notes', d.show.notes)}
       ${check('show.youtube', 'YouTube', d.show.youtube)}
       ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}
@@ -280,6 +276,7 @@ function mountAll() {
   mountOutlook($('#sheet-outlook'), draft, queueSave);
   mountLocation($('#sheet-location'), draft, queueSave);
   mountTeams($('#sheet-teams'), draft, queueSave);
+  mountJobs($('#sheet-jobs'), draft, queueSave);
   paintGroups();
 }
 
@@ -317,7 +314,7 @@ function wire(dlg) {
   wired = true;
   const onEdit = (e) => {
     const el = e.target;
-    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams')) return;
+    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-jobs')) return;
     if (el.dataset.ai) {
       // Saved straight to this computer; the search box picks it up without a reload.
       aiDraft[el.dataset.ai] = el.value.trim();
