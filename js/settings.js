@@ -60,7 +60,12 @@ export const DEFAULTS = {
   gmail: { feed: 'inbox', hidden: [] }, // every signed-in Gmail account except `hidden`
   calendars: [], // extra calendars added by iCal link
   outlook: { clientId: '', mail: true, calendar: true, color: 5 }, // clientId overrides config.js
-  news: { topics: ['top', 'us', 'technology'], custom: [], style: 'card' }, // style: card, ticker or both
+  news: { topics: ['top', 'us', 'technology'], custom: [] },
+  // Each card: 'card' (on the board), 'both' (and in the ticker) or 'ticker' (in the ticker only).
+  ticker: {
+    today: 'card', month: 'card', notes: 'card', stocks: 'card', teams: 'card', news: 'card',
+    jobs: 'card', deliveries: 'card', mail: 'card', area: 'card', youtube: 'card',
+  },
   youtube: { hideShorts: true },
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
@@ -106,6 +111,11 @@ function migrate(saved) {
 export async function loadSettings() {
   const { settings } = await chrome.storage.sync.get('settings');
   const s = merge(structuredClone(DEFAULTS), migrate(settings));
+  // Headlines had the ticker to themselves, set as news.style; every card can have it now.
+  if (s.news.style) {
+    if (!settings?.ticker?.news) s.ticker.news = s.news.style;
+    delete s.news.style;
+  }
   // NYS jobs started with a words box and a counties box; those are rules now.
   const { keywords, counties, ...jobs } = s.jobs;
   if (keywords) jobs.rules = [{ field: 'any', op: 'has', value: keywords }, ...jobs.rules];

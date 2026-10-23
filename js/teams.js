@@ -4,6 +4,7 @@
 import { $, esc, cached, hash, getJSON, local, fmtTime, relTime, updatedText, errorText, safeUrl, startOfDay, addDays } from './util.js';
 import { fetchFeed } from './news.js';
 import { icon } from './icons.js';
+import { setTicker, offBoard } from './ticker.js';
 
 const API = 'https://site.api.espn.com/apis/site/v2/sports';
 
@@ -205,6 +206,30 @@ function renderCard(S, teams, data, meta) {
     return;
   }
   body.innerHTML = `<ol class="teams">${teams.map((t, i) => teamRow(t, data[i], S.clock24)).join('')}</ol>`;
+  setTicker(
+    'teams',
+    teams
+      .map((t, i) => {
+        const g = featured(data[i]?.games || []);
+        if (!g) return null;
+        const date = new Date(g.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        const meta =
+          g.state === 'in'
+            ? `Live · ${g.us ?? 0}–${g.them ?? 0}${g.detail ? ` · ${g.detail}` : ''}`
+            : g.state === 'post'
+              ? `Final · ${resultText(g)}`
+              : [date, g.tbd ? 'Time TBA' : fmtTime(g.start, S.clock24), g.tv].filter(Boolean).join(' · ');
+        return {
+          tag: t.short,
+          pair: { us: teamLogo(t), them: g.opp.logo, sep: g.home || g.neutral ? 'vs' : '@' },
+          title: `${g.opp.rank ? `#${g.opp.rank} ` : ''}${g.opp.short}`,
+          meta,
+          tone: g.state === 'in' ? 'now' : '',
+          href: g.link || teamUrl(t),
+        };
+      })
+      .filter(Boolean),
+  );
 }
 
 // ---- News --------------------------------------------------------------------------
@@ -248,9 +273,11 @@ function renderNews(teams, items, meta) {
 export async function refreshTeams(S, force = false, onGames = () => {}) {
   const card = $('#card-teams');
   const teams = followed(S);
-  card.hidden = !S.show.teams || !teams.length;
-  if (card.hidden) {
+  const off = !S.show.teams || !teams.length;
+  card.hidden = off || offBoard(S, 'teams');
+  if (off) {
     onGames([]);
+    setTicker('teams', []);
     return;
   }
   const sig = hash(teams.map((t) => [t.league, t.id]));

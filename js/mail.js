@@ -1,4 +1,5 @@
 import { $, esc, cached, hash, local, relTime, updatedText, errorText, safeUrl, showToast } from './util.js';
+import { setTicker } from './ticker.js';
 import { graph, graphWrite, msAccount, msHas } from './msauth.js';
 import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
 import { GMAIL_FEEDS, outlookWebUrl, msClientId } from './settings.js';
@@ -229,6 +230,13 @@ function render() {
     .flatMap(([key, s]) => s.data.items.map((m) => ({ ...m, key, letter: s.letter, account: sourceLabel(s) })))
     .sort((a, b) => b.at - a.at)
     .slice(0, 40);
+  setTicker(
+    'mail',
+    live
+      .flatMap(([, s]) => s.data.items)
+      .sort((a, b) => b.at - a.at)
+      .map((m) => ({ tag: m.from, title: m.subject, meta: relTime(m.at), href: m.url })),
+  );
   const packages = settingsRef.show.packages;
   const deliveries = packages
     ? deliveriesFrom([

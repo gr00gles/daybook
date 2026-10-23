@@ -3,6 +3,7 @@
 // quota. With Shorts hidden, the feed used is the channel's long-form uploads list (UULF…),
 // which leaves out Shorts and live streams.
 import { $, esc, local, relTime, errorText, showToast } from './util.js';
+import { setTicker } from './ticker.js';
 import { youtubeApi, googleAccount, googleConfigured } from './gauth.js';
 import { icon } from './icons.js';
 
@@ -331,6 +332,10 @@ function render() {
 
   const list = unwatched().slice(0, ROLODEX);
   if (current >= list.length) current = 0;
+  setTicker(
+    'youtube',
+    list.map((v) => ({ tag: v.channel, title: v.title, meta: relTime(v.at), href: `https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}` })),
+  );
   body.innerHTML = list.length
     ? `<div class="rolo" tabindex="0" role="group" aria-roledescription="carousel" aria-label="Latest uploads from your subscriptions">
         <div class="rolo-stack">${list.map(cardHtml).join('')}</div>
