@@ -1,9 +1,10 @@
 // New vacancies from StateJobsNY, New York State's jobs site: the jobs open to the general
 // public, newest first, grouped by the day they were posted. The site has no API or public
 // feed; its vacancy page carries the whole list as one HTML table, which is read here by the
-// column headings, so a column moving doesn't break it. Every column is kept, so the rules in
-// Settings can use any field the site lists. Rules filter the list as it's drawn, so changing
-// them doesn't refetch. The card shows the newest few; jobs.html lists them all.
+// column headings, so a column moving doesn't break it. Salary and the other details are on
+// each posting's own page, which is read once per posting. Every column and detail is kept, so
+// the rules in Settings can use any field the site lists. Rules filter the list as it's drawn,
+// so changing them doesn't refetch. The card shows the newest few; jobs.html lists them all.
 import { $, esc, cached, local, updatedText, errorText, addDays } from './util.js';
 import { icon } from './icons.js';
 
@@ -30,6 +31,8 @@ export const RULE_OPS = {
   not: 'isn’t',
   min: 'is at least',
   max: 'is at most',
+  over: 'is more than',
+  under: 'is less than',
 };
 
 // Column headings, matched in this order; each column goes to the first that names it.
@@ -48,10 +51,18 @@ const pad = (n) => String(n).padStart(2, '0');
 // The site files agencies like an index ("Transportation, Department of"); read them the usual way.
 export const agencyName = (s) => s.replace(/^(.+), ((?:department|office|division|board|commission|council) of(?: the)?)$/i, '$2 $1');
 export const postingUrl = (id) => `${SITE}vacancyDetailsView.cfm?id=${encodeURIComponent(id)}`;
-// A field that is a number: 18 for "18" or "SG-18", 45000 for "$45,000" or "$45,000 - $60,000".
-// Anything else, like the grades "NS" and "M-1", has none.
-const NUMBER = /^(?:sg-?)?\$?\d[\d,]*(?:\.\d+)?(?:\s*[-–]\s*\$?\d[\d,]*(?:\.\d+)?)?$/i;
-export const numberIn = (s) => (NUMBER.test(clean(s)) ? parseFloat(clean(s).replace(/^sg-?|[$,]/gi, '')) : NaN);
+// The number in a field, for "is at least" and for sorting: a plain number ("18", "SG-18",
+// "37.5", "70%", "60k"), or else the first dollar amount, which for a salary range ("From
+// $55817 to $67990 Annually") is where it starts: what new State hires are paid. Grades like
+// "NS" and "M-1", and other text, have none.
+export function numberIn(s) {
+  const t = clean(s);
+  if (/^(?:sg-?)?\d[\d,]*(?:\.\d+)?%?$/i.test(t)) return parseFloat(t.replace(/^sg-?|[,%]/gi, ''));
+  const k = t.match(/^\$?(\d+(?:\.\d+)?)k$/i);
+  if (k) return Number(k[1]) * 1000;
+  const money = t.match(/\$\s?(\d[\d,]*(?:\.\d+)?)/);
+  return money ? parseFloat(money[1].replace(/,/g, '')) : NaN;
+}
 
 // A cell's date as YYYY-MM-DD: from a sort key the table may carry, or the text (10/22/26,
 // 10/22/2026, 2026-10-22 or Oct 22, 2026).
@@ -122,26 +133,169 @@ async function fetchJobs() {
 
 export const loadJobs = (force, render) => cached({ key: 'jobs', sig: 'v2', maxAge: 2 * 3600e3, force, fetch: fetchJobs, render });
 
+// ---- Each posting's page --------------------------------------------------------------
+// The list has only the table's columns. Salary, employment type, telecommuting and the rest
+// are on each posting's own page, which is read once, a few at a time, and kept by id.
+
+const DETAILS = 'jobs:details'; // { [id]: { at, fields: { label: value } | null, error } }
+const RETRY = 6 * 3600e3; // a page that couldn't be read is tried again after this
+const FORGET = 21 * 86400e3;
+const LONG = 400; // longer text, like the duties, isn't kept
+
+// Labels the site uses, for finding them in the text of a page laid out unlike the pairs below.
+// The long ones at the end mostly mark where the field before them stops.
+const KNOWN = [
+  'Occupational Category', 'Salary Grade', 'Bargaining Unit', 'Salary Range', 'Employment Type', 'Appointment Type', 'Jurisdictional Class',
+  'Travel Percentage', 'Workweek', 'Hours Per Week', 'Flextime allowed?', 'Mandatory overtime?', 'Compressed workweek allowed?',
+  'Telecommuting allowed?', 'Street Address', 'Zip Code', 'Duties Description', 'Minimum Qualifications', 'Additional Comments', 'Contact Information',
+];
+
+// The label and value pairs on a posting's page: two-cell rows, term lists, elements holding
+// just a short label and its value, "Label:" in bold before its value, and as a last resort
+// the site's own labels found in the page's text.
+export function parseDetails(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  for (const el of doc.querySelectorAll('script, style, noscript, nav, header, footer, form')) el.remove();
+  for (const br of doc.querySelectorAll('br')) br.replaceWith(' ');
+  const fields = {};
+  const add = (label, value) => {
+    label = clean(label).replace(/\s*:$/, '');
+    value = clean(value);
+    if (!/^[a-z]/i.test(label) || label.length > 60 || !value || value.length > LONG || value === label || label in fields) return;
+    fields[label] = value;
+  };
+  const block = 'div, table, ul, ol, dl, section, article, h1, h2, h3, h4, h5, h6';
+  for (const dt of doc.querySelectorAll('dt')) if (dt.nextElementSibling?.matches('dd')) add(dt.textContent, dt.nextElementSibling.textContent);
+  for (const el of doc.querySelectorAll('body *')) {
+    if (el.children.length !== 2 || el.matches('dl, ul, ol, select')) continue;
+    const [a, b] = el.children;
+    // A link is a menu, not a label.
+    if (a.matches('a') || a.querySelector(`${block}, a`) || b.querySelector(block)) continue;
+    if ([...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim())) continue;
+    add(a.textContent, b.textContent);
+  }
+  for (const a of doc.querySelectorAll('[class*="left" i], [class*="label" i]')) {
+    const b = a.nextElementSibling;
+    if (b?.matches('[class*="right" i], [class*="value" i]') && !a.querySelector('a')) add(a.textContent, b.textContent);
+  }
+  for (const s of doc.querySelectorAll('strong, b, label, th')) {
+    const label = clean(s.textContent);
+    const all = clean(s.parentElement?.textContent);
+    if (label.endsWith(':') && all.startsWith(label)) add(label, all.slice(label.length));
+  }
+  if (!Object.keys(fields).some((l) => /salary/i.test(l))) {
+    // A value runs from its label to the next label or the end of its line, whichever is first;
+    // a label alone on its line takes the next line.
+    for (const el of doc.querySelectorAll('div, p, li, tr, td, th, dt, dd, h1, h2, h3, h4, h5, h6, section')) el.append('\n');
+    const text = (doc.body?.textContent || '').replace(/[^\S\n]+/g, ' ');
+    const found = KNOWN.map((l) => [l, text.indexOf(l)]).filter(([, i]) => i >= 0).sort((x, y) => x[1] - y[1]);
+    found.forEach(([l, i], k) => add(l, text.slice(i + l.length, found[k + 1]?.[1]).replace(/^[\s:]+/, '').split('\n')[0]));
+  }
+  return fields;
+}
+
+async function fetchDetails(id) {
+  const res = await fetch(postingUrl(id), { cache: 'no-store' });
+  if (!res.ok) throw Object.assign(new Error(`StateJobsNY returned ${res.status}`), { status: res.status });
+  return parseDetails(await res.text());
+}
+
+export const loadDetails = async () => (await local.get(DETAILS)) || {};
+export const withDetails = (jobs, details) => jobs.map((j) => ({ ...j, info: details[j.id]?.fields || null }));
+
+// Reads the pages of the postings in `ids` not read yet, three at a time, saving as it goes.
+// One Daybook page does this at a time; the others get the results through storage. Without a
+// connection it stops and tries again next time; a page the site won't give is retried later.
+export function ensureDetails(ids) {
+  return navigator.locks.request('jobs-details', { ifAvailable: true }, async (lock) => {
+    if (!lock) return;
+    const now = Date.now();
+    const have = await loadDetails();
+    const queue = ids.filter((id) => !have[id] || (!have[id].fields && now - have[id].at > RETRY));
+    if (!queue.length) return;
+    const got = {};
+    let saved = now;
+    const save = async () => {
+      saved = Date.now();
+      const all = { ...(await loadDetails()), ...got };
+      for (const [id, d] of Object.entries(all)) if (now - d.at > FORGET) delete all[id];
+      await local.set(DETAILS, all);
+    };
+    const worker = async () => {
+      for (let id; (id = queue.shift()); ) {
+        try {
+          got[id] = { at: Date.now(), fields: await fetchDetails(id) };
+        } catch (err) {
+          if (!err.status) queue.length = 0;
+          else got[id] = { at: Date.now(), fields: null, error: errorText(err) };
+        }
+        if (Date.now() - saved > 3000) await save();
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    await save();
+  });
+}
+
+// Calls `fn` when more postings' pages have been read, by this page or another.
+export function onDetails(fn) {
+  let timer;
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[DETAILS]) return;
+    clearTimeout(timer);
+    timer = setTimeout(fn, 300);
+  });
+}
+
+export const salaryLabel = (info) => Object.keys(info || {}).find((l) => /salary/i.test(l));
+
+// "From $55817 to $67990 Annually" as "$55,817–$67,990"; hourly pay says so.
+export function salaryText(job) {
+  const raw = job.info?.[salaryLabel(job.info)] || '';
+  const amounts = [...raw.matchAll(/\$\s?(\d[\d,]*(?:\.\d+)?)/g)].map((m) => Number(m[1].replace(/,/g, '')));
+  const money = (n) => `$${n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+  return amounts.length ? `${amounts.slice(0, 2).map(money).join('–')}${/hour/i.test(raw) ? ' an hour' : ''}` : '';
+}
+
+// How many of `jobs` rules leave out because their pages are still to be read, or couldn't be.
+// Only rules on fields from the postings' pages need them.
+function unread(jobs, data, J, details) {
+  const onList = (f) => f === 'any' || data.columns.some((c) => c.label.toLowerCase() === f.toLowerCase());
+  if (!activeRules(J).some((r) => !onList(r.field))) return { waiting: 0, failed: 0 };
+  const missing = jobs.filter((j) => !j.info);
+  const failed = missing.filter((j) => details[j.id]?.error).length;
+  return { waiting: missing.length - failed, failed };
+}
+
+const unreadText = ({ waiting, failed }) =>
+  [
+    waiting && `Reading ${waiting} more ${waiting === 1 ? 'posting' : 'postings'} for your rules…`,
+    failed && `StateJobsNY wouldn’t give the ${failed === 1 ? 'page of 1 posting' : `pages of ${failed} postings`}, so your rules leave ${failed === 1 ? 'it' : 'them'} out for now.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
 // ---- Rules ---------------------------------------------------------------------------
 
 const norm = (s) => clean(s).toLowerCase().replace(/\s+county$/, '');
 const valuesOf = (s) => String(s || '').split(',').map(norm).filter(Boolean);
 export const activeRules = (J) => (J.rules || []).filter((r) => valuesOf(r.value).length);
 
-// A field's text, or null when the site doesn't list that column (then the rule is skipped).
+// A field's text: a column of the list or a detail from the posting's page, empty when the
+// posting has no such field (or its page hasn't been read yet).
 function fieldText(job, field) {
-  const all = Object.values(job.cells || {});
-  if (field === 'any') return [job.title, job.agency, ...all].map((v) => norm(`${v} ${agencyName(v)}`));
-  const label = Object.keys(job.cells || {}).find((l) => l.toLowerCase() === field.toLowerCase());
-  if (label === undefined) return null;
+  const own = { ...job.info, ...job.cells };
+  if (field === 'any') return [job.title, job.agency, ...Object.values(own)].map((v) => norm(`${v} ${agencyName(v)}`));
+  const label = Object.keys(own).find((l) => l.toLowerCase() === field.toLowerCase());
+  const v = label === undefined ? '' : own[label];
   // Agencies match as the site lists them or as the card shows them.
-  return [norm(job.cells[label]), norm(agencyName(job.cells[label]))];
+  return [norm(v), norm(agencyName(v))];
 }
 
 function passes(job, rule) {
   const want = valuesOf(rule.value);
-  const have = want.length ? fieldText(job, rule.field) : null;
-  if (!have) return true;
+  if (!want.length) return true;
+  const have = fieldText(job, rule.field);
   const contains = want.some((w) => have.some((h) => h.includes(w)));
   const equals = want.some((w) => have.includes(w));
   if (rule.op === 'has') return contains;
@@ -151,7 +305,8 @@ function passes(job, rule) {
   const n = numberIn(have[0]);
   const limit = numberIn(rule.value);
   if (Number.isNaN(limit)) return true;
-  return !Number.isNaN(n) && (rule.op === 'min' ? n >= limit : n <= limit);
+  if (Number.isNaN(n)) return false;
+  return { min: n >= limit, max: n <= limit, over: n > limit, under: n < limit }[rule.op] ?? true;
 }
 
 // The postings from the last J.days days, and with `rules`, only those passing every rule.
@@ -161,21 +316,44 @@ export function pick(jobs, J, { rules = true } = {}) {
   return jobs.filter((j) => j.posted >= since && use.every((r) => passes(j, r)));
 }
 
-// The columns rules can use: every one the site lists except the dates (Posted has its own
-// setting), or the usual ones before the list has loaded.
-export const ruleFields = (data) =>
-  data?.columns?.length ? data.columns.filter((c) => c.role !== 'posted' && c.role !== 'due').map((c) => c.label) : ['Title', 'Grade', 'Agency', 'County'];
+// The fields rules can use: the list's columns except the dates (Posted has its own setting),
+// or the usual ones before the list has loaded; then, A to Z, the details on the postings'
+// pages that at least a fifth of them have.
+export function ruleFields(data, details = {}) {
+  const columns = data?.columns?.length ? data.columns : [];
+  const fields = columns.length ? columns.filter((c) => c.role !== 'posted' && c.role !== 'due').map((c) => c.label) : ['Title', 'Grade', 'Agency', 'County'];
+  const taken = new Set([...fields, ...columns.map((c) => c.label)].map((l) => l.toLowerCase()));
+  const count = new Map();
+  let read = 0;
+  for (const j of data?.jobs || []) {
+    const f = details[j.id]?.fields;
+    if (!f) continue;
+    read++;
+    for (const l of Object.keys(f)) count.set(l, (count.get(l) || 0) + 1);
+  }
+  const enough = Math.min(read, Math.max(2, Math.ceil(read / 5)));
+  for (const [l, n] of [...count].sort(([a], [b]) => a.localeCompare(b))) {
+    const low = l.toLowerCase();
+    if (n >= enough && !taken.has(low) && !COLUMNS.posted.test(low) && !COLUMNS.due.test(low)) fields.push(l);
+  }
+  return fields;
+}
 
 // The NYS jobs part of Settings: how far back to look, and the rules, with how many of the
 // postings Daybook has pass them.
 export async function mountJobs(el, draft, changed) {
   const J = draft.jobs;
   const data = (await local.get('cache:jobs'))?.data;
+  const details = await loadDetails();
   if (!el.isConnected) return;
-  const jobs = data?.jobs || [];
-  const fields = ['any', ...ruleFields(data)];
+  const jobs = withDetails(data?.jobs || [], details);
+  const fields = ['any', ...ruleFields(data, details)];
   const example = (r) =>
-    r.op === 'min' || r.op === 'max' ? '14' : { title: 'analyst, engineer', agency: 'Health, Parks', county: 'Albany, Saratoga' }[r.field.toLowerCase()] || 'analyst';
+    /salary/i.test(r.field)
+      ? '60000'
+      : ['min', 'max', 'over', 'under'].includes(r.op)
+        ? '14'
+        : { title: 'analyst, engineer', agency: 'Health, Parks', county: 'Albany, Saratoga' }[r.field.toLowerCase()] || 'analyst';
   const option = (value, label, current) => `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`;
 
   const paintCount = () => {
@@ -184,11 +362,12 @@ export async function mountJobs(el, draft, changed) {
       box.textContent = 'Once the card has loaded the postings, this shows how many pass.';
       return;
     }
-    const all = pick(jobs, J, { rules: false }).length;
+    const recent = pick(jobs, J, { rules: false });
     const kept = pick(jobs, J).length;
+    const note = unreadText(unread(recent, data, J, details));
     box.textContent = activeRules(J).length
-      ? `${kept} of the ${all} postings ${daysText(J.days)} pass ${activeRules(J).length === 1 ? 'this rule' : 'these rules'}.`
-      : `${all} postings ${daysText(J.days)}. Add a rule to see fewer.`;
+      ? `${kept} of the ${recent.length} postings ${daysText(J.days)} pass ${activeRules(J).length === 1 ? 'this rule' : 'these rules'}.${note ? ` ${note}` : ''}`
+      : `${recent.length} postings ${daysText(J.days)}. Add a rule to see fewer.`;
   };
 
   const paint = () => {
@@ -255,11 +434,11 @@ function dayLabel(iso) {
 function item(j) {
   const where = [agencyName(j.agency), j.county].filter(Boolean).join(' · ');
   const grade = j.grade && (/^\d+$/.test(j.grade) ? `Grade ${j.grade}` : j.grade);
-  const due = j.due && `Apply by ${shortDate(j.due)}`;
+  const tags = [salaryText(j), j.due && `Apply by ${shortDate(j.due)}`].filter(Boolean);
   return `<li><a class="jb" href="${esc(postingUrl(j.id))}" target="_blank" rel="noopener">
     <span class="jb-title">${esc(j.title)}</span>
     ${where ? `<span class="jb-meta">${esc(where)}</span>` : ''}
-    ${grade || due ? `<span class="jb-tags">${grade ? `<span class="jb-grade">${esc(grade)}</span>` : ''}${due ? `<span>${esc(due)}</span>` : ''}</span>` : ''}
+    ${grade || tags.length ? `<span class="jb-tags">${grade ? `<span class="jb-grade">${esc(grade)}</span>` : ''}${tags.map((t) => `<span>${esc(t)}</span>`).join('')}</span>` : ''}
   </a></li>`;
 }
 
@@ -284,7 +463,10 @@ function paintLinks(n) {
     <a class="foot-link" href="${LIST}" target="_blank" rel="noopener">${icon('external')}StateJobsNY</a>`;
 }
 
-function render(S, data, meta) {
+let card = null; // what the card last drew: { S, data, meta }
+
+async function render() {
+  const { S, data, meta } = card;
   const body = $('#jobs-body');
   const J = S.jobs;
   const rules = activeRules(J).length;
@@ -296,14 +478,25 @@ function render(S, data, meta) {
     body.innerHTML = `<p class="notice warn">NYS jobs aren’t loading: ${esc(errorText(meta.error).replace(/\.$/, ''))}.</p>`;
     return;
   }
-  const jobs = pick(data.jobs, J);
+  const details = await loadDetails();
+  const all = withDetails(data.jobs, details);
+  const jobs = pick(all, J);
+  // Rules about details leave out postings whose pages haven't been read.
+  const note = unreadText(unread(pick(all, J, { rules: false }), data, J, details));
   $('#jobs-count').textContent = jobs.length || '';
   paintLinks(jobs.length);
-  body.innerHTML = jobs.length
-    ? list(jobs.slice(0, SHOWN))
-    : `<p class="quiet is-empty">No new postings${rules ? ' pass your rules' : ''} ${esc(daysText(J.days))}.</p>`;
+  body.innerHTML = `${
+    jobs.length ? list(jobs.slice(0, SHOWN)) : `<p class="quiet${note ? '' : ' is-empty'}">No new postings${rules ? ' pass your rules' : ''} ${esc(daysText(J.days))}.</p>`
+  }${note ? `<p class="quiet jb-note">${esc(note)}</p>` : ''}`;
 }
 
+let watching = false;
 export function refreshJobs(S, force = false) {
-  loadJobs(force, (data, meta) => render(S, data, meta));
+  if (!watching) onDetails(() => card && render());
+  watching = true;
+  loadJobs(force, (data, meta) => {
+    card = { S, data, meta };
+    render();
+    if (data) ensureDetails(pick(data.jobs, S.jobs, { rules: false }).map((j) => j.id));
+  });
 }
