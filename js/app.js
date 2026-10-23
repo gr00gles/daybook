@@ -92,9 +92,10 @@ function renderNextUp() {
   const leave = trip && trip.at - Date.now() < 90 * 60e3 ? leaveText(trip, (ms) => fmtTime(ms, S.clock24)) : null;
   el.hidden = false;
   el.classList.toggle('soon', Boolean(mode === 'now' || mins <= 15 || leave?.level));
-  el.innerHTML = `<span class="nu-label">${mode === 'now' ? 'Now' : 'Next'}</span>
-    <span class="cal-dot" style="--c: ${colorVar(e.color)}"></span>
-    <span class="nu-title">${esc(e.title)}</span>
+  // The bubble wears the event's calendar color; Now or Next is in its tooltip.
+  el.style.setProperty('--c', colorVar(e.color));
+  el.title = `${mode === 'now' ? 'Now' : 'Next'}: ${e.title}`;
+  el.innerHTML = `<span class="nu-title">${esc(e.title)}</span>
     <span class="nu-when">${when}</span>
     ${leave ? `<span class="nu-leave${leave.level ? ` ${leave.level}` : ''}" title="About ${trip.mins} min drive">${icon('car')}${esc(leave.text)}</span>` : ''}
     ${e.join ? `<a class="join" href="${esc(safeUrl(e.join))}">${icon('video')}<span>Join</span></a>` : ''}`;
