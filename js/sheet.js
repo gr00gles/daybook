@@ -10,6 +10,7 @@ import { groupList, openGroupEditor } from './sites.js';
 import { mountTeams } from './teams.js';
 import { loadAi, saveAi, CLAUDE_MODELS } from './ask.js';
 import { AREA_KINDS } from './area.js';
+import { JOB_DAYS } from './jobs.js';
 
 let draft;
 let aiDraft;
@@ -164,6 +165,8 @@ function build() {
       ${check('teams.calendar', 'Show games on the calendar', d.teams.calendar)}
       ${check('teams.news', 'Show team news', d.teams.news)}
     </div>
+  </section>
+
   <section id="set-area">
     <h3>Area events</h3>
     <p class="hint">Concerts, shows, festivals and games around your weather location, from Ticketmaster. It needs a free key: sign up at <a href="https://developer-acct.ticketmaster.com/user/register" target="_blank" rel="noopener">developer.ticketmaster.com</a>, open <strong>My Apps</strong> and copy the <strong>Consumer Key</strong>. Brewery nights and other small local events are rarely on Ticketmaster, so the card also has quick searches for those.</p>
@@ -175,6 +178,16 @@ function build() {
     <div class="topics">${Object.entries(AREA_KINDS)
       .map(([k, t]) => `<label class="check"><input type="checkbox" data-area-kind="${k}"${d.area.kinds.includes(k) ? ' checked' : ''}><span>${t.label}</span></label>`)
       .join('')}</div>
+  </section>
+
+  <section id="set-jobs">
+    <h3>State jobs</h3>
+    <p class="hint">New vacancies open to the general public on <a href="https://statejobs.ny.gov/public/search.cfm" target="_blank" rel="noopener">StateJobsNY</a>, New York State’s jobs site, newest first. Leave the boxes empty to see every new posting, or separate several words or counties with commas.</p>
+    <div class="grid2">
+      <label class="field"><span>Words in the title or agency</span><input id="s-jobs-keywords" type="text" data-path="jobs.keywords" value="${esc(d.jobs.keywords)}" placeholder="analyst, engineer, parks" spellcheck="false" autocomplete="off"></label>
+      <label class="field"><span>Counties</span><input id="s-jobs-counties" type="text" data-path="jobs.counties" value="${esc(d.jobs.counties)}" placeholder="Albany, Saratoga" spellcheck="false" autocomplete="off"></label>
+      <label class="field"><span>Posted</span><select id="s-jobs-days" data-path="jobs.days" data-type="number">${JOB_DAYS.map(([n, l]) => opt(n, l, d.jobs.days)).join('')}</select></label>
+    </div>
   </section>
 
   <section id="set-sections">
@@ -191,6 +204,7 @@ function build() {
       ${check('show.stocks', 'Stocks', d.show.stocks)}
       ${check('show.teams', 'Teams', d.show.teams)}
       ${check('show.area', 'Area events', d.show.area)}
+      ${check('show.jobs', 'State jobs', d.show.jobs)}
       ${check('show.notes', 'Notes', d.show.notes)}
       ${check('show.youtube', 'YouTube', d.show.youtube)}
       ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}

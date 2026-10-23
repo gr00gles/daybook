@@ -9,6 +9,7 @@ import { planTrips, tripInfo, leaveText } from './trip.js';
 import { refreshStocks } from './stocks.js';
 import { refreshTeams } from './teams.js';
 import { initArea, refreshArea } from './area.js';
+import { initJobs, refreshJobs } from './jobs.js';
 import { initEvents } from './events.js';
 import { initDetails } from './details.js';
 import { initMonth, renderMonth } from './month.js';
@@ -306,6 +307,7 @@ function refreshAll(force = false) {
       if (S.show.calendar) renderCalendars();
     });
   if (S.show.area) refreshArea(S, force);
+  if (S.show.jobs) refreshJobs(S, force);
   if (S.show.news) refreshNews(S, force);
   if (S.show.youtube) refreshYouTube(S, force);
 }
@@ -351,6 +353,7 @@ $('#moon').hidden = !S.show.sky;
 if (S.show.youtube) await initYouTube(S);
 initNews();
 if (S.show.area) initArea();
+if (S.show.jobs) initJobs();
 tick(true);
 setInterval(tick, 1000);
 initShortcuts();

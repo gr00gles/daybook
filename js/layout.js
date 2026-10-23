@@ -22,7 +22,7 @@ const FOUR = {
   day: ['card-today', 'card-notes'],
   mail: ['card-month', 'card-stocks', 'card-teams'],
   out: ['card-deliveries', 'card-mail', 'card-area'],
-  more: ['card-youtube', 'card-news'],
+  more: ['card-youtube', 'card-news', 'card-jobs'],
 };
 const AUTO_FOUR = 1480;
 const MIN_WIDTH = 0.5;

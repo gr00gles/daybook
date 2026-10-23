@@ -67,9 +67,10 @@ export const DEFAULTS = {
   area: { key: '', radius: 25, days: 14, kinds: ['music', 'arts', 'other'] }, // Ticketmaster key; radius in miles or km by units
   holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
   teams: { list: [], calendar: true, news: true }, // teams you follow; the card stays hidden without one
+  jobs: { days: 3, keywords: '', counties: '' }, // StateJobsNY; keywords and counties are comma-separated, empty for all
   show: {
     weather: true, mail: true, calendar: true, news: true, notes: true, shortcuts: true, youtube: true,
-    alerts: true, sky: true, travel: true, packages: true, stocks: true, companies: true, teams: true, area: true,
+    alerts: true, sky: true, travel: true, packages: true, stocks: true, companies: true, teams: true, area: true, jobs: true,
   },
 };
 
