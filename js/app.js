@@ -15,7 +15,7 @@ import { initDetails } from './details.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { initYouTube, refreshYouTube } from './youtube.js';
-import { refreshNews, initNews } from './news.js';
+import { refreshNews, initNews, refreshTicker, initTicker } from './news.js';
 import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
 import { msAccount } from './msauth.js';
@@ -35,6 +35,11 @@ for (const [section, on] of Object.entries(S.show)) {
 // The moon sits under the current weather but has its own switch. Without the weather, the
 // hemisphere (which way the moon is lit) comes from the city in Settings or the last location fix.
 if (S.show.sky && !S.show.weather) $('.now-weather').hidden = false;
+// Headlines can be a card, a ticker under the top band, or both.
+const newsCard = S.show.news && S.news.style !== 'ticker';
+const newsTicker = S.show.news && S.news.style !== 'card';
+$('#card-news').hidden = !newsCard;
+$('#ticker').hidden = !newsTicker;
 const homeLat = S.location.lat ?? (await local.get('geo'))?.lat;
 $('#refresh-btn').innerHTML = icon('refresh');
 $('#settings-btn').innerHTML = icon('gear');
@@ -308,7 +313,8 @@ function refreshAll(force = false) {
     });
   if (S.show.area) refreshArea(S, force);
   if (S.show.jobs) refreshJobs(S, force);
-  if (S.show.news) refreshNews(S, force);
+  if (newsCard) refreshNews(S, force);
+  if (newsTicker) refreshTicker(S, force);
   if (S.show.youtube) refreshYouTube(S, force);
 }
 
@@ -352,6 +358,7 @@ if (S.show.sky) loadHolidays(() => {
 $('#moon').hidden = !S.show.sky;
 if (S.show.youtube) await initYouTube(S);
 initNews();
+if (newsTicker) initTicker();
 if (S.show.area) initArea();
 tick(true);
 setInterval(tick, 1000);

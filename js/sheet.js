@@ -109,6 +109,7 @@ function build() {
 
   <section id="set-news">
     <h3>Headlines</h3>
+    <label class="field news-style"><span>Show headlines</span><select id="s-news-style" data-path="news.style">${opt('card', 'As a card', d.news.style)}${opt('ticker', 'As a ticker under the top band', d.news.style)}${opt('both', 'As a card and a ticker', d.news.style)}</select></label>
     <div class="topics">${Object.entries(NEWS_TOPICS)
       .map(([k, t]) => `<label class="check"><input type="checkbox" data-topic="${k}"${d.news.topics.includes(k) ? ' checked' : ''}><span>${t.label}</span></label>`)
       .join('')}</div>

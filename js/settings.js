@@ -60,7 +60,7 @@ export const DEFAULTS = {
   gmail: { feed: 'inbox', hidden: [] }, // every signed-in Gmail account except `hidden`
   calendars: [], // extra calendars added by iCal link
   outlook: { clientId: '', mail: true, calendar: true, color: 5 }, // clientId overrides config.js
-  news: { topics: ['top', 'us', 'technology'], custom: [] },
+  news: { topics: ['top', 'us', 'technology'], custom: [], style: 'card' }, // style: card, ticker or both
   youtube: { hideShorts: true },
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
