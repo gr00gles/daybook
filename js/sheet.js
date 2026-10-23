@@ -182,7 +182,7 @@ function build() {
 
   <section id="set-jobs">
     <h3>NYS jobs</h3>
-    <p class="hint">New vacancies open to the general public on <a href="https://statejobs.ny.gov/public/search.cfm" target="_blank" rel="noopener">StateJobsNY</a>, New York State’s jobs site. Rules narrow them down by any field the site lists, from the vacancy list and from each posting’s own page, like <em>Employment Type is Full-Time</em>, <em>Grade is more than 14</em> or <em>Salary Range is at least 60000</em>. A posting shows when it passes every rule, and values separated by commas match any of them, as in <em>County contains Albany, Saratoga</em>. A salary compares where its range starts, which is what new State hires are paid. Fields from the postings’ pages show up here once Daybook has read some.</p>
+    <p class="hint">New vacancies open to the general public on <a href="https://statejobs.ny.gov/public/search.cfm" target="_blank" rel="noopener">StateJobsNY</a>, New York State’s jobs site. These are the options of the site’s own search; the card shows the postings that match all of the ones you set, and any rules of your own below them. Daybook keeps two weeks of postings, and reads each one’s page for the salary and the rest.</p>
     <div id="sheet-jobs"></div>
   </section>
 

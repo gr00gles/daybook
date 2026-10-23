@@ -1685,7 +1685,13 @@ a.chip:hover { background: var(--fill-2); }
 .jb-note { margin: 10px 0 0; font-size: 12.5px; }
 
 /* Rules in Settings: field, test, value, remove. */
-.jr-days { max-width: 260px; margin-bottom: 14px; }
+#sheet-jobs h4 { margin: 22px 0 10px; }
+#sheet-jobs h4:first-child { margin-top: 4px; }
+#sheet-jobs .grid2 + .grid2 { margin-top: 12px; }
+#sheet-jobs .jr-dates[hidden] { display: none; }
+#sheet-jobs .topics { margin-bottom: 4px; }
+.topics.wide { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.jr-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .jr-rules { display: grid; gap: 8px; margin-bottom: 10px; }
 .jr-rules:empty { display: none; }
 .jr-rule { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr) auto; align-items: center; gap: 8px; }
