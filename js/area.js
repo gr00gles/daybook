@@ -5,6 +5,7 @@
 import { $, esc, cached, hash, updatedText, errorText, safeUrl, fmtTime } from './util.js';
 import { locate } from './weather.js';
 import { icon } from './icons.js';
+import { setTicker } from './ticker.js';
 
 const API = 'https://app.ticketmaster.com/discovery/v2/events.json';
 const SHOWN = 5;
@@ -173,6 +174,10 @@ function render(S, loc, data, meta, sig) {
     return;
   }
   state = { ...state, events: tidy(data, S.area.kinds), h24: S.clock24 };
+  setTicker(
+    'area',
+    state.events.map((e) => ({ tag: dayLabel(e.date), title: e.name, meta: [timeLabel(e, S.clock24), e.venue].filter(Boolean).join(' · '), href: e.url, newTab: true })),
+  );
   const km = S.units === 'C';
   body.innerHTML = `${state.events.length ? '<div id="area-list"></div>' : `<p class="quiet">Nothing listed within ${S.area.radius} ${km ? 'km' : 'miles'} in the next ${S.area.days} days.</p>`}${searches(loc.name)}`;
   paintList();

@@ -3,6 +3,7 @@
 // preview text; nothing leaves your computer except the Gmail search below. For the Google
 // account connected in Daybook, the product picture comes from the email itself.
 import { $, esc, safeUrl, cached, relTime, startOfDay, addDays, local } from './util.js';
+import { setTicker } from './ticker.js';
 import { gmailApi } from './gauth.js';
 import { icon } from './icons.js';
 import { domainOf, logoUrl } from './companies-store.js';
@@ -220,8 +221,10 @@ export function deliveriesFrom(items) {
 // ---- The Deliveries card ------------------------------------------------------------------
 
 const DAY_MS = 86400e3;
+// Days apart counted from midnight to midnight, so this evening is still today.
+const daysFrom = (t) => Math.round((startOfDay(t) - startOfDay()) / DAY_MS);
 const dateParts = (t) => ({
-  day: Math.round((t - startOfDay()) / DAY_MS) === 0 ? 'Today' : Math.round((t - startOfDay()) / DAY_MS) === 1 ? 'Tomorrow' : new Date(t).toLocaleDateString(undefined, { weekday: 'short' }),
+  day: daysFrom(t) === 0 ? 'Today' : daysFrom(t) === 1 ? 'Tomorrow' : new Date(t).toLocaleDateString(undefined, { weekday: 'short' }),
   date: new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
 });
 
@@ -282,6 +285,13 @@ function paintCard() {
   $('#deliveries-count').textContent = coming ? String(coming) : '';
   $('#card-deliveries').classList.toggle('is-empty', !shown.length);
   body.innerHTML = shown.length ? deliveryRows(shown) : '<p class="quiet">Nothing on the way. Shipping emails show up here with their delivery dates.</p>';
+  setTicker(
+    'deliveries',
+    shown.map((d) => {
+      const when = d.state === 'delivered' ? null : d.due != null ? dateParts(d.due) : null;
+      return { tag: d.label, title: d.title, meta: when ? `${when.day} ${when.date}` : '', href: d.href };
+    }),
+  );
 }
 
 // ---- Product pictures -------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 // A stock watchlist from Finnhub (free key from finnhub.io). Quotes refresh every 5 minutes
 // while the US market is open and hourly otherwise.
 import { $, esc, cached, hash, updatedText, errorText } from './util.js';
+import { setTicker, offBoard } from './ticker.js';
 
 const API = 'https://finnhub.io/api/v1';
 
@@ -103,6 +104,18 @@ function render(data, meta, sig) {
   $('#stocks-state').className = `head-meta${data.market.isOpen ? ' open' : ''}`;
   $('#stocks-updated').textContent = meta.error ? "couldn't refresh" : updatedText(meta.at);
   body.innerHTML = `<ol class="tickers">${data.quotes.map(row).join('')}</ol>`;
+  setTicker(
+    'stocks',
+    data.quotes
+      .filter((q) => !q.missing && !q.failed)
+      .map((q) => ({
+        tag: q.symbol,
+        title: money(q.price),
+        meta: q.pct == null ? '' : `${q.change > 0 ? '▲' : q.change < 0 ? '▼' : ''}${Math.abs(q.pct).toFixed(2)}%`,
+        tone: q.change > 0 ? 'up' : q.change < 0 ? 'down' : '',
+        href: `https://finance.yahoo.com/quote/${encodeURIComponent(q.symbol)}`,
+      })),
+  );
 }
 
 export const stockSymbols = (S) =>
@@ -114,8 +127,9 @@ export function refreshStocks(S, force = false) {
   const card = $('#card-stocks');
   const key = (S.stocks.key || '').trim();
   const symbols = stockSymbols(S);
-  card.hidden = !S.show.stocks || !key || !symbols.length;
-  if (card.hidden) return;
+  const off = !S.show.stocks || !key || !symbols.length;
+  card.hidden = off || offBoard(S, 'stocks');
+  if (off) return setTicker('stocks', []);
   const sig = hash([key, symbols]);
   return cached({
     key: 'stocks',

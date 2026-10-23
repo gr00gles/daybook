@@ -11,6 +11,7 @@ import { mountTeams } from './teams.js';
 import { loadAi, saveAi, CLAUDE_MODELS } from './ask.js';
 import { AREA_KINDS } from './area.js';
 import { mountJobs } from './jobs.js';
+import { TICKER_CARDS, TICKER_MODES } from './ticker.js';
 
 let draft;
 let aiDraft;
@@ -109,7 +110,6 @@ function build() {
 
   <section id="set-news">
     <h3>Headlines</h3>
-    <label class="field news-style"><span>Show headlines</span><select id="s-news-style" data-path="news.style">${opt('card', 'As a card', d.news.style)}${opt('ticker', 'As a ticker under the top band', d.news.style)}${opt('both', 'As a card and a ticker', d.news.style)}</select></label>
     <div class="topics">${Object.entries(NEWS_TOPICS)
       .map(([k, t]) => `<label class="check"><input type="checkbox" data-topic="${k}"${d.news.topics.includes(k) ? ' checked' : ''}><span>${t.label}</span></label>`)
       .join('')}</div>
@@ -185,6 +185,14 @@ function build() {
     <h3>NYS jobs</h3>
     <p class="hint">New vacancies open to the general public on <a href="https://statejobs.ny.gov/public/search.cfm" target="_blank" rel="noopener">StateJobsNY</a>, New York State’s jobs site. These are the options of the site’s own search; the card shows the postings that match all of the ones you set, and any rules of your own below them. Daybook keeps two weeks of postings, and reads each one’s page for the salary and the rest.</p>
     <div id="sheet-jobs"></div>
+  </section>
+
+  <section id="set-ticker">
+    <h3>Ticker</h3>
+    <p class="hint">A bar under the top band that crawls through the latest from the cards you put in it, taking turns: your next events, unread mail, deliveries, scores, quotes, headlines and more. Hover over it to hold it still, scroll it to look along it, and click anything to open it. A card can be in the ticker as well as on the board, or only in the ticker.</p>
+    <div class="grid2 ticker-picks">${Object.entries(TICKER_CARDS)
+      .map(([k, c]) => `<label class="field"><span>${esc(c.label)}</span><select id="s-ticker-${k}" data-path="ticker.${k}">${Object.entries(TICKER_MODES).map(([m, l]) => opt(m, l, d.ticker[k])).join('')}</select></label>`)
+      .join('')}</div>
   </section>
 
   <section id="set-sections">

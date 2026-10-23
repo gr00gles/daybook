@@ -1,7 +1,8 @@
 // The month calendar: every day of the month with its events, flippable to other months.
 // Clicking a day shows that day's full schedule under the grid.
-import { $, esc, colorVar, startOfDay, addDays, safeUrl } from './util.js';
-import { monthGrid, eventsBetween, ensureMonth, FIRST_DAY, timedRow, allDayChips } from './calendar.js';
+import { $, esc, colorVar, startOfDay, addDays, safeUrl, fmtTime } from './util.js';
+import { monthGrid, eventsBetween, ensureMonth, FIRST_DAY, timedRow, allDayChips, tickerEvents } from './calendar.js';
+import { setTicker } from './ticker.js';
 import { icon } from './icons.js';
 import { holidaysOn, loadHolidays, coveredBy, holidayTheme, holidayBadge } from './sky.js';
 import { openEventEditor } from './events.js';
@@ -140,6 +141,13 @@ export function renderMonth() {
     rows.push(`<div class="mweek" style="--lanes: ${week.lanes}">${cells.join('')}${week.bars.map(bar).join('')}</div>`);
   }
   body.innerHTML = `<div class="mgrid" role="group" aria-label="${esc($('#month-title').textContent)}" title="Click a day to see its schedule. Double-click to add an event."><div class="mweek mhead">${weekdayLabels()}</div>${rows.join('')}</div>${detail(events, now)}`;
+  // The ticker gets the two weeks after today, whichever month is on screen.
+  const tomorrow = addDays(startOfDay(now), 1);
+  const day = (t) => {
+    const days = Math.round((startOfDay(t) - tomorrow) / 86400e3);
+    return days === 0 ? 'Tomorrow' : new Date(t).toLocaleDateString(undefined, days < 6 ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
+  };
+  setTicker('month', tickerEvents(eventsBetween(tomorrow, addDays(tomorrow, 14)).filter((e) => e.start >= tomorrow), (e) => (e.allDay ? day(e.start) : `${day(e.start)} ${fmtTime(e.start, settingsRef.clock24)}`)));
 }
 
 export function initMonth(S) {

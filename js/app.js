@@ -15,7 +15,8 @@ import { initDetails } from './details.js';
 import { initMonth, renderMonth } from './month.js';
 import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { initYouTube, refreshYouTube } from './youtube.js';
-import { refreshNews, initNews, refreshTicker, initTicker } from './news.js';
+import { refreshNews, initNews, refreshTicker } from './news.js';
+import { initTicker, setTicker, onTicker, offBoard, TICKER_CARDS } from './ticker.js';
 import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
 import { msAccount } from './msauth.js';
@@ -39,11 +40,11 @@ if (S.show.sky && !S.show.weather) {
   $('.now-weather').hidden = false;
   $('.now-weather').append($('.nw-sky'));
 }
-// Headlines can be a card, a ticker under the top band, or both.
-const newsCard = S.show.news && S.news.style !== 'ticker';
-const newsTicker = S.show.news && S.news.style !== 'card';
-$('#card-news').hidden = !newsCard;
-$('#ticker').hidden = !newsTicker;
+// Any card can be in the ticker under the top band as well, or instead: those set to the ticker
+// only are off the board, though they still load what they show there.
+for (const [key, c] of Object.entries(TICKER_CARDS)) if (offBoard(S, key)) $(`#${c.card}`).hidden = true;
+const newsCard = S.show.news && !offBoard(S, 'news');
+const newsTicker = onTicker(S, 'news');
 const homeLat = S.location.lat ?? (await local.get('geo'))?.lat;
 $('#refresh-btn').innerHTML = icon('refresh');
 $('#settings-btn').innerHTML = icon('gear');
@@ -295,6 +296,8 @@ async function initNotes() {
   const ta = $('#notes');
   const { notes = '' } = await chrome.storage.sync.get('notes');
   ta.value = notes;
+  const lines = () => ta.value.split('\n').map((l) => l.trim()).filter(Boolean).map((title) => ({ tag: 'Note', title: title.slice(0, 160) }));
+  setTicker('notes', lines());
   let timer;
   ta.addEventListener('input', () => {
     clearTimeout(timer);
@@ -302,10 +305,13 @@ async function initNotes() {
     timer = setTimeout(async () => {
       await chrome.storage.sync.set({ notes: ta.value });
       $('#notes-state').textContent = 'saved';
+      setTicker('notes', lines());
     }, 500);
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'sync' && changes.notes && document.activeElement !== ta) ta.value = changes.notes.newValue || '';
+    if (area !== 'sync' || !changes.notes || document.activeElement === ta) return;
+    ta.value = changes.notes.newValue || '';
+    setTicker('notes', lines());
   });
 }
 
@@ -409,7 +415,7 @@ if (S.show.sky) loadHolidays(() => {
 $('#moon').hidden = !S.show.sky;
 if (S.show.youtube) await initYouTube(S);
 initNews();
-if (newsTicker) initTicker();
+initTicker(S);
 if (S.show.area) initArea();
 tick(true);
 setInterval(tick, 1000);

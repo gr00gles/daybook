@@ -5,6 +5,7 @@ import { BUILT_IN_HOSTS, msClientId } from './settings.js';
 import { icon, weatherIcon } from './icons.js';
 import { describe } from './weather.js';
 import { tripInfo, leaveText, tripSources } from './trip.js';
+import { setTicker } from './ticker.js';
 
 const DAYS_AHEAD = 7;
 
@@ -425,7 +426,7 @@ export { colorVar };
 // Events on screen by a key in their markup, so a click can open the one it was on.
 const onScreen = new Map();
 export const shownEvent = (key) => onScreen.get(key);
-function eventKey(e) {
+export function eventKey(e) {
   const k = hash([e.id, e.start, e.calName]);
   onScreen.set(k, e);
   return k;
@@ -600,7 +601,20 @@ export function renderAgenda(S) {
 
   const ats = [...sources.values()].map((s) => s.at).filter(Boolean);
   $('#today-updated').textContent = ats.length ? updatedText(Math.min(...ats)) : '';
+  setTicker('today', configured ? tickerEvents(events.filter((e) => e.end > now && e.start < tomorrow), (e) => (e.allDay ? 'All day' : e.start <= now ? 'Now' : fmtTime(e.start, h24))) : []);
 }
+
+// Events as ticker items, in order: `when` says when each is, a game shows its two logos.
+export const tickerEvents = (list, when) =>
+  [...list]
+    .sort((a, b) => a.start - b.start || b.allDay - a.allDay)
+    .map((e) => ({
+      tag: when(e),
+      title: e.title,
+      color: e.game?.them ? '' : colorVar(e.color),
+      pair: e.game?.them ? { us: e.game.us, them: e.game.them, sep: e.game.away ? '@' : 'vs' } : null,
+      event: eventKey(e),
+    }));
 
 // Hosts a calendar list needs beyond what the manifest grants.
 export const extraOrigins = (urls) =>

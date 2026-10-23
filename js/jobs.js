@@ -7,6 +7,7 @@
 // so changing them doesn't refetch. The card shows the newest few; jobs.html lists them all.
 import { $, esc, cached, local, updatedText, errorText, addDays } from './util.js';
 import { icon } from './icons.js';
+import { setTicker } from './ticker.js';
 
 const SITE = 'https://statejobs.ny.gov/public/';
 export const LIST = `${SITE}vacancyTable.cfm`;
@@ -676,6 +677,7 @@ async function render() {
   $('#jobs-updated').textContent = meta.error && data ? "couldn't refresh" : data ? updatedText(meta.at) : '';
   $('#jobs-filter').textContent = rules ? `${rules} ${rules === 1 ? 'rule' : 'rules'}` : '';
   if (!data) {
+    setTicker('jobs', []);
     $('#jobs-count').textContent = '';
     paintLinks(null);
     body.innerHTML = `<p class="notice warn">NYS jobs aren’t loading: ${esc(errorText(meta.error).replace(/\.$/, ''))}.</p>`;
@@ -688,6 +690,10 @@ async function render() {
   const note = unreadText(unread(pick(all, J, { rules: false }), data, J, details));
   $('#jobs-count').textContent = jobs.length || '';
   paintLinks(jobs.length);
+  setTicker(
+    'jobs',
+    jobs.map((j) => ({ tag: dayLabel(j.posted), title: j.title, meta: salaryText(j) || agencyName(j.agency), href: postingUrl(j.id), newTab: true })),
+  );
   body.innerHTML = `${
     jobs.length ? list(jobs.slice(0, SHOWN)) : `<p class="quiet${note ? '' : ' is-empty'}">No new postings${rules ? ' match your rules' : ''} ${esc(whenText(J))}.</p>`
   }${note ? `<p class="quiet jb-note">${esc(note)}</p>` : ''}`;
