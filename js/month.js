@@ -84,10 +84,16 @@ function cell(d0, events, now, week, c) {
     ${week.lanes ? '<span class="mlanes" aria-hidden="true"></span>' : ''}
     ${hols.map((h) => `<span class="mhol${h.clock ? ' clock' : ''}" style="--hol: ${holidayTheme(h).color}"><span class="hol-glyph" aria-hidden="true">${holidayTheme(h).glyph}</span>${esc(h.name)}</span>`).join('')}
     <span class="mevs">${shown
-      .map((e) => `<span class="mev${e.allDay ? ' all' : ''}${e.logo ? ' logo' : ''}" style="--c: ${colorVar(e.color)}">${e.logo ? `<img src="${esc(safeUrl(e.logo))}" alt="" width="12" height="12" loading="lazy">` : ''}${esc(e.title)}</span>`)
+      .map((e) => (e.game?.us && e.game.them ? gameChip(e) : `<span class="mev${e.allDay ? ' all' : ''}${e.logo ? ' logo' : ''}" style="--c: ${colorVar(e.color)}">${e.logo ? `<img src="${esc(safeUrl(e.logo))}" alt="" width="12" height="12" loading="lazy">` : ''}${esc(e.title)}</span>`))
       .join('')}${more > 0 ? `<span class="mmore">+${more}</span>` : ''}</span>
   </button>`;
 }
+
+// A game: the two teams' logos, vs or @ between them; the names are in its tooltip.
+const gameChip = (e) => {
+  const logo = (src) => `<img src="${esc(safeUrl(src))}" alt="" width="14" height="14" loading="lazy">`;
+  return `<span class="mev game" title="${esc(e.title)}">${logo(e.game.us)}<span class="mvs">${e.game.away ? '@' : 'vs'}</span>${logo(e.game.them)}</span>`;
+};
 
 function bar({ e, c0, span, lane, before, after }) {
   const cls = ['mbar', !e.allDay && 'timed', before && 'cont-l', after && 'cont-r'].filter(Boolean).join(' ');

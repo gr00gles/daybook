@@ -1614,9 +1614,14 @@ a.chip:hover { background: var(--fill-2); }
 .tm-news a:hover .news-title { color: var(--accent); }
 .tm-news-logo { width: 16px; height: 16px; margin-top: 2px; object-fit: contain; }
 .tm-news-logo.none { display: inline-block; }
+.tm-meta-logo { width: 14px; height: 14px; margin: 0 3px -3px 0; object-fit: contain; }
+.tm-meta-logo.none { display: none; }
 #teams-body { container-type: inline-size; }
+/* A narrow card keeps both logos, smaller, without the vs between them. */
 @container (max-width: 300px) {
-  .tm-logos .tm-at, .tm-logos .tm-logo + .tm-at + .tm-logo { display: none; }
+  .tm-logos { gap: 2px; }
+  .tm-logo { width: 24px; height: 24px; }
+  .tm-logos .tm-at { display: none; }
 }
 
 /* Team logos in place of calendar dots. */
@@ -1625,6 +1630,10 @@ a.chip:hover { background: var(--fill-2); }
 .mev.logo::before { display: none; }
 .mev.logo img { flex: none; width: 12px; height: 12px; object-fit: contain; }
 .mev.logo.all { padding-left: 3px; }
+.mev.game { display: flex; align-items: center; gap: 3px; padding-left: 2px; }
+.mev.game::before { display: none; }
+.mev.game img { flex: none; width: 14px; height: 14px; object-fit: contain; }
+.mvs { font-size: 9.5px; font-weight: 600; color: var(--muted); }
 @container (max-width: 390px) {
   .mev.logo, .mev.logo.all { width: 12px; height: 12px; padding: 0; border-radius: 0; background: none; }
 }

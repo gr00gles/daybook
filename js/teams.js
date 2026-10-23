@@ -22,6 +22,15 @@ export const LEAGUES = {
 export const MAX_TEAMS = 8;
 
 const logoOf = (t) => t?.logos?.[0]?.href || t?.logo || '';
+// ESPN's own logo files, for a team listed without one: by abbreviation in the pro leagues, by
+// id for colleges and soccer.
+const LOGO_DIRS = { nfl: 'nfl', nba: 'nba', wnba: 'wnba', mlb: 'mlb', nhl: 'nhl', cfb: 'ncaa', cbb: 'ncaa', mls: 'soccer' };
+function cdnLogo(league, t) {
+  const dir = LOGO_DIRS[league];
+  const key = dir === 'ncaa' || dir === 'soccer' ? t?.id : (t?.abbreviation || t?.abbr || '').toLowerCase();
+  return dir && key ? `https://a.espncdn.com/i/teamlogos/${dir}/500/${encodeURIComponent(key)}.png` : '';
+}
+const teamLogo = (t) => t.logo || cdnLogo(t.league, t);
 const hex = (c) => (/^[0-9a-f]{6}$/i.test(c || '') ? `#${c}` : '');
 const followed = (S) => (S.teams?.list || []).filter((t) => LEAGUES[t.league] && t.id);
 const teamUrl = (t) => `https://www.google.com/search?q=${encodeURIComponent(`${t.name} schedule`)}`;
@@ -53,7 +62,7 @@ function parseGame(ev, team) {
     opp: {
       name: them.team?.displayName || 'TBD',
       short: them.team?.shortDisplayName || them.team?.displayName || 'TBD',
-      logo: logoOf(them.team),
+      logo: logoOf(them.team) || cdnLogo(team.league, them.team),
       rank: rank >= 1 && rank <= 25 ? rank : null,
     },
     state: st.state || 'pre', // pre, in or post
@@ -124,7 +133,9 @@ function calendarGames(teams, data) {
         link: g.link || teamUrl(t),
         color: hex(t.color) || 1,
         calName: t.name,
-        logo: t.logo,
+        logo: teamLogo(t),
+        // The month calendar shows a game as the two logos.
+        game: { us: teamLogo(t), them: g.opp.logo, away: !(g.home || g.neutral) },
         readOnly: true,
       });
     }
@@ -151,7 +162,9 @@ function teamRow(t, info, h24) {
   const games = info?.games || [];
   const g = featured(games, now);
   const last = games.filter((x) => x.state === 'post' && x !== g).pop();
-  const meta = [info?.record, info?.standing, last && `Last: ${resultText(last)} ${oppText(last)}`].filter(Boolean);
+  const lastText = last && `Last: ${resultText(last)} ${last.home || last.neutral ? 'vs' : 'at'} `;
+  const meta = [info?.record, info?.standing].filter(Boolean).map(esc);
+  if (last) meta.push(`${esc(lastText)}${img(last.opp.logo, 'tm-meta-logo', 14)}${esc(`${last.opp.rank ? `#${last.opp.rank} ` : ''}${last.opp.short}`)}`);
   let main;
   if (!info) {
     main = `<p class="tm-none">Couldn’t load the schedule right now.</p>`;
@@ -173,14 +186,14 @@ function teamRow(t, info, h24) {
     }
     const where = [g.note, g.venue].filter(Boolean).join(' · ');
     main = `<a class="tm-game" href="${esc(safeUrl(g.link || teamUrl(t)))}" title="${esc(where)}">
-      <span class="tm-logos">${img(t.logo, 'tm-logo', 32)}<span class="tm-at">${g.home || g.neutral ? 'vs' : '@'}</span>${img(g.opp.logo, 'tm-logo', 32)}</span>
+      <span class="tm-logos">${img(teamLogo(t), 'tm-logo', 32)}<span class="tm-at">${g.home || g.neutral ? 'vs' : '@'}</span>${img(g.opp.logo, 'tm-logo', 32)}</span>
       <span class="tm-info"><span class="tm-title">${esc(`${t.short} ${oppText(g)}`)}</span><span class="tm-when">${when}</span></span>
       ${side}
     </a>`;
   }
   return `<li class="team">
     ${main}
-    ${meta.length ? `<p class="tm-meta">${esc(meta.join(' · '))}</p>` : ''}
+    ${meta.length ? `<p class="tm-meta">${meta.join(' · ')}</p>` : ''}
   </li>`;
 }
 
