@@ -129,7 +129,7 @@ let pos = 0; // where the strip is scrolled to, kept in fractions of a pixel
 let held = false;
 
 function tickerList() {
-  const lists = tickerFeeds.map((f) => (tickerItems.get(f.id) || []).map((n) => ({ ...n, topic: f.short })));
+  const lists = tickerFeeds.map((f) => (tickerItems.get(f.id) || []).map((n) => ({ ...n, feed: f.label })));
   const seen = new Set();
   const out = [];
   for (let i = 0; out.length < TICKER_MAX && lists.some((l) => i < l.length); i++) {
@@ -155,8 +155,9 @@ function paintTicker() {
   const run = (copy) =>
     items
       .map(
-        (n) => `<a class="tk-item" href="${esc(safeUrl(n.url))}"${copy ? ' tabindex="-1"' : ''}><span class="tk-topic">${esc(n.topic)}</span><span class="tk-title">${esc(n.title)}</span>${
-          n.source ? `<span class="tk-src">${esc(n.source)}${n.at ? ` · ${relTime(n.at)}` : ''}</span>` : ''
+        // Led by the news source; a feed that doesn't name one goes by its own name.
+        (n) => `<a class="tk-item" href="${esc(safeUrl(n.url))}"${copy ? ' tabindex="-1"' : ''}><span class="tk-src">${esc(n.source || n.feed)}</span><span class="tk-title">${esc(n.title)}</span>${
+          n.at ? `<span class="tk-age">${esc(relTime(n.at))}</span>` : ''
         }</a>`,
       )
       .join('');

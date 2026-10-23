@@ -1789,9 +1789,9 @@ a.chip:hover { background: var(--fill-2); }
 }
 .tk-item:hover .tk-title, .tk-item:focus-visible .tk-title { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .tk-item:focus-visible { outline: none; }
-.tk-topic { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.tk-src { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
 .tk-title { font-weight: 600; }
-.tk-src { font-size: 12.5px; color: var(--muted); }
+.tk-age { font-size: 12.5px; color: var(--muted); }
 .tk-quiet { padding: 0 18px; font-size: 13.5px; color: var(--muted); }
 
 .tabs { display: flex; gap: 4px; margin: -4px 0 10px; padding-block: 2px 4px; overflow-x: auto; scrollbar-width: none; }
