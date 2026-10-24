@@ -1,6 +1,7 @@
 // Live package tracking from 17TRACK, which follows USPS, UPS, FedEx, DHL, Amazon and thousands
-// of other carriers through one API. It needs a free key from api.17track.net: 100 new tracking
-// numbers a month, and checking on numbers already registered doesn't count against that.
+// of other carriers through one API. It needs a key from api.17track.net (sign-up asks for a
+// business email address). New accounts get 200 tracking numbers free, once; checking on numbers
+// already registered doesn't count against that. More are sold by the year.
 // Daybook registers the tracking numbers it finds in shipping emails (while they're still on
 // their way) and the ones you add in Settings, then asks for their status every half hour.
 // Deliveries works as before without a key.
