@@ -29,10 +29,10 @@ async function loadMail() {
   const all = await chrome.storage.local.get(null);
   const items = [];
   for (const [key, v] of Object.entries(all)) {
-    if (!/^cache:(?:gmail:|outlook-mail$|pkg:gmail$)/.test(key) || !v?.data) continue;
+    if (!/^cache:(?:gmail:|outlook-mail$|pkg:mail$)/.test(key) || !v?.data) continue;
     const list = Array.isArray(v.data) ? v.data : v.data.items || [];
-    // Gmail ids, so delivery pictures already found for the new tab show here too.
-    for (const m of list) items.push({ ...m, api: key !== 'cache:outlook-mail', unread: key !== 'cache:pkg:gmail' });
+    // Shipping emails are read or not; the unread feeds' are all unread.
+    for (const m of list) items.push({ ...m, unread: key === 'cache:pkg:mail' ? Boolean(m.unread) : true });
   }
   // The same email can be in the unread feed and among the shipping emails.
   const byId = new Map();

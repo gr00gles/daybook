@@ -1,13 +1,13 @@
-// Deliveries: shipping emails spotted among your mail, with a link to the carrier's tracking
-// page when the email carries a tracking number. Everything is read from the subject and the
-// preview text; nothing leaves your computer except the Gmail search below. For the Google
-// account connected in Daybook, the product picture comes from the email itself. Packages
-// with a tracking number, and the ones added by hand in Settings, get their status and delivery
-// day from the carrier's own tracking page (tracking.js) instead.
-import { $, esc, safeUrl, cached, relTime, startOfDay, addDays, local } from './util.js';
+// Deliveries: the packages your shipping emails talk about, with a link to the carrier's
+// tracking page when an email carries a tracking number. Shipping emails come read in full from
+// shipmail.js (Gmail through its own page, Outlook through its sign-in), and unread ones also
+// come from the mail card as a subject and a preview. Nothing leaves your computer. Packages
+// with a tracking number, and the ones added by hand in Settings, get their status and
+// delivery day from the carrier's own tracking page (tracking.js) instead.
+import { $, esc, safeUrl, relTime, startOfDay, addDays } from './util.js';
 import { setTicker } from './ticker.js';
-import { loadTracking, refreshTracking, onTracking, trackedState, carrierOf, PAGES } from './tracking.js';
-import { gmailApi } from './gauth.js';
+import { loadTracking, refreshTracking, onTracking, trackedState, carrierOf, dateIn, PAGES } from './tracking.js';
+import { lastShippingMail } from './shipmail.js';
 import { icon } from './icons.js';
 import { domainOf, logoUrl } from './companies-store.js';
 
@@ -42,9 +42,12 @@ const SENDERS = [
 const CARRIER_DOMAINS = new Set(['ups.com', 'usps.com', 'fedex.com', 'dhl.com', 'dhl.de', 'ontrac.com', 'lasership.com', 'narvar.com', 'aftership.com', 'route.com']);
 
 const RANK = { out: 0, problem: 1, soon: 2, transit: 3, delivered: 4 };
+// Most pressing first; among packages on their way, the soonest due, then the newest news.
+const byUrgency = (a, b) => RANK[a.state] - RANK[b.state] || (a.due ?? Infinity) - (b.due ?? Infinity) || b.at - a.at;
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const DAY = /(?:mon|tues|wednes|thurs|fri|satur|sun)day|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}\b/i;
+const WEEKDAY = /\b(?:(sun|mon|tues|wednes|thurs|fri|satur)day|(sun|mon|tue|wed|thu|fri|sat)\b\.?)/i;
 const NOT_DELIVERED = /\bbe delivered|not (?:been |yet )?delivered|undelivered|n[’']t (?:been |yet |be )?delivered|didn[’']t get delivered/i;
 const BOUNCE_FROM = /mailer-daemon|mail delivery (?:subsystem|system)|postmaster/i;
 const BOUNCE_SUBJECT = /delivery status notification|undeliver(?:able|ed)|returned mail|message not delivered|delivery (?:has )?failed/i;
@@ -55,12 +58,23 @@ function statusOf(text) {
   if (/delivery (?:attempt|exception)|attempted delivery|missed (?:your )?delivery|unable to deliver|undeliverable|delivery (?:has )?failed|could(?:n[’']?t| not) (?:be )?deliver|was(?:n[’']t| not) delivered|\bdelay(?:ed)?\b|held at|return(?:ed|ing) to sender|action required/i.test(text))
     return { state: 'problem' };
   if (/out for delivery|on the truck/i.test(text)) return { state: 'out', day: 0, label: 'Out for delivery' };
-  if (/\bdelivered\b/i.test(text) && !NOT_DELIVERED.test(text)) return { state: 'delivered' };
+  if ((/\bdelivered\b/i.test(text) && !NOT_DELIVERED.test(text)) || /\b(?:has|have|it[’']s|is) arrived\b/i.test(text)) return { state: 'delivered' };
   if (/arriv(?:ing|es) today|deliver(?:y|ed)?:? (?:by |on )?today|scheduled for delivery today/i.test(text)) return { state: 'out', day: 0 };
   if (/(?:arriving|arrives|deliver(?:y|ed)?):? (?:by |on )?tomorrow/i.test(text)) return { state: 'soon', day: 1 };
   const day = text.match(new RegExp(`(?:arriving|arrives|(?:expected|estimated|scheduled) delivery|expected)(?: on| by| date)?:?,? (${DAY.source})`, 'i'));
   if (day) return { state: 'transit', day: day[1] };
   if (/\bshipped\b|on (?:its|the) way|in transit|dispatched|label created|ready (?:to|for) ship|shipment|tracking (?:number|info)/i.test(text)) return { state: 'transit' };
+  return null;
+}
+
+// The same, from the top of an email's text, where stores put their headline ("Your package
+// has shipped"). Only plain statements count: the rest of an email is full of words like
+// "shipping" and "delivery" that say nothing about this package.
+function bodyStatus(text) {
+  if (/delivery (?:attempt|exception)|attempted delivery|missed (?:your )?delivery|unable to deliver|return(?:ed|ing) to sender/i.test(text)) return { state: 'problem' };
+  if (/out for delivery|on the truck/i.test(text)) return { state: 'out', day: 0, label: 'Out for delivery' };
+  if (/\b(?:was|were|been|successfully) delivered\b|\b(?:has|have) arrived\b/i.test(text) && !/not (?:been |yet )?delivered|n[’']t (?:been |yet )?delivered/i.test(text)) return { state: 'delivered' };
+  if (/\b(?:has|have|was|were) (?:been )?shipped\b|\b(?:is|are) on (?:its|their|the) way\b|\bin transit\b/i.test(text)) return { state: 'transit' };
   return null;
 }
 
@@ -81,13 +95,50 @@ function dueDay(day, sent) {
   return t;
 }
 
+// The day a bit of text names, counted from the day the email was sent: a date, "today",
+// "tomorrow" or a weekday.
+function dayIn(text, sent) {
+  if (!text || text.length > 120) return null;
+  const t = dateIn(text, sent);
+  if (t != null) return t;
+  const w = text.match(WEEKDAY);
+  if (!w) return null;
+  const base = new Date(sent);
+  base.setHours(0, 0, 0, 0);
+  return addDays(base.getTime(), (WEEKDAYS.indexOf((w[1] || w[2]).slice(0, 3).toLowerCase()) - base.getDay() + 7) % 7);
+}
+
+// The day an email says the package is due: the first date after a label like "Estimated
+// delivery", "Arriving" or "ETA", on the same line or the two after it. Other dates in an
+// email (when it was ordered, a sale ending) aren't about the delivery.
+const ETA = /\b(?:(?:estimated|expected|scheduled|anticipated|projected|new|updated|guaranteed)\s+(?:delivery|arrival)|eta\b|arriving|arrives|arrival date|delivery (?:date|by|on|window|estimate)|deliver(?:s|ed)? (?:by|on)|get it (?:by|on)|will arrive|should arrive)/i;
+function etaIn(body, sent) {
+  const lines = body.split('\n');
+  for (let i = 0; i < Math.min(lines.length, 400); i++) {
+    const m = lines[i].match(ETA);
+    if (!m) continue;
+    for (const part of [lines[i].slice(m.index + m[0].length), lines[i + 1], lines[i + 2]]) {
+      const t = dayIn(part, sent);
+      if (t != null) return t;
+    }
+  }
+  return null;
+}
+
+// Status steps drawn as a progress bar ("Ordered · Shipped · Out for delivery · Delivered")
+// are on every email a store sends about an order; they aren't news.
+const STEP = /^(?:\[?(?:completed|pending|current)\]?\s*)?(?:ordered|order placed|placed|confirmed|processing|preparing|packed|shipped|in transit|on the way|out for delivery|delivered|label created)$/i;
+const STEPS = /\bordered\b.{0,40}?\bshipped\b.{0,40}?\bout for delivery\b.{0,40}?\bdelivered\b/gi;
+const leadOf = (body) => body.split('\n').filter((l) => !STEP.test(l)).join(' ').replace(STEPS, ' ').slice(0, 600);
+
 // Status words alone also turn up in ads ("free delivery today"), so without a distinctive
 // tracking number the subject has to talk about an order or package and not sound like an offer.
-const ABOUT_ORDER = /\b(?:order|package|parcel|shipment|delivery|delivered|shipped|tracking|item)s?\b/i;
+const ABOUT_ORDER = /\b(?:order(?:ed)?|package|parcel|shipment|delivery|delivered|shipped|tracking|item|arrived)s?\b/i;
 const PROMO = /\bfree\b|\bsale\b|% off|\bdeals?\b|\boffer\b|\bsave\b|coupon|shop now|subscribe/i;
 
-function numberIn(text, context) {
+function numberIn(text, context, { plain: plainOk = true } = {}) {
   for (const { carrier, re, plain, needs } of NUMBERS) {
+    if (plain && !plainOk) continue;
     if (needs && !needs.test(context)) continue;
     if (plain && !TRACKING_WORDS.test(context)) continue;
     const m = text.match(re);
@@ -99,57 +150,148 @@ function numberIn(text, context) {
   return null;
 }
 
-function titleOf(subject, from) {
+// What follows each "Tracking number:" in an email: the only place a number made of plain
+// digits is taken to be a tracking number, since emails are full of order and item numbers.
+const labeled = (body) => [...body.matchAll(/track(?:ing)?(?:\s*(?:number|no\.?|#|id|code))?\s*[:#]?/gi)].map((m) => body.slice(m.index, m.index + 80)).join('\n');
+
+// A tracking number in a link to a carrier's (or a store's) tracking page.
+const LINK_NUMBER = /(?:tracknum(?:bers?)?|trknbrs?|tlabels|tracking[-_]?(?:id|numbers?|nums?|no)|trackingnumbers?)=([0-9a-z]{8,40})/i;
+function numberInLinks(links = []) {
+  for (const href of links) {
+    const n = (href.match(LINK_NUMBER)?.[1] || href.match(/\/tracking\/(TBA\d{12})\b/i)?.[1] || '').toUpperCase();
+    if (!n) continue;
+    const site = ['ups', 'usps', 'fedex', 'dhl', 'amazon'].find((c) => new RegExp(`\\b${c}\\.`, 'i').test(href)) || '';
+    const carrier = carrierOf(n, site);
+    if (carrier) return { carrier, number: n, plain: false };
+  }
+  return null;
+}
+
+// A forwarded email's own sender, date, subject and text, from the header its text starts with
+// ("From: … Sent: … Subject: …"); the innermost one when it was forwarded more than once.
+function forwarded(body) {
+  const lines = body.split('\n');
+  // "From:" on a line of its own, its value on the next.
+  for (let i = Math.min(lines.length, 120) - 2; i >= 0; i--) if (/^(?:from|sent|date|to|cc|subject):$/i.test(lines[i])) lines.splice(i, 2, `${lines[i]} ${lines[i + 1]}`);
+  let found = null;
+  for (let i = 0; i < Math.min(lines.length, 120); i++) {
+    const from = lines[i].match(/^from:\s*(.+)$/i);
+    if (!from) continue;
+    const near = lines.slice(i + 1, i + 7);
+    const s = near.findIndex((l) => /^subject:/i.test(l));
+    if (s < 0) continue;
+    const date = near.slice(0, s).find((l) => /^(?:sent|date):/i.test(l)) || '';
+    const addr = from[1].match(/<([^>\s]+@[^>\s]+)>/)?.[1] || from[1].match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/)?.[0] || '';
+    found = {
+      from: from[1].replace(/<[^>]*>/, '').replace(/^["'\s]+|["'\s]+$/g, '') || addr,
+      fromAddr: addr,
+      at: Date.parse(date.replace(/^(?:sent|date):\s*/i, '').replace(/\s*\(.*$/, '').replace(/\s+at\s+/i, ' ')) || 0,
+      subject: near[s].replace(/^subject:\s*/i, '').trim(),
+      body: lines.slice(i + 2 + s).join('\n'),
+    };
+    i += s + 1;
+  }
+  return found;
+}
+
+// "Order #: WK12345678", "Order # 112-1234567-1234567": a number, not the next word.
+const ORDER = /\border\s*(?:#|number|no\.?|id)\s*:?\s*#?\s*((?=[A-Z-]*\d)[A-Z0-9][A-Z0-9-]{4,30})/i;
+
+// What's in the box: the line above the first "Qty", "SKU" or "Item #" in a store's email.
+const ITEM_NEXT = /^(?:qty|quantity|sku|item\s*(?:#|no\.?|number)|model\s*(?:#|no\.?|number)|unit price)\b/i;
+const NOT_ITEM = /^(?:order|ship|deliver|track|status|total|subtotal|tax|arriv|qty|quantity|sku|item\s*#|model|price|view|manage|return|sold by|size|colou?r)\b|\$\s?\d|@/i;
+function itemIn(body) {
+  const lines = body.split('\n');
+  const at = lines.findIndex((l, i) => i > 0 && ITEM_NEXT.test(l));
+  for (let i = at - 1; at > 0 && i >= Math.max(0, at - 3); i--) {
+    const l = lines[i];
+    if (l.length >= 12 && l.length <= 200 && /[a-z]{3}\S*\s+\S*[a-z]{3}/i.test(l) && !NOT_ITEM.test(l) && !STEP.test(l)) return l;
+  }
+  return '';
+}
+
+const short = (s, n = 70) => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
+
+// Who sent a package, in a carrier's notice about it ("Shipped from: Acme").
+const shipperIn = (body) => body.match(/^(?:shipped from|ship from|shipper|sender|from shipper)\s*:?\s*(\S.{1,60})$/im)?.[1] || '';
+
+// Subjects that only say something happened to "your order", or when it's due.
+const GENERIC = /\b(?:your|the|an?) (?:[\w’']+ ){0,2}(?:order|package|parcel|shipment|item|delivery|purchase)s?\b|^(?:is |has |was |has been )?(?:shipped|delivered|out for delivery|on (?:its|the) way|arriving|arrived|order)\b|^\d+ items?\b|^it[’']s time\b|^(?:let us know|how did we do|how was|rate|review|tell us|thank(?:s| you))\b|^(?:usps|ups|fedex|dhl)?\W*(?:expected|scheduled|estimated) delivery\b/i;
+
+function titleOf(subject, from, item) {
   const t = subject
-    .replace(/^(?:fwd?|re):\s*/i, '')
+    .replace(/^(?:(?:fwd?|fw|re):\s*)+/i, '')
+    .replace(/^order\s*#?\s*[\w-]*\d[\w-]*\s*/i, '')
     .replace(/^(?:shipped|delivered|out for delivery|arriving[^:]*|ordered|(?:\w+ )?update)\s*:\s*/i, '')
     .replace(/^(?:"([^"]+)"|“([^”]+)”|'([^']+)'(?=\s|$))/, (all, a, b, c) => a || b || c)
     .trim();
-  // "Your package has been delivered" says less than who sent it.
-  if (from && (!t || /^(?:your|a|an)\b.{0,30}\b(?:order|package|parcel|shipment|item|delivery)\b/i.test(t))) return from.slice(0, 70);
-  return (t || 'Package').slice(0, 70);
+  // "Your package has been delivered" says less than what's in it, or who sent it.
+  if (!t || GENERIC.test(t)) return short(item || (SENDERS.some(([, re]) => re.test(from)) && from.length < 30 ? `${from} package` : from) || t || 'Package');
+  return short(t);
 }
 
-// One mail item ({ subject, snippet, from, at, url }) → what it says about a package, or null.
+// One mail item ({ subject, snippet, from, at, url }, and for one read in full also body,
+// links and picture) → what it says about a package, or null.
 function readMail(m) {
   if (!m) return null;
-  const subject = m.subject || '';
-  const from = m.from || '';
+  let { subject = '', from = '', fromAddr = '', body = '' } = m;
+  let at = m.at || Date.now();
+  // Forwarded: read the email inside, from whoever first sent it.
+  const fw = /^(?:fwd?|fw)\s*:/i.test(subject);
+  const fwd = fw && body ? forwarded(body) : null;
+  if (fwd) ({ subject, from, fromAddr, body, at } = { ...fwd, at: fwd.at || at });
+  // Only the preview: it starts "From: Acme <orders@acme.com> Sent: …".
+  const fwdFrom = fw && !body && (m.snippet || '').match(/^\s*from:\s*([^<]*?)\s*<([^>\s]+@[^>\s]+)>/i);
+  if (fwdFrom) ({ subject, from, fromAddr } = { subject: subject.replace(/^(?:(?:fwd?|fw)\s*:\s*)+/i, ''), from: fwdFrom[1] || fwdFrom[2], fromAddr: fwdFrom[2] });
   // Bounced email, but not a carrier's own "undeliverable" notice about a package.
   if (BOUNCE_FROM.test(from) || (BOUNCE_SUBJECT.test(subject) && !SENDERS.some(([, re]) => re.test(from)))) return null;
-  const context = `${from} ${subject} ${m.snippet || ''}`;
-  const found = numberIn(`${subject} ${m.snippet || ''}`.toUpperCase(), context);
+  const lead = body ? leadOf(body) : (m.snippet || '').replace(STEPS, ' ');
+  const context = `${from} ${subject} ${lead}`;
+  const upTop = numberIn(`${subject} ${lead}`.toUpperCase(), context);
+  const found =
+    upTop || (body ? numberIn(body.toUpperCase(), `${context} ${body}`, { plain: false }) || numberIn(labeled(body).toUpperCase(), `${context} ${body}`) || numberInLinks(m.links) : null);
+  const about = ABOUT_ORDER.test(subject);
   const fromSubject = statusOf(subject);
-  const fromSnippet = found || ABOUT_ORDER.test(subject) ? statusOf(m.snippet || '') : null;
+  const fromLead = found || about ? (body ? bodyStatus(lead) : statusOf(lead)) : null;
   // "Shipped: …" with "Arriving Thursday" in the preview: the preview says more.
-  const status =
-    fromSubject?.state === 'transit' && fromSnippet && fromSnippet.state !== 'delivered' && (fromSnippet.state !== 'transit' || fromSnippet.day)
-      ? fromSnippet
-      : fromSubject || fromSnippet;
-  const strong = found && !found.plain;
-  if (!strong && (!(status || found) || !ABOUT_ORDER.test(`${subject} ${found ? m.snippet || '' : ''}`) || PROMO.test(subject))) return null;
+  let status =
+    fromSubject?.state === 'transit' && fromLead && fromLead.state !== 'delivered' && (fromLead.state !== 'transit' || fromLead.day)
+      ? fromLead
+      : fromSubject || fromLead;
+  const coming = !status || status.state === 'transit' || status.state === 'soon';
+  const eta = body && coming && status?.day == null ? etaIn(body, at) : null;
+  if (!status && eta != null && (found || about)) status = { state: 'transit' };
+  // A distinctive number deep in an ad doesn't make it a shipping email.
+  const strong = found && !found.plain && (upTop || !PROMO.test(subject));
+  if (!strong && (!(status || found) || !ABOUT_ORDER.test(`${subject} ${found ? lead : ''}`) || PROMO.test(subject))) return null;
   const sender = SENDERS.find(([, re]) => re.test(`${from} ${subject}`))?.[0] || '';
-  const at = m.at || Date.now();
-  const title = titleOf(subject, from);
+  const title = titleOf(subject, from, body ? itemIn(body) || shipperIn(body) : '');
+  const order = `${subject}\n${body.slice(0, 4000)}`.match(ORDER)?.[1]?.toUpperCase() || '';
   return {
-    msgId: m.msgId || '',
-    // Gmail API ids, for the emails Daybook may open (the connected Google account's).
-    apiId: m.api && m.msgId ? m.msgId : '',
-    domain: domainOf(m.fromAddr),
+    msgId: m.msgId || m.id || '',
+    domain: domainOf(fromAddr),
     from,
-    fromAddr: m.fromAddr || '',
+    fromAddr,
     carrier: found?.carrier || sender,
     number: found?.number || '',
     titleKey: `${sender || from.toLowerCase()}|${title.toLowerCase()}`,
+    orderKey: order ? `${domainOf(fromAddr) || from.toLowerCase()}|${order}` : '',
     state: status?.state || 'transit',
     label: status?.label || '',
     tracking: !status,
-    due: dueDay(status?.day, at),
+    due: status?.day != null ? dueDay(status.day, at) : eta,
     title,
     at,
+    picture: m.picture || '',
+    full: Boolean(m.full),
     mailUrl: safeUrl(m.url),
   };
 }
+
+// Whether an email's subject and preview look like news about an order or a package, before
+// it's read in full.
+export const aboutPackage = (m) =>
+  !PROMO.test(m.subject || '') && (/\b(?:order(?:ed)?|ship(?:ped|ping|ment)?|deliver(?:y|ed)?|track(?:ing)?|arriv(?:ing|ed|es)|package|parcel)\b/i.test(m.subject || '') || Boolean(readMail(m)));
 
 const shortDay = (t) => {
   const days = Math.round((t - startOfDay()) / 86400e3);
@@ -184,18 +326,28 @@ export function deliveriesFrom(items) {
   const seen = new Set();
   const all = [];
   for (const m of items) {
-    // The same email can come from the unread feed and from the Gmail search.
-    if (m.msgId && seen.has(m.msgId)) continue;
-    if (m.msgId) seen.add(m.msgId);
+    // The same email can come from the unread feed and read in full; the first one counts.
+    const id = m.msgId || m.id;
+    if (id && seen.has(id)) continue;
+    if (id) seen.add(id);
     const p = readMail(m);
     if (p) all.push(p);
   }
-  // Emails about one package don't all carry its tracking number: link them by sender and title.
-  const alias = new Map();
-  for (const p of all) if (p.number) alias.set(p.titleKey, p.number);
+  // Emails about one package don't all carry its tracking number: link them by order number,
+  // and by sender and title.
+  const numberOf = new Map();
+  const orderOf = new Map();
+  for (const p of all) {
+    if (p.orderKey) orderOf.set(p.titleKey, p.orderKey);
+    if (p.number) {
+      numberOf.set(p.titleKey, p.number);
+      if (p.orderKey) numberOf.set(p.orderKey, p.number);
+    }
+  }
   const groups = new Map();
   for (const p of all) {
-    const key = p.number || alias.get(p.titleKey) || p.titleKey;
+    const order = p.orderKey || orderOf.get(p.titleKey) || '';
+    const key = p.number || (order && numberOf.get(order)) || numberOf.get(p.titleKey) || order || p.titleKey;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(p);
   }
@@ -203,7 +355,10 @@ export function deliveriesFrom(items) {
   for (const list of groups.values()) {
     list.sort((a, b) => b.at - a.at);
     const newest = list[0];
-    const now = present(newest);
+    // News without a day ("Shipment update") keeps the day an earlier email gave.
+    const coming = newest.state === 'transit' || newest.state === 'soon';
+    const due = newest.due ?? (coming ? list.find((p) => p.due != null)?.due ?? null : null);
+    const now = present({ ...newest, due });
     if (!now) continue;
     const withNumber = list.find((p) => p.number);
     // The store's emails say more about what's in the box than the carrier's do.
@@ -211,14 +366,16 @@ export function deliveriesFrom(items) {
     out.push({
       ...newest,
       ...now,
+      due,
+      title: (list.find((p) => p.full) || newest).title,
+      picture: list.find((p) => p.picture)?.picture || '',
       domain: store?.domain || '',
-      apiIds: list.map((p) => p.apiId).filter(Boolean),
       carrier: withNumber?.carrier || newest.carrier,
       number: withNumber?.number || '',
       href: withNumber ? CARRIERS[withNumber.carrier].track(withNumber.number) : newest.mailUrl,
     });
   }
-  return out.sort((a, b) => RANK[a.state] - RANK[b.state] || b.at - a.at);
+  return out.sort(byUrgency);
 }
 
 // ---- The Deliveries card ------------------------------------------------------------------
@@ -232,8 +389,7 @@ const dateParts = (t) => ({
 });
 
 function thumb(d) {
-  const pic = thumbs.get(d.apiIds?.find((id) => thumbs.get(id)) || '');
-  if (pic) return `<span class="pkg-thumb photo"><img src="${esc(pic)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+  if (d.picture) return `<span class="pkg-thumb photo"><img src="${esc(d.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
   const logo = logoUrl(d.domain || (d.carrier && { ups: 'ups.com', usps: 'usps.com', fedex: 'fedex.com', dhl: 'dhl.com', amazon: 'amazon.com' }[d.carrier]));
   return logo
     ? `<span class="pkg-thumb logo"><img src="${esc(logo)}" alt="" width="32" height="32" referrerpolicy="no-referrer"></span>`
@@ -279,7 +435,6 @@ let trackTimer;
 
 // The new tab passes its settings; the Companies page uses the email side only.
 export function initDeliveries(S) {
-  loadThumbs().then(() => shown.length && paintCard());
   if (!S) return;
   settingsRef = S;
   const reload = async () => {
@@ -298,12 +453,12 @@ export function renderDeliveries(list) {
     shown = list;
     paintCard();
   }
-  findPictures(list);
 }
 
 // An email's package, with what its carrier's page says in place of what the email said.
 function withLive(d) {
-  const t = d.number && trackedState(live[d.number]);
+  // What stood in for an unreadable page was an email, and the emails already made this row.
+  const t = d.number && live[d.number]?.from !== 'mail' && trackedState(live[d.number]);
   if (!t) return d;
   const at = t.event?.at || d.at;
   if (t.state === 'delivered' && Date.now() - at > 2 * DAY_MS) return null;
@@ -323,7 +478,6 @@ function added(p) {
     carrier,
     href: CARRIERS[carrier] ? CARRIERS[carrier].track(p.number) : `https://t.17track.net/en#nums=${encodeURIComponent(p.number)}`,
     domain: '',
-    apiIds: [],
     from: '',
     at,
     state: t?.state || 'transit',
@@ -345,7 +499,7 @@ function compose() {
     const d = !list.some((x) => x.number === p.number) && added(p);
     if (d) list.push(d);
   }
-  shown = list.sort((a, b) => RANK[a.state] - RANK[b.state] || b.at - a.at);
+  shown = list.sort(byUrgency);
   paintCard();
   if (P.checkSites === false) return;
   const numbers = [...(P.tracked || []).map((p) => p.number), ...mail.filter((d) => d.number && d.state !== 'delivered').map((d) => d.number)];
@@ -370,181 +524,13 @@ function paintCard() {
   );
 }
 
-// ---- Product pictures -------------------------------------------------------------------------
-// The first picture in a shipping email that looks like the product: not a logo, a tracking
-// pixel, a social button or a banner. Remembered per email so each one is opened once.
-
-const THUMBS_KEY = 'pkg:thumbs';
-const thumbs = new Map(); // Gmail message id -> picture URL, or '' when the email has none
-const looking = new Set();
-let thumbsLoaded;
-let allowed = true; // false once Gmail says Daybook may not open emails
-
-const loadThumbs = () =>
-  (thumbsLoaded ||= local.get(THUMBS_KEY).then((saved) => {
-    for (const [id, src] of Object.entries(saved || {})) thumbs.set(id, src);
-  }));
-
-async function findPictures(list) {
-  await loadThumbs();
-  let found = false;
-  for (const d of allowed ? list : []) {
-    const ids = d.apiIds || [];
-    if (!ids.length || ids.some((id) => thumbs.get(id))) continue;
-    // The newest two emails about it that haven't been looked at yet.
-    for (const id of ids.filter((x) => !thumbs.has(x) && !looking.has(x)).slice(0, 2)) {
-      looking.add(id);
-      try {
-        const src = pictureIn(await emailHtml(id), d.title);
-        thumbs.set(id, src);
-        if (src) {
-          found = true;
-          break;
-        }
-      } catch (err) {
-        // No permission yet: don't ask again in this tab. Anything else: try again later.
-        if (err.code === 'needs-google') allowed = false;
-        else console.warn('[daybook] package picture:', err);
-      } finally {
-        looking.delete(id);
-      }
-    }
-  }
-  if (found) paintCard();
-  // Keep the newest 80.
-  local.set(THUMBS_KEY, Object.fromEntries([...thumbs].slice(-80)));
-}
-
-const b64 = (data) => new TextDecoder().decode(Uint8Array.from(atob(data.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
-
-function htmlParts(part, out = []) {
-  if ((part.mimeType || '').toLowerCase() === 'text/html' && !part.filename) out.push(part);
-  for (const p of part.parts || []) htmlParts(p, out);
-  return out;
-}
-
-async function emailHtml(id) {
-  const m = await gmailApi(`/messages/${encodeURIComponent(id)}?format=full`, { method: 'GET', quiet: true });
-  const texts = await Promise.all(
-    htmlParts(m.payload || {}).map(async (p) => {
-      let data = p.body?.data;
-      if (!data && p.body?.attachmentId) data = (await gmailApi(`/messages/${id}/attachments/${p.body.attachmentId}`, { method: 'GET', quiet: true })).data;
-      return data ? b64(data) : '';
-    }),
-  );
-  return texts.join('\n');
-}
-
-const NOT_PRODUCT = /logo|icon|pixel|spacer|blank|beacon|track|open\.|\/o\.gif|badge|social|facebook|twitter|instagram|pinterest|tiktok|youtube|linkedin|app[-_ ]?store|google[-_ ]?play|banner|header|footer|divider|rating|stars?\b|arrow|button|btn|signature|qr/i;
-
-export function pictureIn(html, title = '') {
-  if (!html) return '';
-  const doc = new DOMParser().parseFromString(html, 'text/html'); // parsing loads no pictures
-  const words = new Set(title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3));
-  let best = null;
-  for (const img of doc.querySelectorAll('img')) {
-    const src = (img.getAttribute('src') || '').trim();
-    if (!/^https:\/\//i.test(src)) continue;
-    const alt = img.getAttribute('alt') || '';
-    const w = parseInt(img.getAttribute('width') || img.style.width, 10) || 0;
-    const h = parseInt(img.getAttribute('height') || img.style.height, 10) || 0;
-    if (NOT_PRODUCT.test(`${src} ${alt} ${img.className}`)) continue;
-    if ((w && w < 48) || (h && h < 48) || (w && h && (w / h > 2.2 || h / w > 2.2))) continue;
-    let score = 0;
-    if (/\/images\/I\//.test(src)) score += 5; // Amazon's product pictures
-    if (alt && alt.toLowerCase().split(/[^a-z0-9]+/).some((x) => words.has(x))) score += 3;
-    if (/product|item|catalog|sku|cdn\.shopify|scene7|\/is\/image\//i.test(src)) score += 2;
-    if (w >= 64 && h >= 64) score += 1;
-    if (score > 0 && (!best || score > best.score)) best = { src, score };
-  }
-  return best?.src || '';
-}
-
 export const deliveryTag = (d) => (d ? `<span class="pkg-tag s-${d.state}">${icon('box')}${esc(d.label)}</span>` : '');
 
-// A Gmail API message (format=metadata) as a mail item.
-function fromGmail(m) {
-  const header = (name) => m.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value || '';
-  return {
-    msgId: m.id,
-    subject: header('subject'),
-    from: header('from').replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, ''),
-    fromAddr: header('from').match(/<([^>]+)>\s*$/)?.[1] || header('from').match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/)?.[0] || '',
-    api: true,
-    snippet: decodeEntities(m.snippet || ''),
-    at: Number(m.internalDate) || Date.now(),
-  };
-}
-
-// The newest email in the connected Gmail account that mentions a tracking number, read the way
-// shipping emails are, as a package status; for a package whose carrier page couldn't be read.
-// Only once Daybook already has Gmail permission; it never asks for it.
+// What the newest shipping email about a tracking number says, as a package status, for a
+// package whose carrier page couldn't be read. It looks only at the emails already read.
 export async function mailStatusFor(number) {
-  let list;
-  try {
-    list = await gmailApi(`/messages?${new URLSearchParams({ q: `"${number}" newer_than:60d`, maxResults: '5' })}`, { method: 'GET', quiet: true });
-  } catch {
-    return null;
-  }
-  const got = await Promise.allSettled(
-    (list.messages || []).map((m) =>
-      gmailApi(`/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&fields=id,threadId,snippet,internalDate,payload/headers`, { method: 'GET', quiet: true }),
-    ),
-  );
-  const news = got
-    .filter((r) => r.status === 'fulfilled')
-    .map(({ value: m }) => readMail(fromGmail(m)))
-    .filter(Boolean)
-    .sort((a, b) => b.at - a.at)[0];
+  const news = deliveriesFrom(await lastShippingMail()).find((d) => d.number === number);
   if (!news) return null;
   const status = { out: 'OutForDelivery', problem: 'Exception', delivered: 'Delivered' }[news.state] || 'InTransit';
   return { status, eta: status === 'Delivered' ? null : news.due, event: { text: `Email: ${news.title}`, at: news.at }, from: 'mail' };
-}
-
-// Shipping emails from the last 10 days in the Gmail account connected under Google, read or
-// not. Only runs once Daybook already has Gmail permission (from Mark as read or Delete);
-// it never asks for it.
-const SEARCH =
-  'newer_than:10d -category:promotions {"out for delivery" "has shipped" "was delivered" "been delivered" "tracking number" "on its way" "in transit" "arriving" subject:shipped subject:delivered subject:shipment}';
-
-export function refreshShippingMail(email, force, onData) {
-  return cached({
-    key: 'pkg:gmail',
-    sig: email,
-    maxAge: 15 * 60e3,
-    force,
-    fetch: async () => {
-      let list;
-      try {
-        list = await gmailApi(`/messages?${new URLSearchParams({ q: SEARCH, maxResults: '15' })}`, { method: 'GET', quiet: true });
-      } catch (err) {
-        // No Gmail permission yet: the unread feed is all there is. Look again in a while.
-        if (err.code === 'needs-google') return [];
-        throw err;
-      }
-      const ids = (list.messages || []).map((m) => m.id);
-      const got = await Promise.allSettled(
-        ids.map((id) =>
-          gmailApi(`/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&fields=id,threadId,snippet,internalDate,payload/headers`, {
-            method: 'GET',
-            quiet: true,
-          }),
-        ),
-      );
-      return got
-        .filter((r) => r.status === 'fulfilled')
-        .map(({ value: m }) => ({ ...fromGmail(m), url: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email)}#all/${m.threadId}` }))
-        // Keep only what is about a package; the search also matches other mail.
-        .filter((m) => readMail(m));
-    },
-    render: (data) => onData(data || []),
-  });
-}
-
-// Gmail's snippets come HTML-escaped.
-function decodeEntities(s) {
-  return s.replace(/&(#\d+|#x[\da-f]+|amp|lt|gt|quot|apos|nbsp);/gi, (all, e) => {
-    if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
-    return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }[e.toLowerCase()];
-  });
 }

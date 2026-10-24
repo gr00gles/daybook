@@ -4,13 +4,14 @@ import { graph, graphWrite, msAccount, msHas } from './msauth.js';
 import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
 import { GMAIL_FEEDS, outlookWebUrl, msClientId } from './settings.js';
 import { icon } from './icons.js';
-import { deliveriesFrom, renderDeliveries, deliveryOf, deliveryTag, refreshShippingMail } from './packages.js';
+import { deliveriesFrom, renderDeliveries, deliveryOf, deliveryTag } from './packages.js';
+import { refreshShippingMail } from './shipmail.js';
 import { openReader, initReader } from './reader.js';
 
 const sources = new Map(); // key -> { kind, label, ... , data, at, error }
 let filter = 'all';
 let settingsRef;
-let shipping = []; // recent shipping emails from the Gmail API, read or not
+let shipping = []; // recent shipping emails read in full (shipmail.js), read or not
 
 // Asks the background worker to fetch the feed (see background.js for why).
 async function feedRequest(url) {
@@ -130,14 +131,16 @@ export async function refreshMail(S, force) {
   googleEmail = googleConfigured() ? (await googleAccount())?.email?.toLowerCase() || '' : '';
   gmailBlocked = noGmail && !(await gmailAllowed());
   const hidden = new Set(S.gmail.hidden || []);
-  if (S.show.packages && googleEmail && accounts.some((a) => a.email === googleEmail) && !hidden.has(googleEmail)) {
-    refreshShippingMail(googleEmail, force, (list) => {
+  const clientId = msClientId(S);
+  outlookConnected = Boolean(clientId && (await msAccount()));
+  if (S.show.packages) {
+    const gmail = accounts.filter((a) => !hidden.has(a.email));
+    refreshShippingMail({ gmail, outlook: S.outlook.mail && outlookConnected ? clientId : '' }, force, (list) => {
       shipping = list;
       render();
     });
-  } else if (shipping.length || !S.show.packages) {
+  } else if (shipping.length) {
     shipping = [];
-    local.remove('cache:pkg:gmail');
   }
   accounts
     .filter((a) => !hidden.has(a.email))
@@ -165,8 +168,6 @@ export async function refreshMail(S, force) {
         },
       });
     });
-  const clientId = msClientId(S);
-  outlookConnected = Boolean(clientId && (await msAccount()));
   if (S.outlook.mail && outlookConnected) {
     wanted.add('outlook');
     cached({
@@ -238,12 +239,10 @@ function render() {
       .map((m) => ({ tag: m.from, title: m.subject, meta: relTime(m.at), href: m.url })),
   );
   const packages = settingsRef.show.packages;
-  const deliveries = packages
-    ? deliveriesFrom([
-        ...live.flatMap(([, s]) => s.data.items.map((m) => ({ ...m, account: sourceLabel(s), api: s.kind === 'gmail' && s.acct.email === googleEmail }))),
-        ...shipping,
-      ])
-    : [];
+  // The emails read in full go first, so they count over their unread-feed copies; they tag the
+  // rows below too.
+  const readInFull = new Map(shipping.map((m) => [m.msgId, m]));
+  const deliveries = packages ? deliveriesFrom([...shipping, ...live.flatMap(([, s]) => s.data.items.map((m) => ({ ...m, account: sourceLabel(s) })))]) : [];
   if (packages) renderDeliveries(deliveries);
 
   const rows = items.length
@@ -253,7 +252,7 @@ function render() {
             <span class="src" title="${esc(m.account)}">${m.letter}</span>
             <span class="mail-from">${esc(m.from)}</span>
             <time class="mail-time" datetime="${new Date(m.at).toISOString()}">${relTime(m.at)}</time>
-            <span class="mail-subject">${packages ? deliveryTag(deliveryOf(m)) : ''}${esc(m.subject)}</span>
+            <span class="mail-subject">${packages ? deliveryTag(deliveryOf(readInFull.get(m.msgId || m.id) || m)) : ''}${esc(m.subject)}</span>
             <span class="mail-snippet">${esc(m.snippet)}</span>
           </a>${
             canChange(sources.get(m.key))

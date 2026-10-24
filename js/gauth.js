@@ -75,7 +75,7 @@ export async function disconnectGoogle() {
   // Tokens Chrome kept for the extra permissions (Gmail, YouTube, adding events) were revoked too.
   await chrome.identity.clearAllCachedAuthTokens?.().catch(() => {});
   // YouTube's terms require deleting its data once access is removed.
-  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'cache:pkg:gmail', 'pkg:thumbs', 'event:lastCal', 'yt:subs', 'yt:feed', 'yt:watched']);
+  await local.remove([KEY, 'cache:gcal', 'cache:gcal-list', 'event:lastCal', 'yt:subs', 'yt:feed', 'yt:watched']);
 }
 
 export async function gapi(path) {
@@ -155,8 +155,7 @@ async function scopedApi({ scope, what, api }, url, { method = 'POST', body, qui
 const GMAIL = { scope: GMAIL_SCOPE, what: 'manage your Gmail', api: 'Gmail' };
 const EVENTS = { scope: EVENTS_SCOPE, what: 'add events to your calendar', api: 'Google Calendar' };
 
-// Gmail API calls for the Google account connected in Daybook (mark as read, delete, and the
-// deliveries search once that permission exists).
+// Gmail API calls for the Google account connected in Daybook (mark as read, delete).
 export const gmailApi = (path, opts) => scopedApi(GMAIL, `https://gmail.googleapis.com/gmail/v1/users/me${path}`, opts);
 
 // Adding and removing calendar events.
