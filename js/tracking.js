@@ -1,125 +1,200 @@
-// Live package tracking from 17TRACK, which follows USPS, UPS, FedEx, DHL, Amazon and thousands
-// of other carriers through one API. It needs a key from api.17track.net (sign-up asks for a
-// business email address). New accounts get 200 tracking numbers free, once; checking on numbers
-// already registered doesn't count against that. More are sold by the year.
-// Daybook registers the tracking numbers it finds in shipping emails (while they're still on
-// their way) and the ones you add in Settings, then asks for their status every half hour.
-// Deliveries works as before without a key.
-import { esc, local, errorText } from './util.js';
+// Live package status, free and without a key: Daybook opens each package's page on the carrier's
+// own site (UPS, USPS, FedEx, DHL, Amazon) out of sight, in a frame on the new tab page, and reads
+// the status and delivery day off it (track-page.js), the way you would. Carriers don't let other
+// pages show theirs in a frame, so a session rule lifts that for Daybook's own frames only. When
+// a page can't be read, the newest email that mentions the tracking number stands in. Packages
+// come from shipping emails (while they're on their way) and from the ones you add in Settings.
+// One page at a time, every couple of hours, from one tab at a time.
+import { $, esc, local } from './util.js';
 import { icon } from './icons.js';
 
-const API = 'https://api.17track.net/track/v2.2';
-const INFO = 'track:info'; // { [number]: { at, status, sub, eta, event: { text, place, at }, carrier, error } }
-const REG = 'track:reg'; // { [number]: { at, ok, error } }: registering costs quota, so each is done once
-const STALE = 30 * 60e3;
-const RETRY = 6 * 3600e3;
+const INFO = 'track:info'; // { [number]: { at, status, eta, event: { text, at }, carrier, from: 'page' | 'mail', error } }
+const RULE = 4101; // the session rule that lets carrier pages load in Daybook's frames
+const PER_RUN = 6; // pages read each time, so a new tab isn't kept busy
+const WAIT = 45e3; // how long a page gets to show a status
 const FORGET = 30 * 86400e3;
-const BATCH = 40; // the most numbers 17TRACK takes in one call
-const GAP = 400; // ms between calls: it allows 3 a second
 
-class KeyRejected extends Error {}
+// Each carrier's tracking page, and the hosts it may move through.
+export const PAGES = {
+  ups: { name: 'UPS', url: (n) => `https://www.ups.com/track?loc=en_US&tracknum=${n}&requester=ST/trackdetails`, hosts: ['ups.com'] },
+  usps: { name: 'USPS', url: (n) => `https://tools.usps.com/go/TrackConfirmAction?tLabels=${n}`, hosts: ['usps.com'] },
+  fedex: { name: 'FedEx', url: (n) => `https://www.fedex.com/fedextrack/?trknbr=${n}`, hosts: ['fedex.com'] },
+  dhl: { name: 'DHL', url: (n) => `https://www.dhl.com/us-en/home/tracking/tracking-express.html?submit=1&tracking-id=${n}`, hosts: ['dhl.com'] },
+  amazon: { name: 'Amazon', url: (n) => `https://track.amazon.com/tracking/${n}`, hosts: ['amazon.com'] },
+};
+const HOSTS = Object.values(PAGES).flatMap((p) => p.hosts);
 
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function call(key, path, body) {
-  const res = await fetch(`${API}/${path}`, {
-    method: 'POST',
-    headers: { '17token': key, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (res.status === 401 || res.status === 403) throw new KeyRejected('17TRACK didn’t accept the key');
-  if (res.status === 429) throw new Error('17TRACK says too many requests; trying again soon');
-  if (!res.ok) throw new Error(`17TRACK returned ${res.status}`);
-  const r = await res.json();
-  if (r.code !== 0) {
-    const why = r.data?.errors?.[0]?.message || r.message || `error ${r.code}`;
-    if (/token|key|auth/i.test(why)) throw new KeyRejected(`17TRACK didn’t accept the key (${why})`);
-    throw new Error(`17TRACK: ${why}`);
-  }
-  return r.data || {};
-}
-
-// 17TRACK's main statuses (v2.2 names them; v1 numbered them), as Deliveries' states.
+// Package statuses, as Deliveries' states.
 const STATUS = {
   NotFound: { state: 'transit', label: 'Waiting for the carrier' },
   InfoReceived: { state: 'transit', label: 'Label created' },
   InTransit: { state: 'transit', label: 'In transit' },
-  Expired: { state: 'problem', label: 'No news for a while' },
   AvailableForPickup: { state: 'problem', label: 'Ready for pickup' },
   OutForDelivery: { state: 'out', label: 'Out for delivery' },
-  DeliveryFailure: { state: 'problem', label: 'Delivery attempt failed' },
-  Delivered: { state: 'delivered', label: 'Delivered' },
   Exception: { state: 'problem', label: 'Needs attention' },
+  Delivered: { state: 'delivered', label: 'Delivered' },
 };
-const V1 = { 0: 'NotFound', 10: 'InTransit', 20: 'Expired', 30: 'AvailableForPickup', 35: 'DeliveryFailure', 40: 'Delivered', 50: 'Exception' };
 
-const time = (e) => Date.parse(e?.time_iso || e?.time_utc || e?.time || '') || null;
+// Status words, most telling first: a missed delivery says "delivery" too, and "Out for
+// Delivery" isn't "Delivered".
+const PHRASES = [
+  ['Exception', /attempt|exception|delay|held at|unable to|missed|action (?:is )?required|return(?:ed|ing) to (?:the )?sender|undeliverable|could ?n[o’']?t (?:be )?deliver|issue with/i],
+  ['OutForDelivery', /out for delivery|on the truck|with (?:a|your|the) (?:driver|courier)/i],
+  ['AvailableForPickup', /ready for pick ?up|available for pick ?up|awaiting (?:collection|pick ?up)|at (?:a|the) (?:pickup|access) point/i],
+  ['Delivered', /\bdelivered\b/i],
+  ['InfoReceived', /label created|information received|pre-shipment|shipment created|order processed|ready to ship|awaiting item|not yet in system/i],
+  ['InTransit', /in transit|on the way|on its way|arriv|departed|picked up|accepted|processed|moving through|in possession/i],
+];
+const NOT_DELIVERED = /not (?:yet )?delivered|be delivered|(?:estimated|expected|scheduled|anticipated) delivery/i;
 
-// One answer from gettrackinfo, cut down to what the card shows.
-export function readTrack(item) {
-  const t = item.track_info || {};
-  const raw = t.latest_status?.status ?? item.track?.e;
-  const status = STATUS[raw] ? raw : V1[raw] || 'NotFound';
-  const provider = t.tracking?.providers?.[0];
-  const ev = t.latest_event || provider?.events?.[0] || item.track?.z0;
-  const eta = t.time_metrics?.estimated_delivery_date;
-  return {
-    at: Date.now(),
-    status,
-    sub: t.latest_status?.sub_status || '',
-    eta: Date.parse(eta?.from || eta?.to || '') || null,
-    event: ev ? { text: ev.description || ev.z || '', place: ev.location || ev.c || '', at: time(ev) || Date.parse(ev.a || '') || null } : null,
-    carrier: provider?.provider?.name || '',
+export function statusIn(text) {
+  for (const [status, re] of PHRASES) {
+    if (!re.test(text)) continue;
+    if (status === 'Delivered' && NOT_DELIVERED.test(text) && !/\bdelivered[,:]? /i.test(text.replace(NOT_DELIVERED, ''))) continue;
+    return status;
+  }
+  return null;
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MON = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?';
+
+// The day a line names, as local midnight: "Tuesday, October 28", "Oct 28, 2026", "28 OCTOBER
+// 2026", "10/28/26", "today" or "tomorrow". A date months back means next year.
+export function dateIn(line, now = Date.now()) {
+  const t = String(line || '').toLowerCase();
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const at = (y, m, d) => {
+    let ms = new Date(y ?? today.getFullYear(), m, d).getTime();
+    if (y == null && ms < today.getTime() - 120 * 86400e3) ms = new Date(today.getFullYear() + 1, m, d).getTime();
+    return Number.isFinite(ms) ? ms : null;
   };
+  let m = t.match(new RegExp(`\\b${MON}\\s+(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?`));
+  if (m) return at(m[3] ? Number(m[3]) : null, MONTHS.indexOf(m[1]), Number(m[2]));
+  m = t.match(new RegExp(`\\b(\\d{1,2})\\s+${MON}(?:,?\\s+(\\d{4}))?(?!\\d)`));
+  if (m) return at(m[3] ? Number(m[3]) : null, MONTHS.indexOf(m[2]), Number(m[1]));
+  m = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (m) return at(m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : null, Number(m[1]) - 1, Number(m[2]));
+  if (/\btomorrow\b/.test(t)) return today.getTime() + 86400e3;
+  if (/\btoday\b|\btonight\b/.test(t)) return today.getTime();
+  return null;
+}
+
+// What a carrier's page showed (from track-page.js), as a package's status.
+// Only the page's headlines count: the whole page also has menus ("Out for delivery alerts")
+// and footers that would read as a status.
+export function readPage(msg, carrier) {
+  const heads = (msg.found || []).map((c) => c.text);
+  const head = heads.find((h) => statusIn(h)) || '';
+  const status = statusIn(head);
+  if (!status) return { error: `Couldn’t find the status on ${PAGES[carrier]?.name || 'the carrier'}’s page` };
+  const delivered = status === 'Delivered';
+  // When it was delivered is usually in a line near the headline; when it's due, under a label.
+  const lines = delivered ? [head, ...heads.filter((h) => /deliver/i.test(h)), ...(msg.dates || [])] : [...(msg.dates || []), head];
+  const when = lines.map((l) => dateIn(l)).find(Boolean) ?? null;
+  return { status, eta: delivered ? null : when, event: { text: head, at: delivered ? when : null }, carrier: PAGES[carrier]?.name || '', from: 'page' };
 }
 
 export const loadTracking = async () => (await local.get(INFO)) || {};
 
-// Registers the numbers not registered yet, then asks after the ones not checked lately. One
-// Daybook page does this at a time; the others see the results through storage.
-export function refreshTracking(key, numbers, force = false) {
-  key = (key || '').trim();
+// How long a package's status holds before it's looked at again.
+function stale(t, now) {
+  if (!t) return true;
+  if (t.status === 'Delivered') return false;
+  const age = now - (t.at || 0);
+  if (t.error) return age > 3 * 3600e3;
+  return age > (t.status === 'OutForDelivery' ? 30 * 60e3 : 2 * 3600e3);
+}
+
+// Lets the carriers' pages load in frames that Daybook itself opens, and nowhere else.
+async function allowFrames() {
+  await chrome.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: [RULE],
+    addRules: [
+      {
+        id: RULE,
+        priority: 1,
+        action: {
+          type: 'modifyHeaders',
+          responseHeaders: ['x-frame-options', 'content-security-policy', 'content-security-policy-report-only'].map((header) => ({ header, operation: 'remove' })),
+        },
+        condition: { requestDomains: HOSTS, resourceTypes: ['sub_frame'], initiatorDomains: [chrome.runtime.id] },
+      },
+    ],
+  });
+}
+
+function frames() {
+  let box = $('#track-frames');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'track-frames';
+    box.setAttribute('aria-hidden', 'true');
+    document.body.append(box);
+  }
+  return box;
+}
+
+// Opens one package's page out of sight and waits for track-page.js to report what it shows.
+function readCarrierPage(number, carrier) {
+  const page = PAGES[carrier];
+  return new Promise((resolve) => {
+    const frame = document.createElement('iframe');
+    // No navigating this tab, no pop-ups: the page only gets to show itself.
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+    frame.setAttribute('tabindex', '-1');
+    frame.src = page.url(encodeURIComponent(number));
+    let timer;
+    const finish = (result) => {
+      clearTimeout(timer);
+      chrome.runtime.onMessage.removeListener(heard);
+      frame.remove();
+      resolve(result);
+    };
+    const heard = (msg, sender) => {
+      if (msg?.type !== 'track-page' || sender.id !== chrome.runtime.id) return;
+      let host = '';
+      try {
+        host = new URL(sender.url).hostname;
+      } catch {}
+      if (page.hosts.some((h) => host === h || host.endsWith(`.${h}`))) finish(readPage(msg, carrier));
+    };
+    chrome.runtime.onMessage.addListener(heard);
+    timer = setTimeout(() => finish({ error: `${page.name}’s page didn’t load` }), WAIT);
+    frames().append(frame);
+  });
+}
+
+// Reads the pages of the packages due a look, a few each time. `mailAbout(number)` finds the
+// newest email about a number, for when its page can't be read. One Daybook tab does this at a
+// time; the others see the results through storage.
+export function refreshTracking(numbers, { mailAbout, force = false } = {}) {
   const wanted = [...new Set(numbers.filter(Boolean))];
-  if (!key || !wanted.length) return Promise.resolve();
+  if (!wanted.length) return Promise.resolve();
   return navigator.locks.request('tracking', { ifAvailable: true }, async (lock) => {
     if (!lock) return;
     const now = Date.now();
-    // After an error, wait a while before trying again rather than asking on every repaint.
-    const last = (await local.get('track:status')) || {};
-    if (!force && last.error && now - last.at < 10 * 60e3) return;
-    const reg = (await local.get(REG)) || {};
-    const info = await loadTracking();
-    const fresh = wanted.filter((n) => !reg[n] || (!reg[n].ok && now - reg[n].at > RETRY));
-    const stale = (n) => force || !info[n] || now - info[n].at > STALE;
-    // Nothing to ask: write nothing, since a write tells every page to draw again.
-    if (!fresh.length && !wanted.some((n) => reg[n]?.ok && stale(n))) return;
-    let error = null;
+    let info = await loadTracking();
+    const due = wanted.filter((n) => PAGES[carrierOf(n, info[n]?.carrier)] && (force || stale(info[n], now))).slice(0, PER_RUN);
+    if (!due.length) return;
     try {
-      for (let i = 0; i < fresh.length; i += BATCH) {
-        const data = await call(key, 'register', fresh.slice(i, i + BATCH).map((number) => ({ number, auto_detection: true })));
-        for (const a of data.accepted || []) reg[a.number] = { at: now, ok: true };
-        for (const r of data.rejected || []) {
-          // Already registered (on this key, from another computer or an earlier try) is fine.
-          const already = r.error?.code === -18019901;
-          reg[r.number] = { at: now, ok: already, error: already ? '' : r.error?.message || 'rejected' };
-          if (!already) info[r.number] = { ...info[r.number], at: now, error: r.error?.message || '17TRACK couldn’t take this number' };
-        }
-        await wait(GAP);
-      }
-      const due = wanted.filter((n) => reg[n]?.ok && stale(n));
-      for (let i = 0; i < due.length; i += BATCH) {
-        const data = await call(key, 'gettrackinfo', due.slice(i, i + BATCH).map((number) => ({ number })));
-        for (const a of data.accepted || []) info[a.number] = readTrack(a);
-        for (const r of data.rejected || []) info[r.number] = { ...info[r.number], at: now, error: r.error?.message || 'No answer for this number' };
-        await wait(GAP);
-      }
+      await allowFrames();
     } catch (err) {
-      error = err;
+      console.warn('[daybook] tracking frames:', err);
+      return;
+    }
+    for (const number of due) {
+      const carrier = carrierOf(number, info[number]?.carrier);
+      let result = await readCarrierPage(number, carrier);
+      if (result.error && mailAbout) result = (await mailAbout(number).catch(() => null)) || result;
+      info = await loadTracking();
+      // A page that can't be read now keeps what was known before, marked as old news.
+      info[number] = result.error && info[number]?.status ? { ...info[number], at: Date.now(), error: result.error } : { ...result, at: Date.now() };
+      await local.set(INFO, info);
     }
     for (const [n, v] of Object.entries(info)) if (now - (v.at || 0) > FORGET && !wanted.includes(n)) delete info[n];
-    await local.set(REG, reg);
     await local.set(INFO, info);
-    await local.set('track:status', { at: now, error: error ? errorText(error) : '', keyRejected: error instanceof KeyRejected });
   });
 }
 
@@ -127,14 +202,14 @@ export function refreshTracking(key, numbers, force = false) {
 export function onTracking(fn) {
   let timer;
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !(changes[INFO] || changes['track:status'])) return;
+    if (area !== 'local' || !changes[INFO]) return;
     clearTimeout(timer);
     timer = setTimeout(fn, 200);
   });
 }
 
 // What a tracked package says now, in Deliveries' terms: { state, label, due, event, at }, or
-// null before 17TRACK has answered.
+// null before any status is known.
 export function trackedState(t) {
   if (!t?.status) return null;
   const s = STATUS[t.status] || STATUS.InTransit;
@@ -151,7 +226,7 @@ export function trackedState(t) {
   return { ...t, state: s.state, label: s.label, due: null };
 }
 
-// A tracking number's carrier, from its shape (or 17TRACK's name for it), for the link.
+// A tracking number's carrier, from its shape (or a carrier's name), for its page and link.
 export function carrierOf(number, name = '') {
   const n = number.toUpperCase();
   if (/^1Z[0-9A-Z]{16}$/.test(n) || /\bups\b/i.test(name)) return 'ups';
@@ -164,17 +239,18 @@ export function carrierOf(number, name = '') {
 
 export const cleanNumber = (s) => String(s || '').replace(/[\s-]+/g, '').toUpperCase();
 
-// The Package tracking part of Settings: the packages you've added, with what 17TRACK last
-// said about each, a form to add one, and the key's quota.
+// The Package tracking part of Settings: the packages you've added, with what was last seen
+// about each, and a form to add one.
 export async function mountTracking(el, draft, changed) {
   const P = draft.packages;
   const info = await loadTracking();
-  const status = (await local.get('track:status')) || {};
   if (!el.isConnected) return;
   const line = (p) => {
     const t = trackedState(info[p.number]);
     const err = info[p.number]?.error;
-    return t ? `${t.label}${t.event?.text ? ` · ${t.event.text}` : ''}` : err || (P.trackKey ? 'Checking with 17TRACK…' : 'Add a 17TRACK key to follow it');
+    if (!carrierOf(p.number)) return 'Daybook can’t tell whose number this is; it links to 17TRACK’s free lookup';
+    if (t) return `${t.label}${t.event?.text && t.event.text !== t.label ? ` · ${t.event.text}` : ''}${err ? ' (older news)' : ''}`;
+    return err || (P.checkSites === false ? 'Turn on checking carrier pages to follow it' : 'Checking with the carrier…');
   };
   const paint = (msg = '') => {
     el.innerHTML = `${
@@ -192,7 +268,7 @@ export async function mountTracking(el, draft, changed) {
         <label class="field"><span>What it is (optional)</span><input type="text" data-trk="name" placeholder="New boots" autocomplete="off"></label>
         <button class="btn small" type="button" data-trk-add>${icon('plus')}Track it</button>
       </div>
-      <p class="hint trk-msg" aria-live="polite">${esc(msg || (status.error ? `Last check: ${status.error}.` : ''))}</p>`;
+      <p class="hint trk-msg" aria-live="polite">${esc(msg)}</p>`;
   };
   el.addEventListener('click', (e) => {
     const remove = e.target.closest('[data-trk-remove]');
@@ -209,7 +285,8 @@ export async function mountTracking(el, draft, changed) {
     if (P.tracked.some((p) => p.number === number)) return paint('That package is already on the list.');
     P.tracked.push({ number, name, added: Date.now() });
     changed();
-    paint(P.trackKey ? 'Added. Daybook checks on it with 17TRACK when you close Settings.' : 'Added. Add a 17TRACK key above to follow it live.');
+    const who = PAGES[carrierOf(number)]?.name;
+    paint(who ? `Added. Daybook reads ${who}’s page for it when you close Settings.` : 'Added. Daybook can’t tell whose number this is, so it links to 17TRACK’s free lookup instead.');
     el.querySelector('[data-trk="number"]').focus();
   });
   el.addEventListener('keydown', (e) => {

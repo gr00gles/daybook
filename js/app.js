@@ -389,8 +389,8 @@ $('#refresh-btn').addEventListener('click', (e) => {
 initSearch();
 initFlip();
 initLayout();
-// Deliveries come from shipping emails, from 17TRACK for packages added by hand, or both.
-if (S.show.packages && (S.show.mail || S.packages.trackKey || S.packages.tracked.length)) initDeliveries(S);
+// Deliveries come from shipping emails, from the packages added by hand in Settings, or both.
+if (S.show.packages && (S.show.mail || S.packages.tracked.length)) initDeliveries(S);
 else $('#card-deliveries').hidden = true;
 initMail();
 initAlerts();

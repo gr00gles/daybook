@@ -69,8 +69,9 @@ export const DEFAULTS = {
   youtube: { hideShorts: true },
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
-  // 17TRACK key for live tracking; whether shipping emails count; packages added by hand ({ number, name, added }).
-  packages: { trackKey: '', fromMail: true, tracked: [] },
+  // Whether shipping emails count, whether carriers' tracking pages are read for status, and
+  // packages added by hand ({ number, name, added }).
+  packages: { fromMail: true, checkSites: true, tracked: [] },
   area: { key: '', radius: 25, days: 14, kinds: ['music', 'arts', 'other'] }, // Ticketmaster key; radius in miles or km by units
   holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
   teams: { list: [], calendar: true, news: true }, // teams you follow; the card stays hidden without one
@@ -118,6 +119,8 @@ export async function loadSettings() {
     if (!settings?.ticker?.news) s.ticker.news = s.news.style;
     delete s.news.style;
   }
+  // Package tracking briefly went through 17TRACK, with a key; carriers' own pages need none.
+  delete s.packages.trackKey;
   // NYS jobs started with a words box and a counties box; those are rules now.
   const { keywords, counties, ...jobs } = s.jobs;
   if (keywords) jobs.rules = [{ field: 'any', op: 'has', value: keywords }, ...jobs.rules];

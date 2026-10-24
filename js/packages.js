@@ -1,12 +1,12 @@
 // Deliveries: shipping emails spotted among your mail, with a link to the carrier's tracking
 // page when the email carries a tracking number. Everything is read from the subject and the
 // preview text; nothing leaves your computer except the Gmail search below. For the Google
-// account connected in Daybook, the product picture comes from the email itself. With a
-// 17TRACK key (tracking.js), the status and delivery day of each package with a tracking
-// number come from the carrier instead, and packages added by hand in Settings join them.
+// account connected in Daybook, the product picture comes from the email itself. Packages
+// with a tracking number, and the ones added by hand in Settings, get their status and delivery
+// day from the carrier's own tracking page (tracking.js) instead.
 import { $, esc, safeUrl, cached, relTime, startOfDay, addDays, local } from './util.js';
 import { setTicker } from './ticker.js';
-import { loadTracking, refreshTracking, onTracking, trackedState, carrierOf } from './tracking.js';
+import { loadTracking, refreshTracking, onTracking, trackedState, carrierOf, PAGES } from './tracking.js';
 import { gmailApi } from './gauth.js';
 import { icon } from './icons.js';
 import { domainOf, logoUrl } from './companies-store.js';
@@ -250,7 +250,7 @@ export function deliveryRows(list, max = 6) {
       const tip = [d.title, d.number && `${who} ${d.number}`, `email ${relTime(d.at)}`].filter(Boolean).join(' · ');
       // Who sent it and the tracking number, without saying "UPS · UPS".
       const sender = d.from && d.from !== d.title && !(who && d.from.toLowerCase().includes(who.toLowerCase())) ? d.from : '';
-      // From 17TRACK: the carrier's latest word on it, and where.
+      // From the carrier's page: its latest word on the package, and where.
       const meta = d.event?.text
         ? [who, d.event.text, d.event.place].filter(Boolean).join(' · ')
         : [sender, who && d.number ? `${who} ${d.number}` : sender ? '' : who].filter(Boolean).join(' · ');
@@ -274,8 +274,8 @@ export function deliveryRows(list, max = 6) {
 let shown = [];
 let settingsRef = null;
 let fromMail = []; // the deliveries the mail card found, last time it drew
-let live = {}; // what 17TRACK last said, by tracking number
-let trackStatus = {}; // how the last check went: { at, error, keyRejected }
+let live = {}; // what each package's carrier page (or newest email) last said, by tracking number
+let trackTimer;
 
 // The new tab passes its settings; the Companies page uses the email side only.
 export function initDeliveries(S) {
@@ -284,7 +284,6 @@ export function initDeliveries(S) {
   settingsRef = S;
   const reload = async () => {
     live = await loadTracking();
-    trackStatus = (await local.get('track:status')) || {};
     compose();
   };
   reload();
@@ -302,7 +301,7 @@ export function renderDeliveries(list) {
   findPictures(list);
 }
 
-// An email's package, with what 17TRACK says about it in place of what the email said.
+// An email's package, with what its carrier's page says in place of what the email said.
 function withLive(d) {
   const t = d.number && trackedState(live[d.number]);
   if (!t) return d;
@@ -328,22 +327,30 @@ function added(p) {
     from: '',
     at,
     state: t?.state || 'transit',
-    label: t?.label || (raw?.error ? 'Can’t track' : !settingsRef.packages.trackKey ? 'Tracking' : trackStatus.keyRejected ? 'Key not accepted' : 'Checking…'),
+    label: t?.label || (raw?.error ? 'Can’t read the status' : settingsRef.packages.checkSites !== false && PAGES[carrier] ? 'Checking…' : 'Tracking'),
     due: t?.due ?? null,
     event: t?.event || (raw?.error ? { text: raw.error } : null),
   };
 }
 
 // The card's list: the email packages (unless that's off) and the ones added by hand, with
-// 17TRACK's news on each; and the tracking numbers still on their way go to 17TRACK.
+// their carriers' news on each. A few seconds after the page settles, the packages still on
+// their way get a fresh look (tracking.js decides which are due).
 function compose() {
   const P = settingsRef.packages;
   const mail = P.fromMail === false ? [] : fromMail;
   const list = mail.map(withLive).filter(Boolean);
-  for (const p of P.tracked || []) if (!list.some((d) => d.number === p.number)) list.push(added(p));
-  shown = list.filter(Boolean).sort((a, b) => RANK[a.state] - RANK[b.state] || b.at - a.at);
+  for (const p of P.tracked || []) {
+    // A package added by hand that was delivered days ago drops off (added() gives null).
+    const d = !list.some((x) => x.number === p.number) && added(p);
+    if (d) list.push(d);
+  }
+  shown = list.sort((a, b) => RANK[a.state] - RANK[b.state] || b.at - a.at);
   paintCard();
-  if (P.trackKey) refreshTracking(P.trackKey, [...(P.tracked || []).map((p) => p.number), ...mail.filter((d) => d.number && d.state !== 'delivered').map((d) => d.number)]);
+  if (P.checkSites === false) return;
+  const numbers = [...(P.tracked || []).map((p) => p.number), ...mail.filter((d) => d.number && d.state !== 'delivered').map((d) => d.number)];
+  clearTimeout(trackTimer);
+  trackTimer = setTimeout(() => refreshTracking(numbers, { mailAbout: mailStatusFor }), 5000);
 }
 
 function paintCard() {
@@ -353,11 +360,7 @@ function paintCard() {
   $('#deliveries-count').textContent = coming ? String(coming) : '';
   $('#card-deliveries').classList.toggle('is-empty', !shown.length);
   const none = settingsRef?.packages.fromMail === false ? 'Nothing being tracked. Add a tracking number in Settings → Package tracking.' : 'Nothing on the way. Shipping emails show up here with their delivery dates.';
-  const keyNote =
-    settingsRef?.packages.trackKey && trackStatus.keyRejected
-      ? `<div class="notice warn"><p>${esc(trackStatus.error)}, so packages aren’t being tracked live.</p><button class="btn small" type="button" data-open-settings="packages">Check it in Settings</button></div>`
-      : '';
-  body.innerHTML = (shown.length ? deliveryRows(shown) : `<p class="quiet">${none}</p>`) + keyNote;
+  body.innerHTML = shown.length ? deliveryRows(shown) : `<p class="quiet">${none}</p>`;
   setTicker(
     'deliveries',
     shown.map((d) => {
@@ -459,6 +462,45 @@ export function pictureIn(html, title = '') {
 
 export const deliveryTag = (d) => (d ? `<span class="pkg-tag s-${d.state}">${icon('box')}${esc(d.label)}</span>` : '');
 
+// A Gmail API message (format=metadata) as a mail item.
+function fromGmail(m) {
+  const header = (name) => m.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value || '';
+  return {
+    msgId: m.id,
+    subject: header('subject'),
+    from: header('from').replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, ''),
+    fromAddr: header('from').match(/<([^>]+)>\s*$/)?.[1] || header('from').match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/)?.[0] || '',
+    api: true,
+    snippet: decodeEntities(m.snippet || ''),
+    at: Number(m.internalDate) || Date.now(),
+  };
+}
+
+// The newest email in the connected Gmail account that mentions a tracking number, read the way
+// shipping emails are, as a package status; for a package whose carrier page couldn't be read.
+// Only once Daybook already has Gmail permission; it never asks for it.
+export async function mailStatusFor(number) {
+  let list;
+  try {
+    list = await gmailApi(`/messages?${new URLSearchParams({ q: `"${number}" newer_than:60d`, maxResults: '5' })}`, { method: 'GET', quiet: true });
+  } catch {
+    return null;
+  }
+  const got = await Promise.allSettled(
+    (list.messages || []).map((m) =>
+      gmailApi(`/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&fields=id,threadId,snippet,internalDate,payload/headers`, { method: 'GET', quiet: true }),
+    ),
+  );
+  const news = got
+    .filter((r) => r.status === 'fulfilled')
+    .map(({ value: m }) => readMail(fromGmail(m)))
+    .filter(Boolean)
+    .sort((a, b) => b.at - a.at)[0];
+  if (!news) return null;
+  const status = { out: 'OutForDelivery', problem: 'Exception', delivered: 'Delivered' }[news.state] || 'InTransit';
+  return { status, eta: status === 'Delivered' ? null : news.due, event: { text: `Email: ${news.title}`, at: news.at }, from: 'mail' };
+}
+
 // Shipping emails from the last 10 days in the Gmail account connected under Google, read or
 // not. Only runs once Daybook already has Gmail permission (from Mark as read or Delete);
 // it never asks for it.
@@ -491,19 +533,7 @@ export function refreshShippingMail(email, force, onData) {
       );
       return got
         .filter((r) => r.status === 'fulfilled')
-        .map(({ value: m }) => {
-          const header = (name) => m.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value || '';
-          return {
-            msgId: m.id,
-            subject: header('subject'),
-            from: header('from').replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, ''),
-            fromAddr: header('from').match(/<([^>]+)>\s*$/)?.[1] || header('from').match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/)?.[0] || '',
-            api: true,
-            snippet: decodeEntities(m.snippet || ''),
-            at: Number(m.internalDate) || Date.now(),
-            url: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email)}#all/${m.threadId}`,
-          };
-        })
+        .map(({ value: m }) => ({ ...fromGmail(m), url: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email)}#all/${m.threadId}` }))
         // Keep only what is about a package; the search also matches other mail.
         .filter((m) => readMail(m));
     },
