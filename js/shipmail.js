@@ -1,0 +1,229 @@
+// Shipping emails, read in full, read or not, for the Deliveries card: the tracking number,
+// the carrier, the day it's due and what's in the box are usually inside the email, not in its
+// subject or preview.
+//
+// Gmail: Daybook opens Gmail's own page out of sight (frames.js) with a search for shipping
+// emails, signed in the way you already are in this browser, and gmail-page.js reads the
+// results and each email's printable page. No Google API and no permission to give.
+// Outlook: the same Outlook sign-in the Unread card uses searches the mailbox.
+// Each email becomes { msgId, subject, from, fromAddr, at, url, snippet, body (its text),
+// links (its tracking links), picture (the product's), full: true } for packages.js to read.
+import { cached, hash, local } from './util.js';
+import { graph } from './msauth.js';
+import { allowFrames, dropFrames, readHidden } from './frames.js';
+import { aboutPackage } from './packages.js';
+
+const KEY = 'pkg:mail';
+const RULE = 4102; // the session rule that lets Gmail's page load in Daybook's frames
+const DAYS = 14;
+const MAX_ACCOUNTS = 3;
+const BODY_CHARS = 15000;
+const GMAIL_SEARCH = `newer_than:${DAYS}d -category:promotions -category:social {subject:shipped subject:shipping subject:delivered subject:delivery subject:arriving subject:arrived subject:shipment subject:package subject:order subject:ordered subject:tracking "tracking number" "out for delivery" "has shipped" "on its way" "was delivered" "estimated delivery" "expected delivery"}`;
+const OUTLOOK_SEARCH = 'shipped OR shipping OR delivered OR delivery OR arriving OR arrived OR shipment OR package OR tracking OR ordered';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// An email's HTML as lines of text (one per paragraph, cell or line break), and its links.
+export function htmlText(html) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html'); // parsing loads nothing
+  for (const el of doc.querySelectorAll('style, script, head, title, noscript')) el.remove();
+  const BLOCK = /^(?:address|article|aside|blockquote|br|center|dd|div|dl|dt|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tbody|td|tfoot|th|thead|tr|ul)$/i;
+  const out = [];
+  const walk = (node) => {
+    for (const n of node.childNodes) {
+      if (n.nodeType === Node.TEXT_NODE) out.push(n.nodeValue);
+      else if (n.nodeType === Node.ELEMENT_NODE) {
+        const block = BLOCK.test(n.tagName);
+        if (block) out.push('\n');
+        walk(n);
+        if (block) out.push('\n');
+      }
+    }
+  };
+  walk(doc.body || doc);
+  const text = out
+    .join('')
+    .split('\n')
+    // Emails pad their preview text with invisible characters.
+    .map((l) => l.replace(/[­͏؜ᅟᅠ឴឵᠎​-‏‪-‮⁠-⁤ㅤ﻿ﾠ]/g, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n');
+  return { text, doc };
+}
+
+// Links that may carry a tracking number, unwrapped from the click-counting links stores use.
+function trackingLinks(doc) {
+  const out = new Set();
+  for (const a of doc.querySelectorAll('a[href]')) {
+    let href = a.getAttribute('href') || '';
+    for (let i = 0; i < 3; i++) {
+      try {
+        const next = decodeURIComponent(href);
+        if (next === href) break;
+        href = next;
+      } catch {
+        break;
+      }
+    }
+    if (/track|trk|tlabels/i.test(href)) out.add(href.slice(0, 600));
+    if (out.size >= 12) break;
+  }
+  return [...out];
+}
+
+const NOT_PRODUCT = /logo|icon|pixel|spacer|blank|beacon|track|open\.|\/o\.gif|badge|social|facebook|twitter|instagram|pinterest|tiktok|youtube|linkedin|app[-_ ]?store|google[-_ ]?play|banner|header|footer|divider|rating|stars?\b|arrow|button|btn|signature|qr|completed|pending|progress|status|marketing|hero|promo|confirm|deliver|truck|survey/i;
+
+// The picture in an email that looks most like the product: not a logo, a tracking pixel, a
+// social button, a banner or a progress bar.
+export function pictureIn(doc, title = '') {
+  const words = new Set(title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3));
+  let best = null;
+  for (const img of doc.querySelectorAll('img')) {
+    let src = (img.getAttribute('src') || '').trim();
+    // Gmail shows email pictures through its own copier, with the original after the #.
+    const original = src.match(/#(https:\/\/.+)$/)?.[1];
+    if (original) src = original;
+    if (!/^https:\/\//i.test(src)) continue;
+    const alt = img.getAttribute('alt') || '';
+    const w = parseInt(img.getAttribute('width') || img.style.width, 10) || 0;
+    const h = parseInt(img.getAttribute('height') || img.style.height, 10) || 0;
+    if (NOT_PRODUCT.test(`${src} ${alt} ${img.className}`)) continue;
+    if ((w && w < 48) || (h && h < 48) || (w && h && (w / h > 2.2 || h / w > 2.2))) continue;
+    let score = 0;
+    if (/\/images\/I\//.test(src)) score += 5; // Amazon's product pictures
+    if (alt && alt.toLowerCase().split(/[^a-z0-9]+/).some((x) => words.has(x))) score += 3;
+    if (/product|item|catalog|sku|cdn\.shopify|scene7|\/is\/image\/|etsystatic|walmartimages|ebayimg|bbystatic/i.test(src)) score += 2;
+    if (w >= 64 && h >= 64) score += 1;
+    // Big alone isn't enough: stores' emails are full of big pictures that aren't the product.
+    if (score >= 2 && (!best || score > best.score)) best = { src, score };
+  }
+  return best?.src || '';
+}
+
+// One email with its HTML, as packages.js reads it.
+export function fromHtml(m, html) {
+  const { text, doc } = htmlText(html);
+  return { ...m, body: text.slice(0, BODY_CHARS), links: trackingLinks(doc), picture: pictureIn(doc, m.subject), full: true };
+}
+
+// One Gmail account's shipping emails, through its own page.
+async function readGmail(acct) {
+  const hashPart = encodeURIComponent(GMAIL_SEARCH).replace(/%20/g, '+');
+  const msg = await readHidden(`https://mail.google.com/mail/u/${acct.index}/#search/${hashPart}`, {
+    type: 'gmail-page',
+    hosts: ['mail.google.com'],
+    wait: 90e3,
+    accept: (m) => m.base === `/mail/u/${acct.index}/`,
+  });
+  if (!msg) throw new Error('Gmail’s page didn’t load');
+  // The accounts moved round since Daybook last looked: the next look sorts it out.
+  if (msg.email && msg.email !== acct.email) throw new Error('Gmail accounts changed');
+  const url = (t) => `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(acct.email)}#all/${t.hex}`;
+  const out = [];
+  for (const t of msg.threads || []) {
+    const base = { subject: t.subject, from: t.from, fromAddr: t.fromAddr, at: t.at, url: url(t), snippet: t.snippet, unread: t.unread };
+    if (!t.messages?.length) {
+      // Only the search result: the subject and preview still say something.
+      out.push({ ...base, msgId: t.lastId || t.hex });
+      continue;
+    }
+    t.messages.forEach((m, i) => {
+      const last = i === t.messages.length - 1;
+      out.push(
+        fromHtml(
+          {
+            ...base,
+            // The newest email's id matches the unread feed's, so the two count once.
+            msgId: last ? t.lastId || t.hex : `${t.hex}.${i}`,
+            from: m.from || t.from,
+            fromAddr: m.fromAddr || t.fromAddr,
+            at: m.at || t.at || Date.now(),
+            snippet: last ? t.snippet : '',
+          },
+          m.html,
+        ),
+      );
+    });
+  }
+  return out;
+}
+
+// The Outlook mailbox's newest emails about orders and packages, then the ones that look like
+// shipping news read in full.
+async function readOutlook(clientId) {
+  // Newest first, which is how Outlook orders search results.
+  const q = `$search=${encodeURIComponent(`"${OUTLOOK_SEARCH}"`)}&$top=40&$select=id,subject,from,receivedDateTime,bodyPreview,webLink,isRead`;
+  const list = await graph(clientId, `/me/messages?${q}`);
+  const since = Date.now() - DAYS * 86400e3;
+  const items = (list.value || [])
+    .map((m) => ({
+      msgId: m.id,
+      subject: m.subject || '',
+      from: m.from?.emailAddress?.name || m.from?.emailAddress?.address || '',
+      fromAddr: m.from?.emailAddress?.address || '',
+      at: Date.parse(m.receivedDateTime) || Date.now(),
+      url: m.webLink,
+      snippet: m.bodyPreview || '',
+      unread: !m.isRead,
+    }))
+    .filter((m) => m.at >= since && aboutPackage(m))
+    .slice(0, 20);
+  const got = await Promise.allSettled(items.map((m) => graph(clientId, `/me/messages/${encodeURIComponent(m.msgId)}?$select=body`)));
+  return items.map((m, i) => {
+    const body = got[i].status === 'fulfilled' ? got[i].value.body : null;
+    if (!body?.content) return m;
+    return fromHtml(m, body.contentType === 'text' ? `<pre>${body.content.replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</pre>` : body.content);
+  });
+}
+
+// Shipping emails from the Gmail accounts signed into this browser ([{ index, email }]) and,
+// when `outlook` (a Microsoft client ID) is given, the connected Outlook mailbox. Kept for 20
+// minutes; one Daybook tab reads at a time and the others use what it found. A source that
+// can't be read keeps what it had last time.
+export function refreshShippingMail({ gmail = [], outlook = '' }, force, onData) {
+  const accounts = gmail.slice(0, MAX_ACCOUNTS);
+  const sig = hash([accounts.map((a) => a.email), Boolean(outlook)]);
+  local.remove(['cache:pkg:gmail', 'pkg:thumbs']); // from when Gmail was read through its API
+  return cached({
+    key: KEY,
+    sig,
+    maxAge: 20 * 60e3,
+    force,
+    fetch: () =>
+      navigator.locks.request('shipmail', async () => {
+        const before = await local.get(`cache:${KEY}`);
+        if (!force && before?.sig === sig && Date.now() - before.at < 15 * 60e3) return before.data;
+        const old = before?.data || [];
+        const kept = (source) => old.filter((m) => m.source === source);
+        const out = [];
+        if (accounts.length) {
+          // Let the board draw first; Gmail's page is a big one.
+          await sleep(force ? 0 : 3000);
+          await allowFrames(RULE, ['mail.google.com']);
+        }
+        for (const acct of accounts) {
+          const source = `gmail:${acct.email}`;
+          try {
+            out.push(...(await readGmail(acct)).map((m) => ({ ...m, source })));
+          } catch (err) {
+            console.warn('[daybook] shipping emails, Gmail:', err);
+            out.push(...kept(source));
+          }
+        }
+        if (accounts.length) dropFrames(RULE);
+        if (outlook) {
+          try {
+            out.push(...(await readOutlook(outlook)).map((m) => ({ ...m, source: 'outlook' })));
+          } catch (err) {
+            console.warn('[daybook] shipping emails, Outlook:', err);
+            out.push(...kept('outlook'));
+          }
+        }
+        return out.sort((a, b) => b.at - a.at);
+      }),
+    render: (data) => onData(data || []),
+  });
+}
+
+// The shipping emails Daybook last read, for a look-up without reading again.
+export const lastShippingMail = async () => (await local.get(`cache:${KEY}`))?.data || [];

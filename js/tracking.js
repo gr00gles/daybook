@@ -1,12 +1,12 @@
 // Live package status, free and without a key: Daybook opens each package's page on the carrier's
-// own site (UPS, USPS, FedEx, DHL, Amazon) out of sight, in a frame on the new tab page, and reads
-// the status and delivery day off it (track-page.js), the way you would. Carriers don't let other
-// pages show theirs in a frame, so a session rule lifts that for Daybook's own frames only. When
+// own site (UPS, USPS, FedEx, DHL, Amazon) out of sight, in a frame on the new tab page (frames.js),
+// and reads the status and delivery day off it (track-page.js), the way you would. When
 // a page can't be read, the newest email that mentions the tracking number stands in. Packages
 // come from shipping emails (while they're on their way) and from the ones you add in Settings.
 // One page at a time, every couple of hours, from one tab at a time.
-import { $, esc, local } from './util.js';
+import { esc, local } from './util.js';
 import { icon } from './icons.js';
+import { allowFrames, dropFrames, readHidden } from './frames.js';
 
 const INFO = 'track:info'; // { [number]: { at, status, eta, event: { text, at }, carrier, from: 'page' | 'mail', error } }
 const RULE = 4101; // the session rule that lets carrier pages load in Daybook's frames
@@ -107,63 +107,11 @@ function stale(t, now) {
   return age > (t.status === 'OutForDelivery' ? 30 * 60e3 : 2 * 3600e3);
 }
 
-// Lets the carriers' pages load in frames that Daybook itself opens, and nowhere else.
-async function allowFrames() {
-  await chrome.declarativeNetRequest.updateSessionRules({
-    removeRuleIds: [RULE],
-    addRules: [
-      {
-        id: RULE,
-        priority: 1,
-        action: {
-          type: 'modifyHeaders',
-          responseHeaders: ['x-frame-options', 'content-security-policy', 'content-security-policy-report-only'].map((header) => ({ header, operation: 'remove' })),
-        },
-        condition: { requestDomains: HOSTS, resourceTypes: ['sub_frame'], initiatorDomains: [chrome.runtime.id] },
-      },
-    ],
-  });
-}
-
-function frames() {
-  let box = $('#track-frames');
-  if (!box) {
-    box = document.createElement('div');
-    box.id = 'track-frames';
-    box.setAttribute('aria-hidden', 'true');
-    document.body.append(box);
-  }
-  return box;
-}
-
 // Opens one package's page out of sight and waits for track-page.js to report what it shows.
-function readCarrierPage(number, carrier) {
+async function readCarrierPage(number, carrier) {
   const page = PAGES[carrier];
-  return new Promise((resolve) => {
-    const frame = document.createElement('iframe');
-    // No navigating this tab, no pop-ups: the page only gets to show itself.
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
-    frame.setAttribute('tabindex', '-1');
-    frame.src = page.url(encodeURIComponent(number));
-    let timer;
-    const finish = (result) => {
-      clearTimeout(timer);
-      chrome.runtime.onMessage.removeListener(heard);
-      frame.remove();
-      resolve(result);
-    };
-    const heard = (msg, sender) => {
-      if (msg?.type !== 'track-page' || sender.id !== chrome.runtime.id) return;
-      let host = '';
-      try {
-        host = new URL(sender.url).hostname;
-      } catch {}
-      if (page.hosts.some((h) => host === h || host.endsWith(`.${h}`))) finish(readPage(msg, carrier));
-    };
-    chrome.runtime.onMessage.addListener(heard);
-    timer = setTimeout(() => finish({ error: `${page.name}’s page didn’t load` }), WAIT);
-    frames().append(frame);
-  });
+  const msg = await readHidden(page.url(encodeURIComponent(number)), { type: 'track-page', hosts: page.hosts, wait: WAIT });
+  return msg ? readPage(msg, carrier) : { error: `${page.name}’s page didn’t load` };
 }
 
 // Reads the pages of the packages due a look, a few each time. `mailAbout(number)` finds the
@@ -179,19 +127,24 @@ export function refreshTracking(numbers, { mailAbout, force = false } = {}) {
     const due = wanted.filter((n) => PAGES[carrierOf(n, info[n]?.carrier)] && (force || stale(info[n], now))).slice(0, PER_RUN);
     if (!due.length) return;
     try {
-      await allowFrames();
+      await allowFrames(RULE, HOSTS);
     } catch (err) {
       console.warn('[daybook] tracking frames:', err);
       return;
     }
-    for (const number of due) {
-      const carrier = carrierOf(number, info[number]?.carrier);
-      let result = await readCarrierPage(number, carrier);
-      if (result.error && mailAbout) result = (await mailAbout(number).catch(() => null)) || result;
-      info = await loadTracking();
-      // A page that can't be read now keeps what was known before, marked as old news.
-      info[number] = result.error && info[number]?.status ? { ...info[number], at: Date.now(), error: result.error } : { ...result, at: Date.now() };
-      await local.set(INFO, info);
+    try {
+      for (const number of due) {
+        const carrier = carrierOf(number, info[number]?.carrier);
+        let result = await readCarrierPage(number, carrier);
+        info = await loadTracking();
+        // Nothing known from the page yet: the newest email stands in.
+        if (result.error && mailAbout && !(info[number]?.status && info[number].from !== 'mail')) result = (await mailAbout(number).catch(() => null)) || result;
+        // A page that can't be read now keeps what was known before, marked as old news.
+        info[number] = result.error && info[number]?.status ? { ...info[number], at: Date.now(), error: result.error } : { ...result, at: Date.now() };
+        await local.set(INFO, info);
+      }
+    } finally {
+      dropFrames(RULE);
     }
     for (const [n, v] of Object.entries(info)) if (now - (v.at || 0) > FORGET && !wanted.includes(n)) delete info[n];
     await local.set(INFO, info);
