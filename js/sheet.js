@@ -144,9 +144,10 @@ function build() {
 
   <section id="set-packages">
     <h3>Package tracking</h3>
-    <p class="hint">Live status and delivery days for your packages, straight from the carrier, through <a href="https://api.17track.net/" target="_blank" rel="noopener">17TRACK</a>: it follows USPS, UPS, FedEx, DHL, Amazon and thousands of other carriers. It needs a key: sign up at <a href="https://api.17track.net/" target="_blank" rel="noopener">api.17track.net</a> (it asks for a business email address, not Gmail or Outlook), then in its dashboard open <strong>Settings → Security</strong> and copy the <strong>Access Key</strong>. A new account gets 200 tracking numbers free, once; checking on them again doesn’t count, and more are sold by the year. Daybook sends 17TRACK only the tracking numbers.</p>
-    <label class="field"><span>17TRACK key</span><input id="s-17track" type="text" data-path="packages.trackKey" value="${esc(d.packages.trackKey)}" placeholder="Paste your 17TRACK Access Key" spellcheck="false" autocomplete="off"></label>
+    <p class="hint">Daybook follows your packages on the carriers’ own sites, free and without a key: for each one, it opens the tracking page at UPS, USPS, FedEx, DHL or Amazon out of sight and reads the status and delivery day off it, the way you would, every couple of hours while a new tab is open. When a page can’t be read, the newest email that mentions the tracking number stands in. Carriers change their pages now and then; a package whose page can’t be read still links to it.</p>
+    <div class="trk-mail">${check('packages.checkSites', 'Check carriers’ tracking pages for the latest status', d.packages.checkSites)}</div>
     <div class="trk-mail">${check('packages.fromMail', 'Find packages in shipping emails too', d.packages.fromMail)}</div>
+    <p class="hint">To hear about every package coming to your address without entering anything, sign up (free) for <a href="https://www.ups.com/us/en/services/tracking/mychoice" target="_blank" rel="noopener">UPS My Choice</a>, <a href="https://www.fedex.com/en-us/delivery-manager.html" target="_blank" rel="noopener">FedEx Delivery Manager</a> and <a href="https://informeddelivery.usps.com/" target="_blank" rel="noopener">USPS Informed Delivery</a>: they email you as each one moves, and Daybook reads those emails.</p>
     <h4>Packages you’re tracking</h4>
     <div id="sheet-tracking"></div>
   </section>
