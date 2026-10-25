@@ -288,6 +288,9 @@ svg { flex: none; }
 }
 .holiday-line { display: flex; margin: 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
 .flip .hol-badge { white-space: nowrap; }
+/* Every face in the bubble is the same 34px pill, so its curve runs concentric with the search
+   box's (46px tall, 6px around it). */
+.flip .hol-badge, .flip .hol-badge.today, .next-up, .win-face { box-sizing: border-box; height: 34px; min-height: 0; padding-block: 0; border-radius: 999px; }
 
 /* Holidays: each wears its own color (--hol) and emblem, on a sliver of tinted glass. */
 .hol-badge {
@@ -386,7 +389,7 @@ svg { flex: none; }
 .nu-title { font-size: 13.5px; font-weight: 650; line-height: 1.3; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .nu-when { color: var(--ink-2); white-space: nowrap; }
 .nu-leave { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
-.next-up .join { margin-left: 2px; padding-block: 4px; }
+.next-up .join { margin-left: 2px; padding-block: 4px; border-radius: 999px; }
 .nu-leave .ui-icon { width: 16px; height: 16px; }
 .nu-leave.soon { color: var(--serious); }
 .nu-leave.now { color: var(--now); }
