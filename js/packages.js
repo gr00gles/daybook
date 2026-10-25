@@ -413,8 +413,7 @@ export function deliveryRows(list, max = 6) {
       return `<li><a class="pkg s-${d.state}" href="${esc(d.href)}" title="${esc(tip)}">
         ${thumb(d)}
         <span class="pkg-text">
-          <span class="pkg-status">${esc(d.label)}</span>
-          <span class="pkg-title">${esc(d.title)}</span>
+          <span class="pkg-line"><span class="pkg-status">${esc(d.label)}</span><span class="pkg-title">${esc(d.title)}</span></span>
           ${meta ? `<span class="pkg-meta">${esc(meta)}</span>` : ''}
         </span>
         ${

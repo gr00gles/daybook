@@ -549,7 +549,7 @@ export function initEvents(S, { onChange: changed }) {
   const dlg = $('#event-dialog');
   const add = $('#add-event');
   if (add) {
-    add.innerHTML = `${icon('plus')}<span>Add event</span>`;
+    add.innerHTML = icon('plus');
     add.addEventListener('click', () => openEventEditor());
   }
   dlg.addEventListener('click', (e) => {

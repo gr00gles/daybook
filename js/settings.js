@@ -24,6 +24,8 @@ export const ENGINES = {
   maps: { label: 'Maps', bang: 'm', url: 'https://www.google.com/maps/search/%s' },
   claude: { label: 'Claude', bang: 'c', url: 'https://claude.ai/new?q=%s', ask: true },
   chatgpt: { label: 'ChatGPT', bang: 'gpt', url: 'https://chatgpt.com/?q=%s', ask: true },
+  // Gemini's site takes no question in its link; js/gemini-page.js types the one after #daybook-q= in.
+  gemini: { label: 'Gemini', bang: 'gem', url: 'https://gemini.google.com/app#daybook-q=%s', ask: true },
   wikipedia: { label: 'Wikipedia', bang: 'w', url: 'https://en.wikipedia.org/w/index.php?search=%s' },
   amazon: { label: 'Amazon', bang: 'a', url: 'https://www.amazon.com/s?k=%s' },
   gmail: { label: 'Gmail', bang: 'e', url: 'https://mail.google.com/mail/u/0/#search/%s' },

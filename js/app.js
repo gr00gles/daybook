@@ -1,4 +1,4 @@
-import { loadSettings, ENGINES, outlookWebUrl } from './settings.js';
+import { loadSettings, saveSettings, ENGINES, outlookWebUrl } from './settings.js';
 import { $, $$, esc, colorVar, safeUrl, fmtTime, local } from './util.js';
 import { refreshWeather, renderSun, lastWeather, todayIndex, initWeather } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
@@ -20,7 +20,7 @@ import { initTicker, setTicker, onTicker, offBoard, TICKER_CARDS } from './ticke
 import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
 import { msAccount } from './msauth.js';
-import { icon } from './icons.js';
+import { icon, aiMark } from './icons.js';
 import { groupTiles } from './sites.js';
 import { initDeliveries } from './packages.js';
 import { initAsk, ask, hasKey } from './ask.js';
@@ -184,12 +184,29 @@ function tick(force = false) {
 
 // ---- Search ------------------------------------------------------------------------
 
+// The circle at the start of the search box says who gets what you type: Claude, ChatGPT or
+// Gemini, or the search engine (Google unless Settings picks another). Clicking it turns to the
+// next, and the pick is kept as the default search.
+const AIS = ['claude', 'chatgpt', 'gemini'];
+
 function initSearch() {
   let engine = ENGINES[S.searchEngine] ? S.searchEngine : 'google';
+  // The search engine the circle comes back around to.
+  let base = ENGINES[engine].ask ? 'google' : engine;
   const input = $('#search-input');
   const chips = $('#engines');
+  const pick = $('#ai-pick');
+  const nextOf = (k) => {
+    const turn = [...AIS, base];
+    return turn[(turn.indexOf(k) + 1) % turn.length];
+  };
   const paint = () => {
-    input.placeholder = `${ENGINES[engine].ask ? 'Ask' : 'Search'} ${ENGINES[engine].label}`;
+    const what = (k) => `${ENGINES[k].ask ? 'Ask' : 'Search'} ${ENGINES[k].label}`;
+    input.placeholder = what(engine);
+    pick.innerHTML = ENGINES[engine].ask ? aiMark(engine) : icon('search');
+    pick.dataset.engine = engine;
+    pick.title = `${what(engine)}. Click to switch to ${ENGINES[nextOf(engine)].label}.`;
+    pick.setAttribute('aria-label', pick.title);
     chips.innerHTML = Object.entries(ENGINES)
       .map(
         ([k, e]) =>
@@ -198,13 +215,25 @@ function initSearch() {
       .join('');
   };
   paint();
-  chips.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-engine]');
-    if (!b) return;
-    engine = b.dataset.engine;
+  const use = (k) => {
+    engine = k;
+    if (!ENGINES[k].ask) base = k;
     paint();
     input.focus();
     updatePlaces();
+  };
+  chips.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-engine]');
+    if (b) use(b.dataset.engine);
+  });
+  pick.addEventListener('click', () => {
+    use(nextOf(engine));
+    S.searchEngine = engine;
+    saveSettings(S);
+  });
+  // A click anywhere else in the box goes to the text.
+  $('.search-box').addEventListener('click', (e) => {
+    if (!e.target.closest('button, a, input')) input.focus();
   });
   const navigate = (url, newTab) => (newTab ? window.open(url, '_blank') : (location.href = url));
   initPlaces({ input, isActive: () => engine === 'maps' || /^!m\s/i.test(input.value), navigate });
@@ -223,8 +252,8 @@ function initSearch() {
       }
     }
     const looksLikeUrl = !/\s/.test(q) && /^(https?:\/\/)?(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?(\/\S*)?$/i.test(q) && !bang;
-    // Claude and ChatGPT answer on the page when there's an API key; otherwise (or with
-    // Ctrl/Cmd+Enter) the question opens on their site, where you're signed in.
+    // Claude, ChatGPT and Gemini answer on the page when there's an API key; otherwise (or
+    // with Ctrl/Cmd+Enter) the question opens on their site, where you're signed in.
     if (ENGINES[use].ask && !looksLikeUrl && !newTab && hasKey(use)) {
       ask(use, q);
       input.value = '';

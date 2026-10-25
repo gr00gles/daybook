@@ -19,14 +19,14 @@
 
     <section class="finder">
       <form class="search" id="search-form" role="search">
-        <label class="search-box">
-          <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.4-4.4"/></svg>
+        <div class="search-box">
+          <button class="ai-pick" id="ai-pick" type="button"></button>
           <input id="search-input" type="search" placeholder="Search Google" autocomplete="off" spellcheck="false" aria-label="Search" aria-keyshortcuts="/" title="Press / to search">
           <span class="flip" id="flip" hidden>
             <span class="next-up" id="next-up" hidden></span>
             <span class="holiday-line" id="holiday-line" hidden></span>
           </span>
-        </label>
+        </div>
         <div class="places pop" id="places" hidden></div>
         <div class="ask pop" id="ask" role="region" aria-label="Answer" hidden></div>
         <div class="engines" id="engines" role="radiogroup" aria-label="Search with"></div>
@@ -70,7 +70,7 @@
       <header class="card-head">
         <h2 id="today-h">Today</h2>
         <span class="head-meta" id="today-date"></span>
-        <button class="btn small add-event" type="button" id="add-event"></button>
+        <button class="icon-btn small add-event" type="button" id="add-event" title="Add event" aria-label="Add event"></button>
       </header>
       <div class="card-body" id="today-body"><p class="quiet">Loading your calendars…</p></div>
     </section>

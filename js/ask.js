@@ -1,11 +1,12 @@
-// Ask Claude or ChatGPT from the search box. With an API key saved in Settings, the answer
-// streams into a bubble under the search box and follow-ups continue the same conversation.
-// Without a key, the question opens in claude.ai or chatgpt.com, where you are signed in.
+// Ask Claude, ChatGPT or Gemini from the search box. With an API key saved in Settings, the
+// answer streams into a bubble under the search box and follow-ups continue the same
+// conversation. Without a key, the question opens in claude.ai, chatgpt.com or
+// gemini.google.com, where you are signed in.
 // Keys stay in chrome.storage.local on this computer; they never sync with your profile.
 import { $, esc, safeUrl, local, showPop } from './util.js';
 import { icon } from './icons.js';
 
-export const AI_DEFAULTS = { anthropicKey: '', claudeModel: 'claude-opus-5-5', openaiKey: '', openaiModel: 'gpt-5' };
+export const AI_DEFAULTS = { anthropicKey: '', claudeModel: 'claude-opus-5-5', openaiKey: '', openaiModel: 'gpt-5', geminiKey: '', geminiModel: 'gemini-flash-latest' };
 
 export const CLAUDE_MODELS = {
   'claude-opus-5-5': 'Claude Opus 5.5 (smartest)',
@@ -16,6 +17,7 @@ export const CLAUDE_MODELS = {
 const PROVIDERS = {
   claude: { label: 'Claude', site: 'Claude.ai', siteUrl: 'https://claude.ai/new?q=%s', keyField: 'anthropicKey' },
   chatgpt: { label: 'ChatGPT', site: 'ChatGPT', siteUrl: 'https://chatgpt.com/?q=%s', keyField: 'openaiKey' },
+  gemini: { label: 'Gemini', site: 'Gemini', siteUrl: 'https://gemini.google.com/app#daybook-q=%s', keyField: 'geminiKey' },
 };
 
 const SYSTEM =
@@ -42,7 +44,8 @@ async function readSSE(res, onData) {
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
-    buf += value;
+    // Gemini ends its lines with \r\n; a \r at the end of a piece waits for the \n after it.
+    buf = (buf + value).replace(/\r\n/g, '\n');
     let cut;
     while ((cut = buf.indexOf('\n\n')) >= 0) {
       const chunk = buf.slice(0, cut);
@@ -118,6 +121,25 @@ async function streamOpenAI(messages, onText, signal) {
   await readSSE(res, (ev) => {
     if (ev.error) throw new Error(ev.error.message || 'ChatGPT stopped with an error.');
     const text = ev.choices?.[0]?.delta?.content;
+    if (text) onText(text);
+  });
+}
+
+async function streamGemini(messages, onText, signal) {
+  const model = ai.geminiModel.trim() || AI_DEFAULTS.geminiModel;
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': ai.geminiKey.trim() },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+    }),
+    signal,
+  });
+  if (!res.ok) throw await failure(res, 'Google');
+  await readSSE(res, (ev) => {
+    if (ev.error) throw new Error(ev.error.message || 'Gemini stopped with an error.');
+    const text = (ev.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
     if (text) onText(text);
   });
 }
@@ -250,7 +272,7 @@ export async function ask(engine, question) {
     });
   };
   try {
-    await (engine === 'claude' ? streamClaude : streamOpenAI)(history, onText, mine.signal);
+    await { claude: streamClaude, chatgpt: streamOpenAI, gemini: streamGemini }[engine](history, onText, mine.signal);
     if (!reply.content.trim()) reply.error = 'No answer came back. Try asking again.';
   } catch (err) {
     if (mine.signal.aborted) return;

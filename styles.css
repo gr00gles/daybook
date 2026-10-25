@@ -398,7 +398,7 @@ svg { flex: none; }
   align-items: center;
   gap: 12px;
   height: 46px;
-  padding: 0 10px 0 17px;
+  padding: 0 10px 0 7px;
   border-radius: 999px;
   background: var(--glass-strong);
   -webkit-backdrop-filter: var(--blur);
@@ -410,6 +410,31 @@ svg { flex: none; }
 }
 .search-box:focus-within { background: var(--control-hover); box-shadow: inset 0 0 0 1px var(--glass-edge), 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent), var(--shadow); }
 .search-box .ui-icon { width: 19px; height: 19px; }
+/* Who gets what's typed (app.js): an assistant's mark, or the magnifier for the search engine.
+   A click turns it to the next one. */
+.ai-pick {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--control);
+  box-shadow: inset 0 0 0 1px var(--hair), 0 1px 2px var(--glass-shade);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color .15s ease, box-shadow .15s ease;
+}
+.ai-pick:hover { background: var(--control-hover); box-shadow: inset 0 0 0 1px var(--fill-2), 0 2px 6px var(--glass-shade); }
+.ai-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ai-pick .ai-mark { width: 21px; height: 21px; }
+.ai-pick[data-engine="chatgpt"] { color: var(--ink); }
+.ai-pick > svg { animation: ai-turn .35s cubic-bezier(.2, .8, .2, 1); }
+@keyframes ai-turn { from { transform: rotate(-90deg) scale(.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ai-pick > svg { animation: none; } }
 .search-box input {
   flex: 1;
   min-width: 0;
@@ -818,12 +843,18 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .wx-icon .i-moon { stroke: var(--ink-2); }
 .wx-icon .i-rain { stroke: var(--rain); }
 
-/* Arrange, refresh and settings, side by side at the end of the band. */
+/* Arrange, refresh and settings, small and stacked at the end of the band, so they take little of
+   its width; quiet until the pointer comes near. */
 .toolbar {
-  display: flex;
-  gap: 2px;
-  margin: -2px -6px 0 0;
+  display: grid;
+  gap: 1px;
+  margin: -4px -8px 0 -8px;
+  opacity: .7;
+  transition: opacity .15s ease;
 }
+.toolbar:hover, .toolbar:focus-within { opacity: 1; }
+.toolbar .icon-btn { width: 28px; height: 28px; }
+.toolbar .ui-icon { width: 17px; height: 17px; }
 .icon-btn {
   display: grid;
   place-items: center;
@@ -1027,7 +1058,7 @@ a.chip:hover { background: var(--fill-2); }
 
 /* ---- Today ------------------------------------------------------------------- */
 
-.ruler { margin: 4px 0 14px; }
+.ruler { margin: 0 0 6px; }
 .ruler-track {
   position: relative;
   height: calc(var(--lanes) * 9px + 4px);
@@ -1044,7 +1075,7 @@ a.chip:hover { background: var(--fill-2); }
 .ruler-block.past { opacity: .4; }
 .ruler-now { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--now); }
 .ruler-now::before { content: ""; position: absolute; top: -3px; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--now); }
-.ruler-ticks { position: relative; height: 18px; }
+.ruler-ticks { position: relative; height: 16px; }
 .tick { position: absolute; top: 5px; transform: translateX(-50%); font-size: 11px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* All-day items: an "All day" label in the time column and plain items, not pills. Each
@@ -1063,21 +1094,21 @@ a.chip:hover { background: var(--fill-2); }
 .allday .chip { gap: 8px; padding: 0; border: 0; border-radius: 4px; background: none; box-shadow: none; font-size: 14px; font-weight: 500; line-height: 1.6; color: var(--ink); text-align: left; cursor: pointer; }
 .allday .chip:hover { background: none; text-decoration: underline; text-underline-offset: 3px; }
 .allday .chip .cal-logo { width: 15px; height: 15px; }
-.ev-list { list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 2px; }
+.ev-list { list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 1px; }
 .ev {
   position: relative;
   display: grid;
   grid-template-columns: 74px minmax(0, 1fr) auto auto;
   align-items: start;
   gap: 2px 10px;
-  padding: 7px 10px;
+  padding: 4px 10px;
   border-radius: 12px;
   transition: background-color .12s ease;
 }
 /* The whole row opens the event; the title is the button, stretched over the row. */
 .ev:hover { background: var(--fill); }
 .ev .join { position: relative; z-index: 1; }
-.ev-time { display: grid; font-size: 13px; line-height: 1.45; font-weight: 500; color: var(--ink-2); padding-top: 1px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ev-time { display: grid; font-size: 13px; line-height: 1.3; font-weight: 500; color: var(--ink-2); padding-top: 1px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ev-time .to { color: var(--muted); font-size: 12px; font-weight: 400; }
 .ev-main { min-width: 0; }
 .ev-title {
@@ -1116,13 +1147,13 @@ a.chip:hover { background: var(--fill-2); }
 .pill { align-self: center; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 3px 8px; border-radius: 999px; }
 .now-pill { padding: 0; background: none; color: var(--accent); font-size: 12.5px; text-transform: none; letter-spacing: 0; }
 .ev .join { align-self: center; }
-.ev-list.compact .ev { grid-template-columns: 74px minmax(0, 1fr) auto auto; padding: 5px 10px; }
+.ev-list.compact .ev { grid-template-columns: 74px minmax(0, 1fr) auto auto; padding: 3px 10px; }
 .ev-list.compact .ev-title { font-weight: 500; font-size: 14px; }
 
-.upcoming { margin: 18px -10px 0; padding: 14px 10px 0; background: linear-gradient(var(--hair), var(--hair)) 10px 0 / calc(100% - 20px) 1px no-repeat; max-height: 460px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; }
+.upcoming { margin: 10px -10px 0; padding: 8px 10px 0; background: linear-gradient(var(--hair), var(--hair)) 10px 0 / calc(100% - 20px) 1px no-repeat; max-height: 460px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; }
 .upcoming.scrolls { mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); padding-bottom: 24px; }
-.day h3 { display: flex; align-items: baseline; gap: 8px; margin: 14px 0 4px; font: 600 15px var(--font-display); letter-spacing: -0.01em; }
-.day:first-of-type h3 { margin-top: 6px; }
+.day h3 { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 2px; font: 600 15px var(--font-display); letter-spacing: -0.01em; }
+.day:first-of-type h3 { margin-top: 2px; }
 .day-date { font: 400 12.5px var(--font-body); color: var(--muted); }
 .day .allday { margin: 4px 0 4px; }
 
@@ -1254,8 +1285,42 @@ a.chip:hover { background: var(--fill-2); }
 .mhol { display: block; padding: 0 4px; border-radius: 5px; font-size: 10.5px; font-weight: 650; line-height: 1.35; color: color-mix(in srgb, var(--hol, var(--serious)) 68%, var(--ink)); background: color-mix(in srgb, var(--hol, var(--serious)) 14%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mhol .hol-glyph { margin-right: 3px; font-size: 10px; }
 .mhol.clock { color: var(--muted); font-weight: 500; background: none; }
-.mday.hol:not(.sel) { background: color-mix(in srgb, var(--hol) 7%, transparent); }
-.mday.hol:not(.sel):hover { background: color-mix(in srgb, var(--hol) 12%, transparent); }
+/* A holiday's whole day is a little party: washed in its color and sprinkled with confetti, its
+   number on a badge of that color, and its emblem big in the corner, wiggling under the pointer. */
+.mday.hol {
+  --dot: color-mix(in srgb, var(--hol) 60%, transparent);
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 16% 84%, var(--dot) 0 1.7px, transparent 2.3px),
+    radial-gradient(circle at 44% 94%, var(--dot) 0 1.3px, transparent 1.9px),
+    radial-gradient(circle at 84% 16%, var(--dot) 0 1.5px, transparent 2.1px),
+    radial-gradient(circle at 64% 40%, var(--dot) 0 1.1px, transparent 1.7px),
+    radial-gradient(circle at 92% 58%, var(--dot) 0 1.3px, transparent 1.9px),
+    linear-gradient(150deg, color-mix(in srgb, var(--hol) 26%, transparent), color-mix(in srgb, var(--hol) 8%, transparent) 80%);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--hol) 50%, transparent);
+}
+.mday.hol:hover { background-color: color-mix(in srgb, var(--hol) 10%, transparent); }
+.mday.hol.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.mday.hol.out { opacity: .6; }
+.mday.hol > * { position: relative; z-index: 1; }
+.mday.hol::after {
+  content: attr(data-glyph);
+  position: absolute;
+  right: -2px;
+  bottom: -4px;
+  font: 30px/1 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  opacity: .6;
+  transform: rotate(-12deg);
+  pointer-events: none;
+}
+.mday.hol:hover::after { opacity: .9; animation: hol-wiggle .7s ease-in-out; }
+@keyframes hol-wiggle {
+  25% { transform: rotate(-26deg) scale(1.15); }
+  60% { transform: rotate(6deg) scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) { .mday.hol:hover::after { animation: none; } }
+.mday.hol:not(.today) .mnum { background: var(--hol); color: #fff; font-weight: 700; box-shadow: 0 2px 6px -2px var(--hol); }
 .mdetail-hol { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 .mdetail { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hair); }
 .mdetail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
@@ -1270,7 +1335,7 @@ a.chip:hover { background: var(--fill-2); }
   .mev::before { display: none; }
   .mmore { display: none; }
   .mhol { display: none; }
-  .mday.hol:not(.today) .mnum { box-shadow: inset 0 -2px 0 var(--hol, var(--serious)); border-radius: 4px; }
+  .mday.hol::after { right: -3px; bottom: -3px; font-size: 20px; }
   .mwd { font-size: 10.5px; letter-spacing: 0; }
   .mweek { --bar-top: 31px; --bar-step: 6px; }
   .mbar, .mbar.cont-l, .mbar.cont-r { padding: 0; font-size: 0; background: var(--c); }
@@ -1367,13 +1432,13 @@ a.chip:hover { background: var(--fill-2); }
 .s-delivered { --st: var(--good); }
 .s-problem { --st: var(--critical); }
 .s-minor { --st: var(--accent); }
-.pkg-list { display: grid; gap: 2px; margin: 0 -10px; padding: 0; list-style: none; }
+.pkg-list { display: grid; gap: 0; margin: 0 -10px; padding: 0; list-style: none; }
 .pkg {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 6px 12px 6px 10px;
+  gap: 10px;
+  padding: 4px 12px 4px 10px;
   border-radius: 14px;
   text-decoration: none;
   transition: background-color .12s ease;
@@ -1382,26 +1447,29 @@ a.chip:hover { background: var(--fill-2); }
 .pkg-thumb {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   overflow: hidden;
   background: color-mix(in srgb, var(--st) 12%, var(--glass-strong));
   box-shadow: inset 0 0 0 1px var(--hair);
   color: var(--st);
 }
-.pkg-thumb .ui-icon { width: 20px; height: 20px; }
+.pkg-thumb .ui-icon { width: 18px; height: 18px; }
 .pkg-thumb.photo { background: #fff; }
 .pkg-thumb.photo img { width: 100%; height: 100%; object-fit: contain; }
 .pkg-thumb.logo { background: var(--raised); }
-.pkg-thumb.logo img { width: 26px; height: 26px; border-radius: 6px; }
+.pkg-thumb.logo img { width: 22px; height: 22px; border-radius: 5px; }
 .pkg-text { display: grid; min-width: 0; }
-.pkg-status { font-size: 14px; font-weight: 650; color: var(--st); }
+/* The status and what's coming share the first line; the sender or carrier is under them. */
+.pkg-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; line-height: 1.35; }
+.pkg-status { flex: none; max-width: 65%; font-size: 13.5px; font-weight: 650; color: var(--st); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .s-transit .pkg-status { color: var(--ink); }
-.pkg-title { font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pkg-title { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pkg-title::before { content: "·"; margin-right: 6px; color: var(--muted); }
 .pkg-meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .pkg-when { display: grid; justify-items: end; line-height: 1.25; font-variant-numeric: tabular-nums; }
-.pkg-day { font-size: 13.5px; font-weight: 650; }
+.pkg-day { font-size: 13px; font-weight: 650; }
 .pkg-date { font-size: 12px; color: var(--muted); }
 .pkg-more { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
 #card-deliveries.is-empty .card-head { margin-bottom: 4px; }
@@ -1786,13 +1854,14 @@ a.chip:hover { background: var(--fill-2); }
 /* ---- State jobs ---------------------------------------------------------------- */
 
 #jobs-filter { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.jb-day { margin: 12px 0 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.jb-day { margin: 8px 0 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
 .jb-day:first-child { margin-top: 0; }
-.jb-list { list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 2px; }
+.jb-list { list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 0; }
+.jb-list > li { position: relative; }
 .jb {
   display: grid;
-  gap: 2px;
-  padding: 7px 10px;
+  gap: 1px;
+  padding: 5px 40px 5px 10px;
   border-radius: 14px;
   text-decoration: none;
   color: inherit;
@@ -1805,6 +1874,30 @@ a.chip:hover { background: var(--fill-2); }
 .jb-tags { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .jb-grade { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--cat-6); }
 .jb-note { margin: 10px 0 0; font-size: 12.5px; }
+/* Mark as reviewed: an eye in the corner of the posting under the pointer. */
+.jb-seen {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--control);
+  box-shadow: inset 0 0 0 1px var(--hair), 0 1px 3px var(--glass-shade);
+  color: var(--ink-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, background-color .12s ease, color .12s ease;
+}
+.jb-seen .ui-icon { width: 17px; height: 17px; }
+.jb-seen:hover { background: var(--accent); color: var(--accent-ink); }
+.jb-list > li:hover .jb-seen, .jb-seen:focus-visible { opacity: 1; }
+@media (hover: none) { .jb-seen { opacity: 1; } }
 
 /* Package tracking in Settings: the packages added by hand, and the form to add one. */
 .trk-mail { margin: 10px 0 4px; }
@@ -1996,7 +2089,11 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 
 /* ---- New event --------------------------------------------------------------- */
 
-.add-event { margin-left: auto; align-self: center; display: inline-flex; align-items: center; gap: 4px; }
+/* Today's add button: a + at the end of its heading, showing while the pointer is on the card. */
+.add-event { margin: -4px -6px -4px auto; align-self: center; opacity: 0; transition: opacity .15s ease, background-color .15s ease; }
+#card-today:hover .add-event, .add-event:focus-visible { opacity: 1; }
+@media (hover: none) { .add-event { opacity: 1; } }
+#card-today > .card-head { margin-bottom: 6px; }
 .event-dialog {
   width: min(500px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
@@ -2479,15 +2576,16 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 .flip-card.fixed > .flip-deck { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .flip-card.fixed .flip-face:not(.flip-off):has(> textarea) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 #card-month.fixed > #month-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-#card-month.fixed .mgrid { flex: 1 1 0; min-height: 0; grid-template-rows: auto; grid-auto-rows: minmax(0, 1fr); }
+/* Each week is at least as tall as its events (js/layout.js keeps the card that tall), and they share what's left. */
+#card-month.fixed .mgrid { flex: 1 1 0; min-height: 0; grid-template-rows: auto; grid-auto-rows: minmax(min-content, 1fr); }
 #card-month.fixed .mday { min-height: 0; overflow: hidden; }
 #card-month.fixed .mdetail { flex: none; max-height: 45%; overflow-y: auto; scrollbar-width: thin; }
-/* Headings whose items were all dropped go with them. A day in Today's Coming up shows whole
-   or not at all, and the days after it go too (items go from the end), even ones with only
-   all-day events. */
+/* Headings whose items were all dropped go with them. A day in Today's Coming up shows the
+   events that fit, and the days after a day cut short go too (items go from the end), even ones
+   with only all-day events. */
 .ev-list:has(> li[data-clip]) ~ .upcoming,
-.upcoming:has(> .day:first-of-type li[data-clip]),
-.day:has(li[data-clip]),
+.upcoming:has(> .day:first-of-type li[data-clip]):not(:has(> .day:first-of-type li:not([data-clip]))),
+.day:has(li[data-clip]):not(:has(li:not([data-clip]))),
 .day:has(li[data-clip]) ~ .day,
 .tm-news-wrap:has(li[data-clip]):not(:has(li:not([data-clip]))),
 .ae-list:has(> li[data-clip]):not(:has(> li:not([data-clip]))),

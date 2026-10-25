@@ -35,6 +35,9 @@ const MIN_HEIGHT = 140;
 const SHARE = { 'card-today': 3, 'card-month': 3, 'card-mail': 3, 'card-flip': 3, 'card-news': 3, 'card-youtube': 3 };
 // The least a card gets when the column is short: the month needs its weeks.
 const FLOOR = { 'card-month': 320 };
+// Cards that keep at least this many items however short the column, taking the room from the
+// cards beside them. The month keeps every event its days show (up to three a day; see needed).
+const KEEP = { 'card-jobs': 2, 'card-deliveries': 4 };
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
 
@@ -125,7 +128,27 @@ function fitItems(card, h) {
 // ---- Sizes ------------------------------------------------------------------------------
 
 const share = (card) => SHARE[card.id] || 2;
-const floor = (card) => FLOOR[card.id] || MIN_HEIGHT;
+
+// The height a card needs to show what it keeps, measured at its own height (see release): its
+// first KEEP items, or the whole month with every event its days show. A day opened under the
+// month isn't counted.
+function needed(card) {
+  if (card.id === 'card-month') {
+    const detail = $('.mdetail', card);
+    if (detail) detail.style.display = 'none';
+    const h = card.offsetHeight;
+    if (detail) detail.style.display = '';
+    return h;
+  }
+  const k = KEEP[card.id];
+  if (!k) return 0;
+  const items = itemsOf(card);
+  showFirst(items, k);
+  const h = card.offsetHeight;
+  showFirst(items, items.length);
+  return h;
+}
+const floorOf = (card) => Math.max(FLOOR[card.id] || MIN_HEIGHT, needed(card));
 
 // Back to a card's own height, with every item, for measuring.
 function release(card) {
@@ -143,9 +166,11 @@ function fix(card, h) {
 }
 
 // Splits `room` pixels between a column's cards: those with a height set by dragging keep it,
-// and the others share the rest by SHARE, none below its FLOOR. With every height set, the
-// last card still takes what's left, so the column ends at the bottom.
-function split(col, cards, room) {
+// and the others share the rest by SHARE, none below its floor (floors, by card). With every
+// height set, the last card still takes what's left, so the column ends at the bottom. When the
+// floors don't fit, the column runs past the bottom rather than cutting a card below MIN_HEIGHT.
+function split(col, cards, room, floors) {
+  const floor = (c) => floors.get(c);
   const gap = parseFloat(getComputedStyle(col).rowGap) || 0;
   let free = room - gap * Math.max(0, cards.length - 1);
   const h = new Map();
@@ -162,7 +187,7 @@ function split(col, cards, room) {
     free -= floor(low);
     flex = flex.filter((c) => c !== low);
   }
-  for (const c of flex) h.set(c, (free * share(c)) / total());
+  for (const c of flex) h.set(c, Math.max(MIN_HEIGHT, (free * share(c)) / total()));
   return cards.map((c) => h.get(c));
 }
 
@@ -173,7 +198,8 @@ function fitBoard() {
     const cards = cardsIn(col).filter(shown);
     cardsIn(col).forEach(release);
     const top = col.getBoundingClientRect().top + scrollY;
-    const heights = across ? split(col, cards, bottom - top) : cards.map((c) => layout.heights[c.id] || share(c) * UNIT);
+    const floors = new Map(cards.map((c) => [c, floorOf(c)]));
+    const heights = across ? split(col, cards, bottom - top, floors) : cards.map((c) => layout.heights[c.id] || Math.max(share(c) * UNIT, floors.get(c)));
     cards.forEach((card, i) => fix(card, heights[i]));
   }
 }

@@ -5,7 +5,8 @@
 // each posting's own page, which is read once per posting. Every column and detail is kept, so
 // the rules in Settings can use any field the site lists. Rules filter the list as it's drawn,
 // so changing them doesn't refetch. The card shows the newest few; jobs.html lists them all.
-import { $, esc, cached, local, errorText, addDays } from './util.js';
+// Postings marked as reviewed (the eye on each one) leave the card and the ticker.
+import { $, esc, cached, local, errorText, addDays, showToast } from './util.js';
 import { icon } from './icons.js';
 import { setTicker } from './ticker.js';
 
@@ -635,11 +636,24 @@ function dayLabel(iso) {
   return day.toLocaleDateString(undefined, diff < 7 ? { weekday: 'long' } : { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+// Postings you've marked as reviewed, kept on this computer by id with when.
+const REVIEWED = 'jobs:reviewed';
+let reviewed = {};
+
+async function setReviewed(id, on) {
+  reviewed = (await local.get(REVIEWED)) || {};
+  if (on) reviewed[id] = Date.now();
+  else delete reviewed[id];
+  // Postings are kept two weeks; a month covers them.
+  for (const [k, at] of Object.entries(reviewed)) if (Date.now() - at > 30 * 86400e3) delete reviewed[k];
+  await local.set(REVIEWED, reviewed);
+}
+
 function item(j) {
   const where = [agencyName(j.agency), j.county].filter(Boolean).join(' · ');
   const grade = j.grade && (/^\d+$/.test(j.grade) ? `Grade ${j.grade}` : j.grade);
   const tags = [salaryText(j), j.due && `Apply by ${shortDate(j.due)}`].filter(Boolean);
-  return `<li><a class="jb" href="${esc(postingUrl(j.id))}" target="_blank" rel="noopener">
+  return `<li><button class="jb-seen" type="button" data-jb-seen="${esc(j.id)}" title="Mark as reviewed" aria-label="Mark as reviewed: ${esc(j.title)}">${icon('eye')}</button><a class="jb" href="${esc(postingUrl(j.id))}" target="_blank" rel="noopener">
     <span class="jb-title">${esc(j.title)}</span>
     ${where ? `<span class="jb-meta">${esc(where)}</span>` : ''}
     ${grade || tags.length ? `<span class="jb-tags">${grade ? `<span class="jb-grade">${esc(grade)}</span>` : ''}${tags.map((t) => `<span>${esc(t)}</span>`).join('')}</span>` : ''}
@@ -685,24 +699,50 @@ async function render() {
   }
   const details = await loadDetails();
   const all = withDetails(data.jobs, details);
-  const jobs = pick(all, J);
+  const matching = pick(all, J);
+  const jobs = matching.filter((j) => !reviewed[j.id]);
   // Rules about details leave out postings whose pages haven't been read.
   const note = unreadText(unread(pick(all, J, { rules: false }), data, J, details));
   $('#jobs-count').textContent = jobs.length || '';
-  paintLinks(jobs.length);
+  paintLinks(matching.length);
   setTicker(
     'jobs',
     jobs.map((j) => ({ tag: dayLabel(j.posted), title: j.title, meta: salaryText(j) || agencyName(j.agency), href: postingUrl(j.id), newTab: true })),
   );
   body.innerHTML = `${
-    jobs.length ? list(jobs.slice(0, SHOWN)) : `<p class="quiet${note ? '' : ' is-empty'}">No new postings${rules ? ' match your rules' : ''} ${esc(whenText(J))}.</p>`
+    jobs.length
+      ? list(jobs.slice(0, SHOWN))
+      : matching.length
+        ? `<p class="quiet${note ? '' : ' is-empty'}">You’ve reviewed every posting ${esc(whenText(J))}.</p>`
+        : `<p class="quiet${note ? '' : ' is-empty'}">No new postings${rules ? ' match your rules' : ''} ${esc(whenText(J))}.</p>`
   }${note ? `<p class="quiet jb-note">${esc(note)}</p>` : ''}`;
 }
 
-let watching = false;
-export function refreshJobs(S, force = false) {
-  if (!watching) onDetails(() => card && render());
-  watching = true;
+let watching = null;
+async function watch() {
+  onDetails(() => card && render());
+  reviewed = (await local.get(REVIEWED)) || {};
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[REVIEWED]) return;
+    reviewed = changes[REVIEWED].newValue || {};
+    if (card) render();
+  });
+  $('#jobs-body').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-jb-seen]');
+    if (!b) return;
+    const id = b.dataset.jbSeen;
+    await setReviewed(id, true);
+    await render();
+    showToast('Marked as reviewed', async () => {
+      await setReviewed(id, false);
+      render();
+    });
+  });
+}
+
+export async function refreshJobs(S, force = false) {
+  watching ||= watch();
+  await watching;
   loadJobs(force, (data, meta) => {
     card = { S, data, meta };
     render();
