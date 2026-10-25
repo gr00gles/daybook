@@ -2308,6 +2308,7 @@ code { font: 400 12px var(--font-mono); }
   background: var(--surface);
 }
 .sheet-foot .hint { margin: 0; }
+.sheet-foot .sheet-version { margin-left: auto; color: var(--faint); }
 
 /* ---- Sign-in controls (setup screen and Settings) ----------------------------- */
 
