@@ -78,9 +78,11 @@ function cell(d0, events, now, week, c) {
   const shown = singles.slice(0, room);
   const more = singles.length - shown.length + week.hidden[c];
   const label = `${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${hols.map((h) => `, ${h.name}`).join('')}: ${list.length ? `${list.length} event${list.length === 1 ? '' : 's'}` : 'nothing scheduled'}`;
-  const festive = hols.find((h) => !h.clock);
-  const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected === d0 && 'sel', festive && 'hol', festive && `hol-${holidayTheme(festive).id}`].filter(Boolean).join(' ');
-  return `<button type="button" class="${cls}" data-day="${d0}" aria-label="${esc(label)}"${selected === d0 ? ' aria-pressed="true"' : ''}${hols.length ? ` title="${esc(hols.map((h) => h.name).join(', '))}"` : ''}${festive ? ` style="--hol: ${holidayTheme(festive).color}"` : ''}>
+  // The whole day dresses up for a holiday, even one a calendar already names.
+  const festive = settingsRef.show.sky ? holidaysOn(d0).find((h) => !h.clock) : null;
+  const theme = festive && holidayTheme(festive);
+  const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected === d0 && 'sel', festive && 'hol'].filter(Boolean).join(' ');
+  return `<button type="button" class="${cls}" data-day="${d0}" aria-label="${esc(label)}"${selected === d0 ? ' aria-pressed="true"' : ''}${hols.length ? ` title="${esc(hols.map((h) => h.name).join(', '))}"` : ''}${theme ? ` style="--hol: ${theme.color}" data-hol="${theme.id}" data-glyph="${esc(theme.glyph)}"` : ''}>
     <span class="mnum">${d.getDate()}</span>
     ${week.lanes ? '<span class="mlanes" aria-hidden="true"></span>' : ''}
     ${hols.map((h) => `<span class="mhol${h.clock ? ' clock' : ''}" style="--hol: ${holidayTheme(h).color}"><span class="hol-glyph" aria-hidden="true">${holidayTheme(h).glyph}</span>${esc(h.name)}</span>`).join('')}

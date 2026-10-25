@@ -83,3 +83,13 @@ export const GROUP_ICONS = ['hammer', 'cart', 'home', 'wrench', 'car', 'plane', 
 export const hasIcon = (name) => Object.hasOwn(UI, name);
 
 export const icon = (name, cls = 'ui-icon') => `<svg class="${cls}" ${ATTR}>${UI[name]}</svg>`;
+
+// The assistants' marks, drawn small for the circle in the search box: Claude's spark,
+// ChatGPT's knot and Gemini's four-pointed star.
+const SPARK = Array.from({ length: 12 }, (_, i) => i * 30 + (i % 2 ? 4 : -3));
+const AI_MARKS = {
+  claude: `<path d="${rays(12, 12, 2.2, 10, SPARK.filter((_, i) => i % 2 === 0))}" stroke="#d97757" stroke-width="2.4"/><path d="${rays(12, 12, 2.2, 7.6, SPARK.filter((_, i) => i % 2))}" stroke="#d97757" stroke-width="2.1"/>`,
+  chatgpt: `<g stroke="currentColor" stroke-width="1.5">${[0, 60, 120, 180, 240, 300].map((a) => `<rect x="8.6" y="2.6" width="6.8" height="11.6" rx="3.4" transform="rotate(${a} 12 12)"/>`).join('')}</g>`,
+  gemini: `<defs><linearGradient id="gem-g" x1="3" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4285f4"/><stop offset=".55" stop-color="#9b72cb"/><stop offset="1" stop-color="#d96570"/></linearGradient></defs><path d="M12 2c.6 5.4 4.6 9.4 10 10-5.4.6-9.4 4.6-10 10-.6-5.4-4.6-9.4-10-10 5.4-.6 9.4-4.6 10-10z" fill="url(#gem-g)" stroke="none"/>`,
+};
+export const aiMark = (name) => `<svg class="ai-mark" ${ATTR}>${AI_MARKS[name]}</svg>`;
