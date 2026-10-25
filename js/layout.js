@@ -12,7 +12,8 @@
 // window and its cards split it by SHARE (see split); otherwise each card is its SHARE times
 // UNIT tall. A height set by dragging overrides either. A card with more than fits drops whole
 // items (emails, games, events, list rows) from the end, never a scroll bar. The exception:
-// Unread and Teams in one column share their room by how much mail there is (see LEAN).
+// Unread and Teams, and NYS jobs and Today, in one column share their room by how much mail or
+// how many postings there are (see LEAN).
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
 import { $, $$, esc, showPop } from './util.js';
 import { icon } from './icons.js';
@@ -44,7 +45,12 @@ const KEEP = { 'card-jobs': 2, 'card-deliveries': 4, 'card-teams': 2 };
 // column: the first takes what it needs to show everything (no more, even under MIN_HEIGHT),
 // the second the rest, neither cut below its floor. Teams grows as the mail goes down, taking
 // all but one line when there's none.
-const LEAN = [['card-mail', 'card-teams']];
+// With `cap`, the first takes no more than the split gave it: NYS jobs gives Today the room its
+// postings don't need, but never takes any of Today's.
+const LEAN = [
+  ['card-mail', 'card-teams'],
+  ['card-jobs', 'card-today', { cap: true }],
+];
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
 
@@ -194,13 +200,13 @@ function split(col, cards, room, floors) {
 // Shares out each LEAN pair's room in a column, for pairs with neither height set by dragging.
 // Measured with the cards released.
 function lean(cards, heights, floors) {
-  for (const ids of LEAN) {
-    const [a, b] = ids.map((id) => cards.findIndex((c) => c.id === id));
-    if (a < 0 || b < 0 || ids.some((id) => layout.heights[id])) continue;
+  for (const [first, second, { cap = false } = {}] of LEAN) {
+    const [a, b] = [first, second].map((id) => cards.findIndex((c) => c.id === id));
+    if (a < 0 || b < 0 || layout.heights[first] || layout.heights[second]) continue;
     const room = heights[a] + heights[b];
     // As short as what it holds, even under MIN_HEIGHT (an empty inbox is one line), but not
     // cut below its floor to make room.
-    const own = cards[a].offsetHeight;
+    const own = cap ? Math.min(cards[a].offsetHeight, heights[a]) : cards[a].offsetHeight;
     const h = Math.min(own, room - floors.get(cards[b]));
     if (h < Math.min(own, floors.get(cards[a]))) continue; // no room for both floors: keep the split
     heights[a] = h;
