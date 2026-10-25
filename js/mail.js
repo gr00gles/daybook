@@ -285,8 +285,6 @@ function render() {
       : '';
   body.innerHTML = `${live.length > 1 && (total || filter !== 'all') ? `<div class="filters" role="group" aria-label="Show mail from">${chips.join('')}</div>` : ''}${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
   $('#mail-links').innerHTML = openLinks + connectOutlook;
-  const ats = list.map(([, s]) => s.at).filter(Boolean);
-  $('#mail-updated').textContent = ats.length ? updatedText(Math.min(...ats)) : '';
 }
 
 const shortLabel = (s) => (s.includes('@') ? s.split('@')[0] : s);

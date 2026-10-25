@@ -25,6 +25,7 @@ import { groupTiles } from './sites.js';
 import { initDeliveries } from './packages.js';
 import { initAsk, ask, hasKey } from './ask.js';
 import { applyLayout, initLayout } from './layout.js';
+import { setCredit } from './credits.js';
 
 const S = await loadSettings();
 await applyLayout();
@@ -388,6 +389,18 @@ $('#refresh-btn').addEventListener('click', (e) => {
   setTimeout(() => btn.classList.remove('spin'), 900);
   refreshAll(true);
 });
+
+// Where the data comes from, once, in soft text under the board.
+const credits = {
+  weather: S.show.weather && 'Weather by <a href="https://open-meteo.com/">Open-Meteo.com</a>',
+  alerts: S.show.alerts && 'alerts by the <a href="https://www.weather.gov/">National Weather Service</a>',
+  news: S.show.news && 'headlines by <a href="https://news.google.com/">Google News</a>',
+  stocks: S.show.stocks && S.stocks.key && 'quotes by <a href="https://finnhub.io/">Finnhub</a>',
+  teams: S.show.teams && S.teams.list.length && 'schedules by <a href="https://www.espn.com/">ESPN</a>',
+  area: S.show.area && S.area.key && 'events by <a href="https://www.ticketmaster.com/">Ticketmaster</a>',
+  jobs: S.show.jobs && 'vacancies from <a href="https://statejobs.ny.gov/">StateJobsNY</a>',
+};
+for (const [key, html] of Object.entries(credits)) setCredit(key, html || '');
 
 initSearch();
 initFlip();

@@ -2,7 +2,7 @@
 // Discovery API (free key from developer.ticketmaster.com), around the weather location.
 // Without a key the card still offers web searches for brewery events, festivals and the
 // weekend, which find the small local listings Ticketmaster doesn't carry.
-import { $, esc, cached, hash, updatedText, errorText, safeUrl, fmtTime } from './util.js';
+import { $, esc, cached, hash, errorText, safeUrl, fmtTime } from './util.js';
 import { locate } from './weather.js';
 import { icon } from './icons.js';
 import { setTicker } from './ticker.js';
@@ -164,7 +164,7 @@ function render(S, loc, data, meta, sig) {
   const body = $('#area-body');
   if (meta.error instanceof KeyRejected) rejected = sig;
   else if (meta.fresh) rejected = '';
-  $('#area-updated').textContent = meta.error && data ? "couldn't refresh" : data ? updatedText(meta.at) : '';
+  $('#area-updated').textContent = meta.error && data ? "couldn't refresh" : '';
   if (rejected === sig) {
     body.innerHTML = `<div class="notice warn"><p>${esc(meta.error.message)}. Check it in Settings.</p><button class="btn small" type="button" data-open-settings="area">Open Settings</button></div>${searches(loc.name)}`;
     return;
@@ -196,7 +196,6 @@ export function refreshArea(S, force = false) {
       return;
     }
     $('#area-place').textContent = loc.name && loc.name !== 'Your location' ? `near ${loc.name}` : '';
-    $('#card-area .credit').hidden = !key;
     if (!key) {
       $('#area-updated').textContent = '';
       body.innerHTML = `<p class="ae-key">A free Ticketmaster key lists concerts, shows and games nearby. <button class="linklike" type="button" data-open-settings="area">Add a key</button></p>${searches(loc.name)}`;
