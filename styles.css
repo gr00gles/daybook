@@ -1667,16 +1667,21 @@ a.chip:hover { background: var(--fill-2); }
 /* ---- Markets ----------------------------------------------------------------- */
 
 .head-meta.open::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--good); vertical-align: 1px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
-/* Always four rows tall, whatever it holds (js/layout.js keeps the card at its own height): up
-   to four symbols in one column, five to eight in two side by side, filled down then across. */
-#card-stocks { --tk-row: 36px; }
-#stocks-body { min-height: calc(4 * var(--tk-row) + 3 * 2px); }
+/* Four rows, whatever it holds: up to four symbols in one column, five to eight in two side by
+   side, filled down then across. On its own the card is the four rows at their tightest, the
+   least the board gives it (js/layout.js); at the height the board sets, the rows spread out to
+   fill it, up to --tk-row each. */
+#card-stocks { --tk-min: 21px; --tk-row: 46px; }
+#card-stocks > .card-head { margin-bottom: 6px; }
+#stocks-body { min-height: calc(4 * var(--tk-min)); }
 .tickers {
-  list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 2px 8px;
-  grid-template-rows: repeat(4, minmax(var(--tk-row), auto)); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 0 8px; line-height: 18px;
+  grid-template-rows: repeat(4, var(--tk-min)); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
 }
 .tickers > li { display: flex; }
-.tickers > li > .tk { flex: 1; min-width: 0; }
+.tickers > li > .tk { flex: 1; min-width: 0; padding-block: 0; }
+#card-stocks.fixed { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+#card-stocks.fixed .tickers { height: 100%; grid-template-rows: repeat(4, minmax(var(--tk-min), var(--tk-row))); }
 .tk {
   display: grid;
   grid-template-columns: 60px minmax(0, 1fr) auto auto;
