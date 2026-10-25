@@ -74,7 +74,7 @@ export const DEFAULTS = {
   packages: { fromMail: true, checkSites: true, tracked: [] },
   area: { key: '', radius: 25, days: 14, kinds: ['music', 'arts', 'other'] }, // Ticketmaster key; radius in miles or km by units
   holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
-  teams: { list: [], calendar: true, news: true }, // teams you follow; the card stays hidden without one
+  teams: { list: [], calendar: true, news: true, wins: true }, // teams you follow; the card stays hidden without one
   // StateJobsNY: days back (-1 yesterday only, 0 from/to), the options of the site's own search
   // (empty for any), and rules of your own, each { field: a column on the site or 'any', op, value }.
   jobs: {
