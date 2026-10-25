@@ -115,10 +115,6 @@ function recentResult(t, games, now = Date.now()) {
   const g = games.filter((x) => x.state === 'post').pop();
   return typeof g?.won === 'boolean' && !games.some((x) => x.state === 'in') && now < endOf(g, t) + WIN_FOR ? g : null;
 }
-function recentWin(t, games, now) {
-  const g = recentResult(t, games, now);
-  return g?.won ? g : null;
-}
 
 // How soon to check again: often while a game is on, less often on game day, else a few hours.
 function freshness(data, now = Date.now()) {
@@ -175,13 +171,14 @@ function teamRow(t, info, S) {
   const now = Date.now();
   const games = info?.games || [];
   const g = featured(games, now);
-  const win = S.teams.wins !== false ? recentWin(t, games, now) : null;
+  // A result the search box bubble is showing isn't repeated under the row.
+  const shown = S.teams.wins !== false ? recentResult(t, games, now) : null;
   const last = games.filter((x) => x.state === 'post' && x !== g).pop();
-  const lastText = last && `${last === win ? `Won ${last.us}–${last.them}` : `Last: ${resultText(last)}`} ${last.home || last.neutral ? 'vs' : 'at'} `;
   const meta = [info?.record, info?.standing].filter(Boolean).map(esc);
-  if (last) {
-    const text = `${esc(lastText)}${img(last.opp.logo, 'tm-meta-logo', 14)}${esc(`${last.opp.rank ? `#${last.opp.rank} ` : ''}${last.opp.short}`)}`;
-    meta.push(last === win ? `<span class="tm-won">${text}</span>` : text);
+  if (last && last !== shown) {
+    meta.push(
+      `${esc(`Last: ${resultText(last)} ${last.home || last.neutral ? 'vs' : 'at'} `)}${img(last.opp.logo, 'tm-meta-logo', 14)}${esc(`${last.opp.rank ? `#${last.opp.rank} ` : ''}${last.opp.short}`)}`,
+    );
   }
   let main;
   if (!info) {
@@ -195,7 +192,7 @@ function teamRow(t, info, S) {
       when = `<span class="tm-live">Live</span>${esc(g.detail)}`;
       side = `<span class="tm-score">${esc(g.us ?? '0')}–${esc(g.them ?? '0')}</span>`;
     } else if (g.state === 'post') {
-      when = `${g === win ? '<span class="tm-win">Win</span>' : ''}${esc(`Final${g.detail && g.detail !== 'Final' ? ` (${g.detail})` : ''}`)}`;
+      when = `${esc(`Final${g.detail && g.detail !== 'Final' ? ` (${g.detail})` : ''}`)}`;
       side = `<span class="tm-score ${g.won ? 'won' : g.won === false ? 'lost' : ''}">${esc(resultText(g))}</span>`;
     } else {
       const date = new Date(g.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -209,8 +206,7 @@ function teamRow(t, info, S) {
       ${side}
     </a>`;
   }
-  // A win wears the team's color for a day.
-  return `<li class="team${win ? ' won' : ''}"${win ? ` style="--c: ${hex(t.color) || 'var(--good)'}"` : ''}>
+  return `<li class="team">
     ${main}
     ${meta.length ? `<p class="tm-meta">${meta.join(' · ')}</p>` : ''}
   </li>`;
