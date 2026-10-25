@@ -3,22 +3,40 @@
 // subject or preview.
 //
 // Gmail: Daybook opens Gmail's own page out of sight (frames.js) with a search for shipping
-// emails, signed in the way you already are in this browser, and gmail-page.js reads the
-// results and each email's printable page. No Google API and no permission to give.
-// Outlook: the same Outlook sign-in the Unread card uses searches the mailbox.
+// emails in the folders picked for Deliveries, signed in the way you already are in this
+// browser, and gmail-page.js reads the results and each email's printable page. No Google API
+// and no permission to give.
+// Outlook: the same Outlook sign-in the Unread card uses searches the whole mailbox or the
+// folders picked.
 // Each email becomes { msgId, subject, from, fromAddr, at, url, snippet, body (its text),
 // links (its tracking links), picture (the product's), full: true } for packages.js to read.
 import { cached, hash, local } from './util.js';
 import { graph } from './msauth.js';
 import { allowFrames, dropFrames, readHidden } from './frames.js';
 import { aboutPackage } from './packages.js';
+import { GMAIL_FOLDERS } from './settings.js';
 
 const KEY = 'pkg:mail';
 const RULE = 4102; // the session rule that lets Gmail's page load in Daybook's frames
 const DAYS = 14;
 const MAX_ACCOUNTS = 3;
 const BODY_CHARS = 15000;
-const GMAIL_SEARCH = `newer_than:${DAYS}d -category:promotions -category:social {subject:shipped subject:shipping subject:delivered subject:delivery subject:arriving subject:arrived subject:shipment subject:package subject:order subject:ordered subject:tracking "tracking number" "out for delivery" "has shipped" "on its way" "was delivered" "estimated delivery" "expected delivery"}`;
+const GMAIL_WORDS = `{subject:shipped subject:shipping subject:delivered subject:delivery subject:arriving subject:arrived subject:shipment subject:package subject:order subject:ordered subject:tracking "tracking number" "out for delivery" "has shipped" "on its way" "was delivered" "estimated delivery" "expected delivery"}`;
+
+const labelNames = (labels) => String(labels || '').split(',').map((l) => l.trim()).filter(Boolean);
+// What an account's search looks in ({ folders, labels }; see shippingFolders), as Gmail search
+// words: All mail (everything but Spam and Trash) leaves out Promotions and Social unless they're
+// ticked too; otherwise any of the folders and labels ticked. Null with nothing ticked.
+export function gmailWhere({ folders = [], labels = '' }) {
+  if (folders.includes('all')) return ['promotions', 'social'].filter((k) => !folders.includes(k)).map((k) => `-category:${k}`).join(' ');
+  // Gmail's search spells a label in lower case, with dashes for spaces and slashes.
+  const terms = [
+    ...folders.filter((k) => GMAIL_FOLDERS[k]).map((k) => GMAIL_FOLDERS[k].search),
+    ...labelNames(labels).map((l) => `label:${l.toLowerCase().replace(/[\s/]+/g, '-').replace(/["{}()]/g, '')}`),
+  ];
+  return terms.length ? `{${terms.join(' ')}}` : null;
+}
+const gmailSearch = (where) => `newer_than:${DAYS}d ${gmailWhere(where)} ${GMAIL_WORDS}`.replace(/ +/g, ' ');
 const OUTLOOK_SEARCH = 'shipped OR shipping OR delivered OR delivery OR arriving OR arrived OR shipment OR package OR tracking OR ordered';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -108,7 +126,7 @@ export function fromHtml(m, html) {
 
 // One Gmail account's shipping emails, through its own page.
 async function readGmail(acct) {
-  const hashPart = encodeURIComponent(GMAIL_SEARCH).replace(/%20/g, '+');
+  const hashPart = encodeURIComponent(gmailSearch(acct.where)).replace(/%20/g, '+');
   const msg = await readHidden(`https://mail.google.com/mail/u/${acct.index}/#search/${hashPart}`, {
     type: 'gmail-page',
     hosts: ['mail.google.com'],
@@ -148,14 +166,16 @@ async function readGmail(acct) {
   return out;
 }
 
-// The Outlook mailbox's newest emails about orders and packages, then the ones that look like
-// shipping news read in full.
-async function readOutlook(clientId) {
-  // Newest first, which is how Outlook orders search results.
+// The newest emails about orders and packages in the Outlook mailbox (folders: ids, or 'all'
+// for the whole mailbox), then the ones that look like shipping news read in full.
+async function readOutlook(clientId, folders) {
   const q = `$search=${encodeURIComponent(`"${OUTLOOK_SEARCH}"`)}&$top=40&$select=id,subject,from,receivedDateTime,bodyPreview,webLink,isRead`;
-  const list = await graph(clientId, `/me/messages?${q}`);
+  const paths = folders.includes('all') ? ['/me/messages'] : folders.slice(0, 8).map((id) => `/me/mailFolders/${encodeURIComponent(id)}/messages`);
+  // A folder deleted since it was picked adds nothing, unless it's the only one.
+  const lists = await Promise.all(paths.map((p) => graph(clientId, `${p}?${q}`).catch((err) => (paths.length === 1 ? Promise.reject(err) : { value: [] }))));
   const since = Date.now() - DAYS * 86400e3;
-  const items = (list.value || [])
+  const items = lists
+    .flatMap((l) => l.value || [])
     .map((m) => ({
       msgId: m.id,
       subject: m.subject || '',
@@ -167,6 +187,7 @@ async function readOutlook(clientId) {
       unread: !m.isRead,
     }))
     .filter((m) => m.at >= since && aboutPackage(m))
+    .sort((a, b) => b.at - a.at)
     .slice(0, 20);
   const got = await Promise.allSettled(items.map((m) => graph(clientId, `/me/messages/${encodeURIComponent(m.msgId)}?$select=body`)));
   return items.map((m, i) => {
@@ -176,13 +197,15 @@ async function readOutlook(clientId) {
   });
 }
 
-// Shipping emails from the Gmail accounts signed into this browser ([{ index, email }]) and,
-// when `outlook` (a Microsoft client ID) is given, the connected Outlook mailbox. Kept for 20
-// minutes; one Daybook tab reads at a time and the others use what it found. A source that
-// can't be read keeps what it had last time.
-export function refreshShippingMail({ gmail = [], outlook = '' }, force, onData) {
-  const accounts = gmail.slice(0, MAX_ACCOUNTS);
-  const sig = hash([accounts.map((a) => a.email), Boolean(outlook)]);
+// Shipping emails from the Gmail accounts signed into this browser ([{ index, email, where }],
+// where is what to look in; see gmailWhere) and, when `outlook` (a Microsoft client ID) is given,
+// the connected Outlook mailbox's outlookFolders. Kept for 20 minutes; one Daybook tab reads at
+// a time and the others use what it found. A source that can't be read keeps what it had last
+// time; one with nothing picked has nothing.
+export function refreshShippingMail({ gmail = [], outlook = '', outlookFolders = ['all'] }, force, onData) {
+  const accounts = gmail.filter((a) => gmailWhere(a.where) !== null).slice(0, MAX_ACCOUNTS);
+  if (!outlookFolders.length) outlook = '';
+  const sig = hash([accounts.map((a) => [a.email, gmailWhere(a.where)]), outlook && outlookFolders]);
   local.remove(['cache:pkg:gmail', 'pkg:thumbs']); // from when Gmail was read through its API
   return cached({
     key: KEY,
@@ -213,7 +236,7 @@ export function refreshShippingMail({ gmail = [], outlook = '' }, force, onData)
         if (accounts.length) dropFrames(RULE);
         if (outlook) {
           try {
-            out.push(...(await readOutlook(outlook)).map((m) => ({ ...m, source: 'outlook' })));
+            out.push(...(await readOutlook(outlook, outlookFolders)).map((m) => ({ ...m, source: 'outlook' })));
           } catch (err) {
             console.warn('[daybook] shipping emails, Outlook:', err);
             out.push(...kept('outlook'));
