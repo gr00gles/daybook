@@ -2,34 +2,41 @@
 // edge to set its height, drag the lines between columns to change their widths, switch
 // the board between three columns and four, and turn fitting the window on or off.
 // The layout is saved under its own key in chrome.storage.sync, apart from Settings:
-//   { v: 1, rev: 2, count: 3 | 4, fit: false, cols: { day: [card ids], mail: [...], out: [...] },
+//   { v: 1, rev: 3, count: 3 | 4, fit: false, cols: { day: [card ids], mail: [...], out: [...] },
 //     cols4: { day, mail, out, more }, widths: [fr × 3], widths4: [fr × 4], heights: { id: px } }
 // Three and four columns each keep their own arrangement and widths; heights are shared. With
 // no count saved, windows at least AUTO_FOUR wide get four, arranged as FOUR. Layouts saved
-// before rev 2 keep only their count: the cards moved to new spots that fit the window.
-// A card's height never scrolls: below its natural height it drops whole items (emails, games,
-// events, list rows) from the end until it fits, and grows back as there's room again.
-// While the columns sit side by side, each also fits the window (see fitColumn).
+// before rev 3 keep only their count: the cards moved to the default board.
+// Cards are a fixed size: their height comes from the layout, never from what's in them, so
+// they stay put as they refresh. While the columns sit side by side, each column fills the
+// window and its cards split it by SHARE (see split); otherwise each card is its SHARE times
+// UNIT tall. A height set by dragging overrides either. A card with more than fits drops whole
+// items (emails, games, events, list rows) from the end, never a scroll bar.
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
 import { $, $$, esc, showPop } from './util.js';
 import { icon } from './icons.js';
+import { loadSettings, saveSettings, defaultBoard } from './settings.js';
 
 const KEY = 'layout';
-const REV = 2;
+const REV = 3;
 const DEFAULT_WIDTHS = { 3: [1.1, 1.2, 1], 4: [1, 1.3, 1, 0.9] };
-// Four columns: the day, the month with the small cards, mail, and things to read or watch.
+// Three columns are as in newtab.html: Today and NYS jobs, the month and Teams, Unread and the
+// flip card. Four give the flip card a column of its own.
 const FOUR = {
-  day: ['card-today', 'card-notes'],
-  mail: ['card-flip', 'card-month', 'card-stocks', 'card-teams'],
-  out: ['card-deliveries', 'card-mail', 'card-area'],
-  more: ['card-youtube', 'card-news', 'card-jobs'],
+  day: ['card-today', 'card-jobs', 'card-notes'],
+  mail: ['card-month', 'card-teams', 'card-stocks'],
+  out: ['card-mail', 'card-deliveries', 'card-area'],
+  more: ['card-flip', 'card-news', 'card-youtube'],
 };
 const AUTO_FOUR = 1480;
 const MIN_WIDTH = 0.5;
 const MIN_HEIGHT = 140;
-const FIT_MIN = 140; // the shortest a card with a list gets when fitting the window
+// How much of its column each card takes; the rest take 2.
+const SHARE = { 'card-today': 3, 'card-month': 3, 'card-mail': 3, 'card-flip': 3, 'card-news': 3, 'card-youtube': 3 };
+// The least a card gets when the column is short: the month needs its weeks.
+const FLOOR = { 'card-month': 320 };
+const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
-const FIT_SLACK = 1 / 3; // how much of a window the page may scroll to keep the columns fitted
 
 let layout = { v: 1, rev: REV, count: null, fit: true, cols: {}, cols4: null, widths: null, widths4: null, heights: {} };
 let arranging = false;
@@ -115,91 +122,59 @@ function fitItems(card, h) {
   showFirst(items, lo);
 }
 
-function applyHeight(card) {
-  const h = layout.heights[card.id];
-  card.classList.toggle('sized', Boolean(h));
-  if (h) card.style.setProperty('--card-h', `${h}px`);
-  else card.style.removeProperty('--card-h');
-}
+// ---- Sizes ------------------------------------------------------------------------------
 
-// ---- Fitting the window ----------------------------------------------------------------
+const share = (card) => SHARE[card.id] || 2;
+const floor = (card) => FLOOR[card.id] || MIN_HEIGHT;
 
-// Back to a card's own height: every item, no height from fitting.
+// Back to a card's own height, with every item, for measuring.
 function release(card) {
-  card.classList.remove('fitted', 'stretched');
-  card.style.removeProperty('--fit-h');
-  card.style.removeProperty('--fit-min');
+  card.classList.remove('fixed');
+  card.style.removeProperty('--card-h');
   showFirst(itemsOf(card), Infinity);
 }
 
-// How a column's cards can give: their own heights (capped by one set by dragging), which of
-// them can drop items, and the least the column can take with those cut to FIT_MIN.
-function measureColumn(col) {
-  const cards = cardsIn(col).filter(shown);
-  col.classList.add('fits'); // lifts the cards' own scroll limits while measuring
-  cards.forEach(release);
+// Sets a card to h pixels, dropping the items that don't fit.
+function fix(card, h) {
+  h = Math.floor(h);
+  fitItems(card, h);
+  card.classList.add('fixed');
+  card.style.setProperty('--card-h', `${h}px`);
+}
+
+// Splits `room` pixels between a column's cards: those with a height set by dragging keep it,
+// and the others share the rest by SHARE, none below its FLOOR. With every height set, the
+// last card still takes what's left, so the column ends at the bottom.
+function split(col, cards, room) {
   const gap = parseFloat(getComputedStyle(col).rowGap) || 0;
-  const all = cards.map((card) => {
-    const cap = layout.heights[card.id] || Infinity;
-    const notes = Boolean(card.querySelector(':scope > textarea'));
-    return { card, cap, notes, flex: notes || itemsOf(card).length > 1, h: Math.min(card.offsetHeight, cap) };
-  });
-  const fixed = gap * Math.max(0, cards.length - 1) + all.reduce((sum, x) => sum + (x.flex ? 0 : x.h), 0);
-  const least = fixed + all.reduce((sum, x) => sum + (x.flex ? Math.min(x.h, FIT_MIN) : 0), 0);
-  return { col, cards, all, fixed, least };
+  let free = room - gap * Math.max(0, cards.length - 1);
+  const h = new Map();
+  let flex = cards.filter((c) => !layout.heights[c.id]);
+  if (!flex.length) flex = cards.slice(-1);
+  for (const c of cards) {
+    if (flex.includes(c)) continue;
+    h.set(c, Math.max(MIN_HEIGHT, layout.heights[c.id]));
+    free -= h.get(c);
+  }
+  const total = () => flex.reduce((sum, c) => sum + share(c), 0);
+  for (let low; (low = flex.find((c) => (free * share(c)) / total() < floor(c))); ) {
+    h.set(low, floor(low));
+    free -= floor(low);
+    flex = flex.filter((c) => c !== low);
+  }
+  for (const c of flex) h.set(c, (free * share(c)) / total());
+  return cards.map((c) => h.get(c));
 }
 
-// Fits a column into `room` pixels. Cards with lists share what the other cards leave: the
-// shorter ones keep their height, the rest split the remainder and drop whole items to fit.
-// Notes takes whatever is still left (at least FIT_MIN), and the last card reaches the bottom
-// so the columns end on one line.
-function fitColumn({ col, cards, all, fixed }, room) {
-  if (!cards.length) return;
-  const lists = all.filter((x) => x.flex && !x.notes);
-  const notes = all.filter((x) => x.notes);
-  const least = (x) => Math.min(x.h, FIT_MIN);
-  let free = room - fixed - notes.reduce((sum, x) => sum + least(x), 0);
-  let n = lists.length;
-  for (const x of [...lists].sort((a, b) => a.h - b.h)) {
-    const h = Math.min(x.h, free / n);
-    fitItems(x.card, Math.floor(h));
-    free -= h;
-    n--;
-  }
-  const used = () => cards.at(-1).getBoundingClientRect().bottom - col.getBoundingClientRect().top;
-  for (const x of notes) {
-    x.card.classList.add('fitted');
-    x.card.style.setProperty('--fit-h', `${least(x)}px`);
-    x.card.style.setProperty('--fit-h', `${Math.floor(Math.min(x.cap, Math.max(least(x), least(x) + room - used())))}px`);
-  }
-  const last = cards.at(-1);
-  const short = Math.floor(room - used());
-  if (short >= 1) {
-    last.classList.add('stretched');
-    last.style.setProperty('--fit-min', `${last.offsetHeight + short}px`);
-  }
-}
-
-// While the columns sit side by side, they all end on one line: the bottom of the window, or
-// as near it as the fullest column can get with its lists cut to FIT_MIN, when that's within
-// FIT_SLACK of a window (the page scrolls that little). Further than that, cutting the lists
-// wouldn't spare much scrolling, so every card keeps its full height. A height set by
-// dragging still caps a card.
 function fitBoard() {
-  const cols = columns();
-  const measured = layout.fit !== false && allAcross() ? cols.map(measureColumn) : [];
-  const top = (col) => col.getBoundingClientRect().top + scrollY;
-  const bottom = Math.max(innerHeight - FIT_BOTTOM - ($('#credits')?.offsetHeight || 0), ...measured.map((m) => top(m.col) + m.least));
-  if (measured.length && bottom <= innerHeight * (1 + FIT_SLACK)) {
-    for (const m of measured) fitColumn(m, bottom - top(m.col));
-    return;
-  }
-  for (const col of cols) {
-    col.classList.remove('fits');
-    for (const card of cardsIn(col)) {
-      release(card);
-      fitItems(card, layout.heights[card.id]);
-    }
+  const across = layout.fit !== false && allAcross();
+  const bottom = innerHeight - FIT_BOTTOM - ($('#credits')?.offsetHeight || 0);
+  for (const col of columns()) {
+    const cards = cardsIn(col).filter(shown);
+    cardsIn(col).forEach(release);
+    const top = col.getBoundingClientRect().top + scrollY;
+    const heights = across ? split(col, cards, bottom - top) : cards.map((c) => layout.heights[c.id] || share(c) * UNIT);
+    cards.forEach((card, i) => fix(card, heights[i]));
   }
 }
 
@@ -213,7 +188,8 @@ export function scheduleFit() {
   });
 }
 function watchCards() {
-  for (const card of $$(BOARD_CARDS)) new MutationObserver(scheduleFit).observe(card, { childList: true, subtree: true, characterData: true });
+  for (const card of $$(BOARD_CARDS))
+    new MutationObserver(scheduleFit).observe(card, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
   let width = board().offsetWidth;
   new ResizeObserver(() => {
     if (board().offsetWidth === width) return;
@@ -243,7 +219,6 @@ export async function applyLayout() {
   } catch {}
   defaults = Object.fromEntries(allColumns().map((col) => [colKey(col), cardsIn(col).map((c) => c.id)]));
   place(wantedCount());
-  for (const card of $$(BOARD_CARDS)) applyHeight(card);
   watchCards();
   // Without a saved count, the board follows the window across AUTO_FOUR.
   addEventListener('resize', () => {
@@ -357,7 +332,6 @@ function startResize(e, card) {
     e,
     (ev) => {
       layout.heights[card.id] = Math.max(MIN_HEIGHT, Math.round(ev.clientY - top));
-      applyHeight(card);
       fitBoard();
     },
     () => {
@@ -369,7 +343,6 @@ function startResize(e, card) {
 
 function resetHeight(card) {
   delete layout.heights[card.id];
-  applyHeight(card);
   fitBoard();
   save();
   placeGutters();
@@ -454,7 +427,7 @@ function addControls() {
     card.insertAdjacentHTML(
       'beforeend',
       `<button class="card-move" type="button" title="Drag to move. Arrow keys move it too." aria-label="Move ${name}">${icon('grip')}</button>
-       <button class="card-size" type="button" title="Drag to change the height. Double-click to fit the contents." aria-label="Resize ${name}"></button>`,
+       <button class="card-size" type="button" title="Drag to change the height. Double-click to reset it." aria-label="Resize ${name}"></button>`,
     );
     const move = card.querySelector(':scope > .card-move');
     const size = card.querySelector(':scope > .card-size');
@@ -462,21 +435,12 @@ function addControls() {
     move.addEventListener('keydown', (e) => keyMove(e, card));
     size.addEventListener('pointerdown', (e) => startResize(e, card));
     size.addEventListener('dblclick', () => resetHeight(card));
-    // Up and down show one item fewer or more; cards without a list step by 40px.
+    // Up and down step the height by 40px.
     size.addEventListener('keydown', (e) => {
       const d = { ArrowUp: -1, ArrowDown: 1 }[e.key];
       if (!d) return;
       e.preventDefault();
-      const items = itemsOf(card);
-      if (items.length) {
-        const k = Math.min(items.length, Math.max(1, items.filter((li) => !li.hasAttribute('data-clip')).length + d));
-        release(card);
-        showFirst(items, k);
-        layout.heights[card.id] = card.offsetHeight;
-      } else {
-        layout.heights[card.id] = Math.max(MIN_HEIGHT, (layout.heights[card.id] || card.offsetHeight) + d * 40);
-      }
-      applyHeight(card);
+      layout.heights[card.id] = Math.max(MIN_HEIGHT, (layout.heights[card.id] || card.offsetHeight) + d * 40);
       fitBoard();
       save();
     });
@@ -508,8 +472,11 @@ function setArranging(on) {
   placeGutters();
 }
 
+// Back to the default board: each card in its spot, and the cards on it back to being a card or
+// in the flip card as they start.
 async function resetLayout() {
   await chrome.storage.sync.remove(KEY);
+  await saveSettings(defaultBoard(await loadSettings()));
   location.reload();
 }
 

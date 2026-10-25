@@ -95,14 +95,6 @@
   </div>
 
   <div class="col col-mail">
-    <section class="card flip-card" id="card-flip" aria-labelledby="flip-h" hidden>
-      <header class="card-head flip-head">
-        <h2 class="flip-title" id="flip-h">Flip card</h2>
-        <div class="tabs flip-tabs" id="flip-tabs" role="tablist" aria-label="Cards in the flip card"></div>
-      </header>
-      <div class="flip-deck" id="flip-deck"></div>
-    </section>
-
     <section class="card" id="card-month" data-section="calendar" aria-labelledby="month-title">
       <header class="card-head month-head">
         <h2 id="month-title">Month</h2>
@@ -116,15 +108,6 @@
       <div class="card-body" id="month-body"></div>
     </section>
 
-    <section class="card" id="card-stocks" data-section="stocks" aria-labelledby="stocks-h" hidden>
-      <header class="card-head">
-        <h2 id="stocks-h">Markets</h2>
-        <span class="head-meta" id="stocks-state"></span>
-        <span class="stamp" id="stocks-updated"></span>
-      </header>
-      <div class="card-body" id="stocks-body"><p class="quiet">Getting quotes…</p></div>
-    </section>
-
     <section class="card" id="card-teams" data-section="teams" aria-labelledby="teams-h" hidden>
       <header class="card-head">
         <h2 id="teams-h">Teams</h2>
@@ -132,6 +115,15 @@
       </header>
       <div class="card-body" id="teams-body"><p class="quiet">Getting schedules…</p></div>
       <div class="tm-news-wrap" id="teams-news"></div>
+    </section>
+
+    <section class="card" id="card-stocks" data-section="stocks" aria-labelledby="stocks-h" hidden>
+      <header class="card-head">
+        <h2 id="stocks-h">Markets</h2>
+        <span class="head-meta" id="stocks-state"></span>
+        <span class="stamp" id="stocks-updated"></span>
+      </header>
+      <div class="card-body" id="stocks-body"><p class="quiet">Getting quotes…</p></div>
     </section>
 
     <section class="card" id="card-news" data-section="news" aria-labelledby="news-h">
@@ -144,19 +136,27 @@
   </div>
 
   <div class="col col-out">
-    <section class="card" id="card-deliveries" data-section="packages" aria-labelledby="deliveries-h">
-      <header class="card-head">
-        <h2 id="deliveries-h">Deliveries <span class="head-count" id="deliveries-count"></span></h2>
-      </header>
-      <div class="card-body" id="deliveries-body"><p class="quiet">Looking for shipping emails…</p></div>
-    </section>
-
     <section class="card" id="card-mail" data-section="mail" aria-labelledby="mail-h">
       <header class="card-head">
         <h2 id="mail-h">Unread <span class="head-count" id="mail-count"></span></h2>
       </header>
       <div class="card-body" id="mail-body"><p class="quiet">Checking your inboxes…</p></div>
       <footer class="card-foot"><div class="foot-links" id="mail-links"></div></footer>
+    </section>
+
+    <section class="card flip-card" id="card-flip" aria-labelledby="flip-h" hidden>
+      <header class="card-head flip-head">
+        <h2 class="flip-title" id="flip-h">Flip card</h2>
+        <div class="tabs flip-tabs" id="flip-tabs" role="tablist" aria-label="Cards in the flip card"></div>
+      </header>
+      <div class="flip-deck" id="flip-deck"></div>
+    </section>
+
+    <section class="card" id="card-deliveries" data-section="packages" aria-labelledby="deliveries-h">
+      <header class="card-head">
+        <h2 id="deliveries-h">Deliveries <span class="head-count" id="deliveries-count"></span></h2>
+      </header>
+      <div class="card-body" id="deliveries-body"><p class="quiet">Looking for shipping emails…</p></div>
     </section>
 
     <section class="card" id="card-area" data-section="area" aria-labelledby="area-h">

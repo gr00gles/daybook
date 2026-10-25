@@ -21,7 +21,8 @@ export function initFlipCard(S) {
     const card = $(`#${TICKER_CARDS[k].card}`);
     if (!card) continue;
     // Its own size on the board doesn't apply in here.
-    card.classList.remove('sized', 'fitted', 'stretched');
+    card.classList.remove('fixed');
+    card.style.removeProperty('--card-h');
     card.classList.add('flip-face', 'flip-off');
     card.dataset.flip = k;
     deck.append(card);

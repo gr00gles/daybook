@@ -4,11 +4,10 @@
 @font-face { font-family: 'IBM Plex Mono'; src: url(fonts/plexmono-500.woff2) format('woff2'); font-weight: 500; font-display: swap; }
 
 /* Layout: one slim band (the clock, search and today's weather) on a full-bleed backdrop whose
-   light follows the real sun (data-phase on <html>), over a board of glass panels in three
-   columns (Today + Notes · Month + Markets + Teams + Headlines · Deliveries + Unread + Around
-   you + YouTube) or four (Today + Notes · Month + Markets + Teams · Deliveries + Unread +
-   Around you · YouTube + Headlines) that fit the window. Cards can be moved and resized, and
-   the board switched between three and four columns (js/layout.js). */
+   light follows the real sun (data-phase on <html>), over a board of fixed-size glass panels
+   that fill the window: Today + NYS jobs · Month + Teams · Unread + the flip card, which takes
+   turns showing the rest. Cards can be moved and resized, and the board switched between three
+   and four columns (js/layout.js). */
 :root {
   /* Solid surfaces: dialogs, inputs, and rings drawn around marks on the glass. */
   --bg: #e6ebf2;
@@ -929,6 +928,7 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   gap: 4px 14px;
   padding-block: 12px;
 }
+.card.fixed:has(> .card-body > .is-empty:only-child) { align-content: flex-start; } /* the line sits at the top of its fixed size */
 .card:has(> .card-body > .is-empty:only-child) > .card-head { display: contents; }
 .card:has(> .card-body > .is-empty:only-child) h2 { font-size: 16.5px; }
 .card:has(> .card-body > .is-empty:only-child) .head-count { display: none; }
@@ -2480,18 +2480,21 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 
 /* ---- Arranging cards (js/layout.js) ----------------------------------------------- */
 
-/* A height set by dragging. Cards with lists show as many whole items as fit (js/layout.js
-   hides the rest), so nothing scrolls; Notes stretches its text box to the height instead. */
+/* Cards are a fixed size (js/layout.js): lists show as many whole items as fit (js/layout.js
+   hides the rest) and never scroll, Notes stretches its text box to the height, the month's
+   weeks share it, and the flip card's turns all fit the same space. */
 [data-clip] { display: none !important; }
-.card.sized:has(> textarea) { display: flex; flex-direction: column; height: var(--card-h); }
-.card.sized > textarea { flex: 1 1 auto; min-height: 0; resize: none; }
-/* Fitting the window (js/layout.js): lists don't scroll inside a card that fits, Notes takes the
-   height it's given, and the last card in a column reaches the bottom. */
-.col.fits .upcoming, .col.fits .mail-list { max-height: none; overflow: visible; }
-.col.fits .upcoming.scrolls { mask-image: none; padding-bottom: 0; }
-.card.fitted:has(> textarea) { display: flex; flex-direction: column; height: var(--fit-h); }
-.card.fitted > textarea { flex: 1 1 auto; min-height: 48px; resize: none; }
-.card.stretched { min-height: var(--fit-min); }
+.board .upcoming, .board .mail-list { max-height: none; overflow: visible; }
+.board .upcoming.scrolls { mask-image: none; padding-bottom: 0; }
+.card.fixed { height: var(--card-h); overflow: hidden; }
+.card.fixed:has(> textarea), #card-month.fixed, .flip-card.fixed { display: flex; flex-direction: column; }
+.card.fixed > textarea, .flip-card.fixed .flip-face > textarea { flex: 1 1 auto; min-height: 0; resize: none; }
+.flip-card.fixed > .flip-deck { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.flip-card.fixed .flip-face:not(.flip-off):has(> textarea) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#card-month.fixed > #month-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+#card-month.fixed .mgrid { flex: 1 1 0; min-height: 0; grid-template-rows: auto; grid-auto-rows: minmax(0, 1fr); }
+#card-month.fixed .mday { min-height: 0; overflow: hidden; }
+#card-month.fixed .mdetail { flex: none; max-height: 45%; overflow-y: auto; scrollbar-width: thin; }
 /* Headings whose items were all dropped go with them. A day in Today's Coming up shows whole
    or not at all, and the days after it go too (items go from the end), even ones with only
    all-day events. */
