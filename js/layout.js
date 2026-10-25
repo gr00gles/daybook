@@ -11,9 +11,8 @@
 // they stay put as they refresh. While the columns sit side by side, each column fills the
 // window and its cards split it by SHARE (see split); otherwise each card is its SHARE times
 // UNIT tall. A height set by dragging overrides either. A card with more than fits drops whole
-// items (emails, games, events, list rows) from the end, never a scroll bar. Markets is as tall
-// as styles.css makes it, the same whatever the window (see OWN), and Unread and Teams in one
-// column share their room by how much mail there is (see LEAN).
+// items (emails, games, events, list rows) from the end, never a scroll bar. The exception:
+// Unread and Teams in one column share their room by how much mail there is (see LEAN).
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
 import { $, $$, esc, showPop } from './util.js';
 import { icon } from './icons.js';
@@ -38,15 +37,13 @@ const SHARE = { 'card-today': 3, 'card-month': 3, 'card-mail': 3, 'card-flip': 3
 // The least a card gets when the column is short: the month needs its weeks.
 const FLOOR = { 'card-month': 320 };
 // Cards that keep at least this many items however short the column, taking the room from the
-// cards beside them. The month keeps every event its days show (up to three a day; see needed).
+// cards beside them. The month keeps every event its days show (up to three a day), and Markets
+// its four rows, tight (see needed).
 const KEEP = { 'card-jobs': 2, 'card-deliveries': 4, 'card-teams': 2 };
 // Pairs of cards that share the room the split gives the two of them when they're in one
 // column: the first takes what it needs to show everything, the second the rest, neither going
 // below its floor. Teams grows as the mail goes down.
 const LEAN = [['card-mail', 'card-teams']];
-// Cards as tall as what they hold rather than a share of the column, like a height set by
-// dragging: Markets is always four rows (styles.css), whatever the window.
-const OWN = new Set(['card-stocks']);
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
 
@@ -138,9 +135,10 @@ function fitItems(card, h) {
 const share = (card) => SHARE[card.id] || 2;
 
 // The height a card needs to show what it keeps, measured at its own height (see release): its
-// first KEEP items, or the whole month with every event its days show.
+// first KEEP items, the whole month with every event its days show, or Markets' four rows at
+// their tightest (styles.css spreads them out in a taller card).
 function needed(card) {
-  if (card.id === 'card-month') return card.offsetHeight;
+  if (card.id === 'card-month' || card.id === 'card-stocks') return card.offsetHeight;
   const k = KEEP[card.id];
   if (!k) return 0;
   const items = itemsOf(card);
@@ -166,21 +164,20 @@ function fix(card, h) {
   card.style.setProperty('--card-h', `${h}px`);
 }
 
-// Splits `room` pixels between a column's cards: those with a set height (sets, by card: one
-// set by dragging, or an OWN card's own) keep it, and the others share the rest by SHARE, none
-// below its floor (floors, by card). With every height set, the last card still takes what's
-// left, so the column ends at the bottom. When the floors don't fit, the column runs past the
-// bottom rather than cutting a card below MIN_HEIGHT.
-function split(col, cards, room, floors, sets) {
+// Splits `room` pixels between a column's cards: those with a height set by dragging keep it,
+// and the others share the rest by SHARE, none below its floor (floors, by card). With every
+// height set, the last card still takes what's left, so the column ends at the bottom. When the
+// floors don't fit, the column runs past the bottom rather than cutting a card below MIN_HEIGHT.
+function split(col, cards, room, floors) {
   const floor = (c) => floors.get(c);
   const gap = parseFloat(getComputedStyle(col).rowGap) || 0;
   let free = room - gap * Math.max(0, cards.length - 1);
   const h = new Map();
-  let flex = cards.filter((c) => !sets.get(c));
+  let flex = cards.filter((c) => !layout.heights[c.id]);
   if (!flex.length) flex = cards.slice(-1);
   for (const c of cards) {
     if (flex.includes(c)) continue;
-    h.set(c, Math.max(MIN_HEIGHT, sets.get(c)));
+    h.set(c, Math.max(MIN_HEIGHT, layout.heights[c.id]));
     free -= h.get(c);
   }
   const total = () => flex.reduce((sum, c) => sum + share(c), 0);
@@ -216,8 +213,7 @@ function fitBoard() {
     cardsIn(col).forEach(release);
     const top = col.getBoundingClientRect().top + scrollY;
     const floors = new Map(cards.map((c) => [c, floorOf(c)]));
-    const sets = new Map(cards.map((c) => [c, layout.heights[c.id] || (OWN.has(c.id) && c.offsetHeight)]));
-    const heights = lean(cards, across ? split(col, cards, bottom - top, floors, sets) : cards.map((c) => sets.get(c) || Math.max(share(c) * UNIT, floors.get(c))), floors);
+    const heights = lean(cards, across ? split(col, cards, bottom - top, floors) : cards.map((c) => layout.heights[c.id] || Math.max(share(c) * UNIT, floors.get(c))), floors);
     cards.forEach((card, i) => fix(card, heights[i]));
   }
 }
