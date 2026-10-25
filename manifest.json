@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Daybook",
-  "version": "2.61.0",
+  "version": "2.62.0",
   "description": "Your new tab: your calendar, unread Gmail and Outlook, weather, headlines and search.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyx1p9iiLJiHulQ9XlXP3gCVgX8GnGutNM93g3qM0ADxMS5I4yaIJx46Fq/ZXQ5t9QLRmRgRQLkDzP3hvVMNrE29q/cqpZhgCSJpaSPaFi6FzLbmAkaxNn0vwwYiYrvaXcF7kNZi2mnd/Y3BstkjF8Mjihfi5aqRgCbrAVXoBeij/Rt6n0Zug1at9B4jYXHsx/jRKpMVJKq3aBVq/RWjPCwGg7iQ1HRt0Euihse1Opm3ZGSBZuEokTaLYxVGHhSUkEhWd2hHfzsS6CJCCNuZmfDGTYLierpQC1S9Ezml5yt4E9VwKwQDFJpdiTxlep+bVXzRwlMIUurMTomss+Jo7WwIDAQAB",
   "chrome_url_overrides": {
