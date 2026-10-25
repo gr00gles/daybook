@@ -11,8 +11,8 @@
 // they stay put as they refresh. While the columns sit side by side, each column fills the
 // window and its cards split it by SHARE (see split); otherwise each card is its SHARE times
 // UNIT tall. A height set by dragging overrides either. A card with more than fits drops whole
-// items (emails, games, events, list rows) from the end, never a scroll bar. The one exception:
-// Unread and Teams in one column share their room by how much mail there is (see lean).
+// items (emails, games, events, list rows) from the end, never a scroll bar. The exceptions
+// are pairs in one column that share their room by what one of them holds (see LEAN).
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
 import { $, $$, esc, showPop } from './util.js';
 import { icon } from './icons.js';
@@ -38,7 +38,15 @@ const SHARE = { 'card-today': 3, 'card-month': 3, 'card-mail': 3, 'card-flip': 3
 const FLOOR = { 'card-month': 320 };
 // Cards that keep at least this many items however short the column, taking the room from the
 // cards beside them. The month keeps every event its days show (up to three a day; see needed).
-const KEEP = { 'card-jobs': 2, 'card-deliveries': 4, 'card-teams': 2 };
+const KEEP = { 'card-jobs': 2, 'card-deliveries': 4, 'card-teams': 2, 'card-stocks': 6 };
+// Pairs of cards that share the room the split gives the two of them when they're in one
+// column: the first takes what it needs to show everything, the second the rest, neither going
+// below its floor. Teams grows as the mail goes down; Markets shows every symbol it can, the
+// month giving up the room past what its events need.
+const LEAN = [
+  ['card-mail', 'card-teams'],
+  ['card-stocks', 'card-month'],
+];
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
 
@@ -184,18 +192,18 @@ function split(col, cards, room, floors) {
   return cards.map((c) => h.get(c));
 }
 
-// Unread and Teams in one column, neither with a height set by dragging, share the room the split
-// gave the two of them: Unread takes what its emails need and Teams the rest, so Teams grows as
-// the mail goes down, never below its first KEEP teams. Measured with the cards released.
+// Shares out each LEAN pair's room in a column, for pairs with neither height set by dragging.
+// Measured with the cards released.
 function lean(cards, heights, floors) {
-  const mail = cards.findIndex((c) => c.id === 'card-mail');
-  const teams = cards.findIndex((c) => c.id === 'card-teams');
-  if (mail < 0 || teams < 0 || layout.heights['card-mail'] || layout.heights['card-teams']) return heights;
-  const room = heights[mail] + heights[teams];
-  const h = Math.min(Math.max(cards[mail].offsetHeight, floors.get(cards[mail])), room - floors.get(cards[teams]));
-  if (h < floors.get(cards[mail])) return heights; // no room for both floors: keep the split
-  heights[mail] = h;
-  heights[teams] = room - h;
+  for (const ids of LEAN) {
+    const [a, b] = ids.map((id) => cards.findIndex((c) => c.id === id));
+    if (a < 0 || b < 0 || ids.some((id) => layout.heights[id])) continue;
+    const room = heights[a] + heights[b];
+    const h = Math.min(Math.max(cards[a].offsetHeight, floors.get(cards[a])), room - floors.get(cards[b]));
+    if (h < floors.get(cards[a])) continue; // no room for both floors: keep the split
+    heights[a] = h;
+    heights[b] = room - h;
+  }
   return heights;
 }
 
