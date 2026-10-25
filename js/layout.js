@@ -41,8 +41,9 @@ const FLOOR = { 'card-month': 320 };
 // its four rows, tight (see needed).
 const KEEP = { 'card-jobs': 2, 'card-deliveries': 4, 'card-teams': 2 };
 // Pairs of cards that share the room the split gives the two of them when they're in one
-// column: the first takes what it needs to show everything, the second the rest, neither going
-// below its floor. Teams grows as the mail goes down.
+// column: the first takes what it needs to show everything (no more, even under MIN_HEIGHT),
+// the second the rest, neither cut below its floor. Teams grows as the mail goes down, taking
+// all but one line when there's none.
 const LEAN = [['card-mail', 'card-teams']];
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
@@ -197,8 +198,11 @@ function lean(cards, heights, floors) {
     const [a, b] = ids.map((id) => cards.findIndex((c) => c.id === id));
     if (a < 0 || b < 0 || ids.some((id) => layout.heights[id])) continue;
     const room = heights[a] + heights[b];
-    const h = Math.min(Math.max(cards[a].offsetHeight, floors.get(cards[a])), room - floors.get(cards[b]));
-    if (h < floors.get(cards[a])) continue; // no room for both floors: keep the split
+    // As short as what it holds, even under MIN_HEIGHT (an empty inbox is one line), but not
+    // cut below its floor to make room.
+    const own = cards[a].offsetHeight;
+    const h = Math.min(own, room - floors.get(cards[b]));
+    if (h < Math.min(own, floors.get(cards[a]))) continue; // no room for both floors: keep the split
     heights[a] = h;
     heights[b] = room - h;
   }
