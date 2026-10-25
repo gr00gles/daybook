@@ -637,11 +637,12 @@ function dayLabel(iso) {
 }
 
 // Postings you've marked as reviewed, kept on this computer by id with when.
-const REVIEWED = 'jobs:reviewed';
+export const REVIEWED = 'jobs:reviewed';
+export const loadReviewed = async () => (await local.get(REVIEWED)) || {};
 let reviewed = {};
 
 async function setReviewed(id, on) {
-  reviewed = (await local.get(REVIEWED)) || {};
+  reviewed = await loadReviewed();
   if (on) reviewed[id] = Date.now();
   else delete reviewed[id];
   // Postings are kept two weeks; a month covers them.
@@ -719,7 +720,7 @@ async function render() {
 let watching = null;
 async function watch() {
   onDetails(() => card && render());
-  reviewed = (await local.get(REVIEWED)) || {};
+  reviewed = await loadReviewed();
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes[REVIEWED]) return;
     reviewed = changes[REVIEWED].newValue || {};
