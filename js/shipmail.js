@@ -198,10 +198,26 @@ async function readGmail(acct) {
   return out;
 }
 
+// fn on each of list, `at` at a time, settled in list's order.
+async function inTurn(list, at, fn) {
+  const out = new Array(list.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const i = next++;
+      out[i] = await fn(list[i]).then((value) => ({ status: 'fulfilled', value }), (reason) => ({ status: 'rejected', reason }));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(at, list.length) }, worker));
+  return out;
+}
+
 // The newest emails about orders and packages in the Outlook mailbox (folders: ids, or 'all'
 // for the whole mailbox), then the ones that look like shipping news read in full.
 async function readOutlook(clientId, folders) {
-  const q = `$search=${encodeURIComponent(`"${OUTLOOK_SEARCH}"`)}&$top=40&$select=id,subject,from,receivedDateTime,bodyPreview,webLink,isRead`;
+  // Stores send several emails an order, and digests (USPS Informed Delivery) one a day, so two
+  // weeks of them run long: look through plenty, and read the newest 40 about packages in full.
+  const q = `$search=${encodeURIComponent(`"${OUTLOOK_SEARCH}"`)}&$top=100&$select=id,subject,from,receivedDateTime,bodyPreview,webLink,isRead`;
   const paths = folders.includes('all') ? ['/me/messages'] : folders.slice(0, 8).map((id) => `/me/mailFolders/${encodeURIComponent(id)}/messages`);
   // A folder deleted since it was picked adds nothing, unless it's the only one.
   const lists = await Promise.all(paths.map((p) => graph(clientId, `${p}?${q}`).catch((err) => (paths.length === 1 ? Promise.reject(err) : { value: [] }))));
@@ -220,8 +236,10 @@ async function readOutlook(clientId, folders) {
     }))
     .filter((m) => m.at >= since && aboutPackage(m))
     .sort((a, b) => b.at - a.at)
-    .slice(0, 20);
-  const got = await Promise.allSettled(items.map((m) => graph(clientId, `/me/messages/${encodeURIComponent(m.msgId)}?$select=body`)));
+    .slice(0, 40);
+  // A few at a time: Outlook answers only about four requests at once for a mailbox, and an
+  // email whose body doesn't come is read from its preview alone (no day, no items).
+  const got = await inTurn(items, 3, (m) => graph(clientId, `/me/messages/${encodeURIComponent(m.msgId)}?$select=body`));
   return items.map((m, i) => {
     const body = got[i].status === 'fulfilled' ? got[i].value.body : null;
     if (!body?.content) return m;
@@ -237,8 +255,8 @@ async function readOutlook(clientId, folders) {
 export function refreshShippingMail({ gmail = [], outlook = '', outlookFolders = ['all'] }, force, onData) {
   const accounts = gmail.filter((a) => gmailWhere(a.where) !== null).slice(0, MAX_ACCOUNTS);
   if (!outlookFolders.length) outlook = '';
-  // v2: emails read since carry the products they name (items).
-  const sig = hash(['v2', accounts.map((a) => [a.email, gmailWhere(a.where)]), outlook && outlookFolders]);
+  // v3: Outlook's bodies are read a few at a time, so more of them come.
+  const sig = hash(['v3', accounts.map((a) => [a.email, gmailWhere(a.where)]), outlook && outlookFolders]);
   local.remove(['cache:pkg:gmail', 'pkg:thumbs']); // from when Gmail was read through its API
   return cached({
     key: KEY,

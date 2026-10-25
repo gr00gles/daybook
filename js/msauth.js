@@ -189,9 +189,15 @@ export async function graph(clientId, path, headers = {}) {
   const token = await getToken(clientId);
   // Accepts a path, or a full @odata.nextLink URL when paging.
   const url = path.startsWith('https://graph.microsoft.com/') ? path : `https://graph.microsoft.com/v1.0${path}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, ...headers },
-  });
+  let res;
+  // Outlook takes a few requests at a time for a mailbox and answers more with 429 and how long
+  // to wait (Retry-After): wait and ask again, twice at most.
+  for (let tries = 0; ; tries++) {
+    res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, ...headers } });
+    if (res.status !== 429 || tries >= 2) break;
+    const wait = Math.min(10, Number(res.headers.get('Retry-After')) || 2 ** tries) * 1000;
+    await new Promise((r) => setTimeout(r, wait));
+  }
   if (res.status === 401) {
     const auth = await local.get(KEY);
     if (auth) await local.set(KEY, { ...auth, expiresAt: 0 });

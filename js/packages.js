@@ -481,6 +481,8 @@ function withLive(d) {
   if (!t) return d;
   const at = t.event?.at || d.at;
   if (t.state === 'delivered' && Date.now() - at > 2 * DAY_MS) return null;
+  // A page that says it's on its way without a day keeps the day the email gave.
+  if (t.due == null && d.due != null && (t.state === 'transit' || t.state === 'soon')) return { ...d, event: t.event, at };
   return { ...d, state: t.state, label: t.label, due: t.due, event: t.event, at };
 }
 
