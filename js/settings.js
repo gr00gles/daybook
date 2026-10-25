@@ -97,8 +97,9 @@ export const DEFAULTS = {
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
   // Whether shipping emails count, where they're looked for (see shippingFolders; for Outlook,
   // folder ids or 'all' for the whole mailbox), whether carriers' tracking pages are read for
-  // status, and packages added by hand ({ number, name, added }).
-  packages: { fromMail: true, mail: { gmail: {}, outlook: ['all'] }, checkSites: true, tracked: [] },
+  // status and Amazon's order pages for what's in the box (amazon.js), and packages added by
+  // hand ({ number, name, added }).
+  packages: { fromMail: true, mail: { gmail: {}, outlook: ['all'] }, checkSites: true, amazonPages: true, tracked: [] },
   area: { key: '', radius: 25, days: 14, kinds: ['music', 'arts', 'other'] }, // Ticketmaster key; radius in miles or km by units
   holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
   teams: { list: [], calendar: true, news: true, wins: true }, // teams you follow; the card stays hidden without one

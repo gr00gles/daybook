@@ -8,6 +8,7 @@ import { $, esc, safeUrl, relTime, startOfDay, addDays, local } from './util.js'
 import { setTicker } from './ticker.js';
 import { loadTracking, refreshTracking, onTracking, trackedState, carrierOf, dateIn, PAGES } from './tracking.js';
 import { lastShippingMail } from './shipmail.js';
+import { loadAmazonOrders, refreshAmazonOrders, onAmazonOrders, isAmazonOrder } from './amazon.js';
 import { icon } from './icons.js';
 import { domainOf, logoUrl } from './companies-store.js';
 
@@ -288,6 +289,7 @@ function readMail(m) {
     carrier: found?.carrier || sender,
     number: found?.number || '',
     titleKey: `${sender || from.toLowerCase()}|${title.toLowerCase()}`,
+    order,
     orderKey: order ? `${domainOf(fromAddr) || from.toLowerCase()}|${order}` : '',
     state: status?.state || 'transit',
     label: status?.label || '',
@@ -383,6 +385,7 @@ export function deliveriesFrom(items) {
       due,
       title: (list.find((p) => p.full) || newest).title,
       items: list.find((p) => p.items?.length)?.items || [],
+      order: list.find((p) => p.order)?.order || '',
       picture: list.find((p) => p.picture)?.picture || '',
       domain: store?.domain || '',
       carrier: withNumber?.carrier || newest.carrier,
@@ -418,7 +421,9 @@ export function deliveryRows(list, max = 6, { full = false } = {}) {
     .slice(0, max)
     .map((d) => {
       const who = CARRIERS[d.carrier]?.name || '';
-      const when = d.state === 'delivered' ? dateParts(d.at) : d.due != null ? dateParts(d.due) : null;
+      const when = d.state === 'delivered' ? { day: 'Delivered', date: dateParts(d.at).date } : d.due != null ? dateParts(d.due) : null;
+      // The day on the right says when; "Arriving Tue" or "Delivered" on the left would say it twice.
+      const status = when && (d.state === 'delivered' || /^arriving\b/i.test(d.label)) ? '' : d.label;
       const tip = [d.title, d.number && `${who} ${d.number}`, `email ${relTime(d.at)}`].filter(Boolean).join(' · ');
       // Who sent it and the tracking number, without saying "UPS · UPS".
       const sender = d.from && d.from !== d.title && !(who && d.from.toLowerCase().includes(who.toLowerCase())) ? d.from : '';
@@ -432,13 +437,13 @@ export function deliveryRows(list, max = 6, { full = false } = {}) {
       return `<li><a class="pkg s-${d.state}" href="${esc(d.href)}" title="${esc(tip)}">
         ${thumb(d)}
         <span class="pkg-text">
-          <span class="pkg-line"><span class="pkg-status">${esc(d.label)}</span><span class="pkg-title">${esc(title)}</span></span>
+          <span class="pkg-line">${status ? `<span class="pkg-status">${esc(status)}</span>` : ''}<span class="pkg-title">${esc(title)}</span></span>
           ${meta ? `<span class="pkg-meta">${esc(meta)}</span>` : ''}
           ${listed ? `<span class="pkg-items">${d.items.map((i) => `<span>${esc(i)}</span>`).join('')}</span>` : ''}
         </span>
         ${
           when
-            ? `<span class="pkg-when" aria-label="${d.state === 'delivered' ? 'Delivered' : 'Estimated delivery'} ${esc(when.day)} ${esc(when.date)}"><span class="pkg-day">${esc(when.day)}</span><span class="pkg-date">${esc(when.date)}</span></span>`
+            ? `<span class="pkg-when" aria-label="${d.state === 'delivered' ? `Delivered ${esc(when.date)}` : `Estimated delivery ${esc(when.day)} ${esc(when.date)}`}"><span class="pkg-day">${esc(when.day)}</span><span class="pkg-date">${esc(when.date)}</span></span>`
             : ''
         }
       </a></li>`;
@@ -450,18 +455,21 @@ let shown = [];
 let settingsRef = null;
 let fromMail = []; // the deliveries the mail card found, last time it drew
 let live = {}; // what each package's carrier page (or newest email) last said, by tracking number
+let amazon = {}; // what's in each Amazon order, from its page on amazon.com (amazon.js)
 let trackTimer;
+let amazonTimer;
 
 // The new tab passes its settings; the Companies page uses the email side only.
 export function initDeliveries(S) {
   if (!S) return;
   settingsRef = S;
   const reload = async () => {
-    live = await loadTracking();
+    [live, amazon] = await Promise.all([loadTracking(), loadAmazonOrders()]);
     compose();
   };
   reload();
   onTracking(reload);
+  onAmazonOrders(reload);
 }
 
 // The newest deliveries from the mail card; repainted whenever the mail is.
@@ -511,10 +519,16 @@ function added(p) {
 // The card's list: the email packages (unless that's off) and the ones added by hand, with
 // their carriers' news on each. A few seconds after the page settles, the packages still on
 // their way get a fresh look (tracking.js decides which are due).
+// An Amazon package with what its order page says is in it, in place of the emails' category.
+function withItems(d) {
+  const names = settingsRef.packages.amazonPages !== false && amazon[d.order]?.items;
+  return names?.length ? { ...d, items: names, title: itemsText(names) } : d;
+}
+
 function compose() {
   const P = settingsRef.packages;
   const mail = P.fromMail === false ? [] : fromMail;
-  const list = mail.map(withLive).filter(Boolean);
+  const list = mail.map(withLive).filter(Boolean).map(withItems);
   for (const p of P.tracked || []) {
     // A package added by hand that was delivered days ago drops off (added() gives null).
     const d = !list.some((x) => x.number === p.number) && added(p);
@@ -522,6 +536,9 @@ function compose() {
   }
   shown = list.sort(byUrgency);
   paintCard();
+  const orders = P.amazonPages === false ? [] : mail.filter((d) => isAmazonOrder(d.order)).map((d) => d.order);
+  clearTimeout(amazonTimer);
+  if (orders.length) amazonTimer = setTimeout(() => refreshAmazonOrders(orders), 8000);
   if (P.checkSites === false) return;
   const numbers = [...(P.tracked || []).map((p) => p.number), ...mail.filter((d) => d.number && d.state !== 'delivered').map((d) => d.number)];
   clearTimeout(trackTimer);
