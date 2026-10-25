@@ -334,9 +334,9 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
 
 // ---- Deliveries --------------------------------------------------------------------
 
-// Where Deliveries looks for shipping emails, for each Gmail account the Unread card shows (the
-// first three) and the Outlook mailbox: All mail or the whole mailbox, or folders and labels.
-// Writes draft.packages.mail.
+// Where Deliveries looks for shipping emails, for each Gmail account signed in (the first three)
+// and the Outlook mailbox: All mail or the whole mailbox, or folders and labels. Its own choice,
+// whatever the Unread card shows. Writes draft.packages.mail.
 export function mountShippingFolders(el, draft, changed) {
   const s = { accounts: null, outlook: '', folders: null };
   const M = () => draft.packages.mail;
@@ -346,9 +346,8 @@ export function mountShippingFolders(el, draft, changed) {
       el.innerHTML = '<p class="hint">Looking for your accounts…</p>';
       return;
     }
-    const hidden = new Set(draft.gmail.hidden || []);
-    const gmail = s.accounts.filter((a) => !hidden.has(a.email));
-    const outlook = s.outlook && draft.outlook.mail;
+    const gmail = s.accounts;
+    const outlook = s.outlook;
     if (!gmail.length && !outlook) {
       el.innerHTML = '<p class="hint">Sign in to Gmail or Outlook under Accounts, and their shipping emails show up here to choose from.</p>';
       return;
@@ -366,7 +365,7 @@ export function mountShippingFolders(el, draft, changed) {
             ${box('all', 'Whole mailbox')}${s.folders ? s.folders.map((f) => box(f.id, f.name)).join('') : ''}
           </fieldset>${s.folders ? '' : '<p class="hint small">Looking for your Outlook folders…</p>'}</div>`
         : ''}
-      <p class="hint small">All mail is the inbox, archived mail and every label, but not Spam or Trash, and it leaves out Promotions and Social unless you tick them too. Outlook’s whole mailbox is every folder. With nothing ticked, Deliveries doesn’t look in that account.</p>`;
+      <p class="hint small">These are apart from the Unread card’s folders under Accounts. All mail is the inbox, archived mail and every label, but not Spam or Trash, and it leaves out Promotions and Social unless you tick them too. Outlook’s whole mailbox is every folder. With nothing ticked, Deliveries doesn’t look in that account.</p>`;
   };
 
   el.addEventListener('change', (e) => {
@@ -385,7 +384,7 @@ export function mountShippingFolders(el, draft, changed) {
     const clientId = msClientId(draft);
     s.outlook = clientId ? (await msAccount().catch(() => null)) || '' : '';
     paint();
-    if (s.outlook && draft.outlook.mail) {
+    if (s.outlook) {
       s.folders = await outlookFolders(clientId);
       paint();
     }

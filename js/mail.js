@@ -185,8 +185,10 @@ export async function refreshMail(S, force) {
   const clientId = msClientId(S);
   outlookConnected = Boolean(clientId && (await msAccount()));
   if (S.show.packages) {
-    const gmail = accounts.filter((a) => !hidden.has(a.email)).map((a) => ({ ...a, where: shippingFolders(S, a.email) }));
-    const outlook = S.outlook.mail && outlookConnected ? clientId : '';
+    // Deliveries has its own choices, apart from the Unread card's: an account or Outlook's mail
+    // turned off there is still read for Deliveries, unless nothing is ticked for it here.
+    const gmail = accounts.map((a) => ({ ...a, where: shippingFolders(S, a.email) }));
+    const outlook = outlookConnected ? clientId : '';
     refreshShippingMail({ gmail, outlook, outlookFolders: S.packages.mail.outlook }, force, (list) => {
       shipping = list;
       render();
