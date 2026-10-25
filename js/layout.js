@@ -2,11 +2,11 @@
 // edge to set its height, drag the lines between columns to change their widths, switch
 // the board between three columns and four, and turn fitting the window on or off.
 // The layout is saved under its own key in chrome.storage.sync, apart from Settings:
-//   { v: 1, rev: 3, count: 3 | 4, fit: false, cols: { day: [card ids], mail: [...], out: [...] },
+//   { v: 1, rev: 4, count: 3 | 4, fit: false, cols: { day: [card ids], mail: [...], out: [...] },
 //     cols4: { day, mail, out, more }, widths: [fr × 3], widths4: [fr × 4], heights: { id: px } }
 // Three and four columns each keep their own arrangement and widths; heights are shared. With
 // no count saved, windows at least AUTO_FOUR wide get four, arranged as FOUR. Layouts saved
-// before rev 3 keep only their count: the cards moved to the default board.
+// before rev 4 keep only their count: the cards moved to the default board.
 // Cards are a fixed size: their height comes from the layout, never from what's in them, so
 // they stay put as they refresh. While the columns sit side by side, each column fills the
 // window and its cards split it by SHARE (see split); otherwise each card is its SHARE times
@@ -18,14 +18,14 @@ import { icon } from './icons.js';
 import { loadSettings, saveSettings, defaultBoard } from './settings.js';
 
 const KEY = 'layout';
-const REV = 3;
+const REV = 4;
 const DEFAULT_WIDTHS = { 3: [1.1, 1.2, 1], 4: [1, 1.3, 1, 0.9] };
-// Three columns are as in newtab.html: Today and NYS jobs, the month and Teams, Unread and the
-// flip card. Four give the flip card a column of its own.
+// Three columns are as in newtab.html: Today and NYS jobs, the month and Teams, Unread, the flip
+// card, Markets and Deliveries. Four give the flip card a column of its own.
 const FOUR = {
   day: ['card-today', 'card-jobs', 'card-notes'],
-  mail: ['card-month', 'card-teams', 'card-stocks'],
-  out: ['card-mail', 'card-deliveries', 'card-area'],
+  mail: ['card-month', 'card-teams'],
+  out: ['card-mail', 'card-stocks', 'card-deliveries', 'card-area'],
   more: ['card-flip', 'card-news', 'card-youtube'],
 };
 const AUTO_FOUR = 1480;
