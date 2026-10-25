@@ -410,12 +410,36 @@ const dateParts = (t) => ({
   date: new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
 });
 
+// A box with pictures of several things in it shows each in turn (see cycleThumbs).
 function thumb(d) {
+  const pics = (d.images || []).filter(Boolean);
+  if (pics.length > 1) {
+    cycleThumbs();
+    return `<span class="pkg-thumb photo cycle">${pics
+      .map((src, i) => `<img${i ? '' : ' class="on"'} src="${esc(safeUrl(src))}" alt="" loading="lazy" referrerpolicy="no-referrer">`)
+      .join('')}</span>`;
+  }
   if (d.picture) return `<span class="pkg-thumb photo"><img src="${esc(d.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
   const logo = logoUrl(d.domain || (d.carrier && { ups: 'ups.com', usps: 'usps.com', fedex: 'fedex.com', dhl: 'dhl.com', amazon: 'amazon.com' }[d.carrier]));
   return logo
     ? `<span class="pkg-thumb logo"><img src="${esc(logo)}" alt="" width="32" height="32" referrerpolicy="no-referrer"></span>`
     : `<span class="pkg-thumb">${icon('box')}</span>`;
+}
+
+// Every few seconds, each box with several pictures shows its next one; still for those who'd
+// rather have less motion, and while the page isn't in view.
+let cycling = 0;
+function cycleThumbs() {
+  if (cycling || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  cycling = setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    for (const box of document.querySelectorAll('.pkg-thumb.cycle')) {
+      const pics = [...box.children];
+      const at = pics.findIndex((p) => p.classList.contains('on'));
+      pics[at]?.classList.remove('on');
+      pics[(at + 1) % pics.length].classList.add('on');
+    }
+  }, 3000);
 }
 
 // A name cut to its first n words.
