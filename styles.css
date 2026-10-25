@@ -887,7 +887,8 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   transform-origin: 50% 50%;
   backface-visibility: hidden;
 }
-.flip-deck > .flip-off { display: none; }
+/* Hidden whatever else sets its display, like the one-line look of a card with nothing to show. */
+.flip-deck > .flip-off { display: none !important; }
 .flip-deck > .flip-face > .card-move, .flip-deck > .flip-face > .card-size { display: none; }
 .card-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 10px; min-height: 28px; }
 .card-head h2 {
