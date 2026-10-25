@@ -9,7 +9,8 @@
 // Outlook: the same Outlook sign-in the Unread card uses searches the whole mailbox or the
 // folders picked.
 // Each email becomes { msgId, subject, from, fromAddr, at, url, snippet, body (its text),
-// links (its tracking links), picture (the product's), full: true } for packages.js to read.
+// links (its tracking links), picture (the product's), items (the products it names),
+// full: true } for packages.js to read.
 import { cached, hash, local } from './util.js';
 import { graph } from './msauth.js';
 import { allowFrames, dropFrames, readHidden } from './frames.js';
@@ -69,20 +70,25 @@ export function htmlText(html) {
   return { text, doc };
 }
 
-// Links that may carry a tracking number, unwrapped from the click-counting links stores use.
+// A link's address, unwrapped from the click-counting links stores use.
+function unwrap(href) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const next = decodeURIComponent(href);
+      if (next === href) break;
+      href = next;
+    } catch {
+      break;
+    }
+  }
+  return href;
+}
+
+// Links that may carry a tracking number.
 function trackingLinks(doc) {
   const out = new Set();
   for (const a of doc.querySelectorAll('a[href]')) {
-    let href = a.getAttribute('href') || '';
-    for (let i = 0; i < 3; i++) {
-      try {
-        const next = decodeURIComponent(href);
-        if (next === href) break;
-        href = next;
-      } catch {
-        break;
-      }
-    }
+    const href = unwrap(a.getAttribute('href') || '');
     if (/track|trk|tlabels/i.test(href)) out.add(href.slice(0, 600));
     if (out.size >= 12) break;
   }
@@ -118,10 +124,35 @@ export function pictureIn(doc, title = '') {
   return best?.src || '';
 }
 
+// A product page: Amazon's /dp/ and /gp/product/, and the /products/, /ip/, /p/ and /itm/ of
+// other stores.
+const PRODUCT_PAGE = /\/(?:dp|gp\/product|gp\/aw\/d|products?|ip|p|itm)\/[\w-]{4,}/i;
+// Words on a link or picture that aren't a product's name.
+const NOT_NAME = /^(?:track|view|manage|buy|shop|write|rate|review|return|replace|see|order|details|your|more|click|learn|sign|change|cancel|leave|get|share|visit|image|photo|product|item|amazon(?:\.com)?)\b|^\W*$|\$\s?\d|@/i;
+
+// The products an email names, in order, once each: the words of its links to product pages and
+// of the pictures in them, and of Amazon's product pictures. Amazon's shipping emails name what's
+// in the box only there.
+export function itemsIn(doc) {
+  const out = [];
+  const add = (t) => {
+    t = (t || '').replace(/\s+/g, ' ').trim();
+    if (t.length < 8 || t.length > 240 || !/[a-z]{3}\S*\s+\S*[a-z]{2}/i.test(t) || NOT_NAME.test(t)) return;
+    if (!out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+  };
+  for (const a of doc.querySelectorAll('a[href]')) {
+    if (!PRODUCT_PAGE.test(unwrap(a.getAttribute('href') || ''))) continue;
+    add(a.textContent);
+    for (const img of a.querySelectorAll('img[alt]')) add(img.getAttribute('alt'));
+  }
+  for (const img of doc.querySelectorAll('img[alt]')) if (/\/images\/I\//.test(img.getAttribute('src') || '')) add(img.getAttribute('alt'));
+  return out.slice(0, 8);
+}
+
 // One email with its HTML, as packages.js reads it.
 export function fromHtml(m, html) {
   const { text, doc } = htmlText(html);
-  return { ...m, body: text.slice(0, BODY_CHARS), links: trackingLinks(doc), picture: pictureIn(doc, m.subject), full: true };
+  return { ...m, body: text.slice(0, BODY_CHARS), links: trackingLinks(doc), picture: pictureIn(doc, m.subject), items: itemsIn(doc), full: true };
 }
 
 // One Gmail account's shipping emails, through its own page.
@@ -205,7 +236,8 @@ async function readOutlook(clientId, folders) {
 export function refreshShippingMail({ gmail = [], outlook = '', outlookFolders = ['all'] }, force, onData) {
   const accounts = gmail.filter((a) => gmailWhere(a.where) !== null).slice(0, MAX_ACCOUNTS);
   if (!outlookFolders.length) outlook = '';
-  const sig = hash([accounts.map((a) => [a.email, gmailWhere(a.where)]), outlook && outlookFolders]);
+  // v2: emails read since carry the products they name (items).
+  const sig = hash(['v2', accounts.map((a) => [a.email, gmailWhere(a.where)]), outlook && outlookFolders]);
   local.remove(['cache:pkg:gmail', 'pkg:thumbs']); // from when Gmail was read through its API
   return cached({
     key: KEY,
