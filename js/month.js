@@ -1,17 +1,18 @@
 // The month calendar: every day of the month with its events, flippable to other months.
-// Clicking a day shows that day's full schedule under the grid.
+// Clicking a day shows that day's schedule on the Today card (calendar.js); clicking it again,
+// or Back to today there, goes back to today.
 import { $, esc, colorVar, startOfDay, addDays, safeUrl, fmtTime } from './util.js';
-import { monthGrid, eventsBetween, ensureMonth, FIRST_DAY, timedRow, allDayChips, tickerEvents } from './calendar.js';
+import { monthGrid, eventsBetween, ensureMonth, FIRST_DAY, tickerEvents, renderAgenda, showDay, shownDay } from './calendar.js';
 import { setTicker } from './ticker.js';
 import { icon } from './icons.js';
-import { holidaysOn, loadHolidays, coveredBy, holidayTheme, holidayBadge } from './sky.js';
+import { holidaysOn, loadHolidays, coveredBy, holidayTheme } from './sky.js';
 import { openEventEditor } from './events.js';
 
 const SHOWN_PER_DAY = 3;
 const MAX_LANES = 3; // rows of multi-day bars per week
 let settingsRef;
 let view;
-let selected = null;
+let jiggle = null; // a holiday's day just clicked: its emblem wiggles once
 let firstClick = null; // the day the first click of a possible double-click was on
 
 const sameDay = (a, b) => startOfDay(a) === startOfDay(b);
@@ -81,11 +82,11 @@ function cell(d0, events, now, week, c) {
   // The whole day dresses up for a holiday, even one a calendar already names.
   const festive = settingsRef.show.sky ? holidaysOn(d0).find((h) => !h.clock) : null;
   const theme = festive && holidayTheme(festive);
-  const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected === d0 && 'sel', festive && 'hol'].filter(Boolean).join(' ');
-  return `<button type="button" class="${cls}" data-day="${d0}" aria-label="${esc(label)}"${selected === d0 ? ' aria-pressed="true"' : ''}${hols.length ? ` title="${esc(hols.map((h) => h.name).join(', '))}"` : ''}${theme ? ` style="--hol: ${theme.color}" data-hol="${theme.id}" data-glyph="${esc(theme.glyph)}"` : ''}>
+  const selected = shownDay() === d0;
+  const cls = ['mday', outside && 'out', today && 'today', past && 'past', selected && 'sel', festive && 'hol', festive && jiggle === d0 && 'jiggle'].filter(Boolean).join(' ');
+  return `<button type="button" class="${cls}" data-day="${d0}" aria-label="${esc(label)}"${selected ? ' aria-pressed="true"' : ''}${hols.length ? ` title="${esc(hols.map((h) => h.name).join(', '))}"` : ''}${theme ? ` style="--hol: ${theme.color}" data-hol="${theme.id}" data-glyph="${esc(theme.glyph)}"` : ''}>
     <span class="mnum">${d.getDate()}</span>
     ${week.lanes ? '<span class="mlanes" aria-hidden="true"></span>' : ''}
-    ${hols.map((h) => `<span class="mhol${h.clock ? ' clock' : ''}" style="--hol: ${holidayTheme(h).color}"><span class="hol-glyph" aria-hidden="true">${holidayTheme(h).glyph}</span>${esc(h.name)}</span>`).join('')}
     <span class="mevs">${shown
       .map((e) => (e.game?.us && e.game.them ? gameChip(e) : `<span class="mev${e.allDay ? ' all' : ''}${e.logo ? ' logo' : ''}" style="--c: ${colorVar(e.color)}">${e.logo ? `<img src="${esc(safeUrl(e.logo))}" alt="" width="12" height="12" loading="lazy">` : ''}${esc(e.title)}</span>`))
       .join('')}${more > 0 ? `<span class="mmore">+${more}</span>` : ''}</span>
@@ -101,22 +102,6 @@ const gameChip = (e) => {
 function bar({ e, c0, span, lane, before, after }) {
   const cls = ['mbar', !e.allDay && 'timed', before && 'cont-l', after && 'cont-r'].filter(Boolean).join(' ');
   return `<span class="${cls}" style="--c: ${colorVar(e.color)}; --col: ${c0}; --span: ${span}; --lane: ${lane}" aria-hidden="true">${esc(e.title)}</span>`;
-}
-
-function detail(events, now) {
-  if (selected === null) return '';
-  const list = dayEvents(events, selected);
-  const allDay = list.filter((e) => e.allDay);
-  const timed = list.filter((e) => !e.allDay);
-  const title = new Date(selected).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const hols = holidays(selected, list);
-  return `<section class="mdetail" aria-live="polite" data-keep>
-    <header class="mdetail-head"><h3>${esc(title)}</h3><button class="btn small" type="button" data-month="add">${icon('plus')}Add event</button><button class="icon-btn small" type="button" data-month="close" aria-label="Close day">${icon('close')}</button></header>
-    ${hols.length ? `<p class="mdetail-hol">${hols.map((h) => holidayBadge(h)).join('')}</p>` : ''}
-    ${allDayChips(allDay)}
-    ${timed.length ? `<ol class="ev-list">${timed.map((e) => timedRow(e, now, settingsRef.clock24)).join('')}</ol>` : ''}
-    ${list.length || hols.length ? '' : '<p class="quiet">Nothing scheduled.</p>'}
-  </section>`;
 }
 
 export function renderMonth() {
@@ -142,7 +127,7 @@ export function renderMonth() {
     for (let c = 0; c < 7; c++) cells.push(cell(addDays(ws, c), events, now, week, c));
     rows.push(`<div class="mweek" style="--lanes: ${week.lanes}">${cells.join('')}${week.bars.map(bar).join('')}</div>`);
   }
-  body.innerHTML = `<div class="mgrid" role="group" aria-label="${esc($('#month-title').textContent)}" title="Click a day to see its schedule. Double-click to add an event."><div class="mweek mhead">${weekdayLabels()}</div>${rows.join('')}</div>${detail(events, now)}`;
+  body.innerHTML = `<div class="mgrid" role="group" aria-label="${esc($('#month-title').textContent)}" title="Click a day to see its schedule on the Today card. Double-click to add an event."><div class="mweek mhead">${weekdayLabels()}</div>${rows.join('')}</div>`;
   // The ticker gets the two weeks after today, whichever month is on screen.
   const tomorrow = addDays(startOfDay(now), 1);
   const day = (t) => {
@@ -150,6 +135,13 @@ export function renderMonth() {
     return days === 0 ? 'Tomorrow' : new Date(t).toLocaleDateString(undefined, days < 6 ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
   };
   setTicker('month', tickerEvents(eventsBetween(tomorrow, addDays(tomorrow, 14)).filter((e) => e.start >= tomorrow), (e) => (e.allDay ? day(e.start) : `${day(e.start)} ${fmtTime(e.start, settingsRef.clock24)}`)));
+}
+
+// Shows `d0` on the Today card (null: today) and marks it here.
+function pick(d0) {
+  showDay(d0);
+  renderAgenda(settingsRef);
+  renderMonth();
 }
 
 export function initMonth(S) {
@@ -163,37 +155,40 @@ export function initMonth(S) {
     if (!b) return;
     if (b.dataset.day) {
       const d0 = Number(b.dataset.day);
-      // The second click of a double-click: keep the day open and add an event on it. If the
+      // The second click of a double-click: keep the day picked and add an event on it. If the
       // first click flipped to the next month, the day under the pointer is a different one,
       // so use the day first clicked.
       if (e.detail === 2) {
         const day = firstClick ?? d0;
         firstClick = null;
-        selected = day;
-        renderMonth();
+        pick(day);
         openEventEditor({ day });
         return;
       }
       firstClick = d0;
-      selected = selected === d0 ? null : d0;
+      jiggle = d0;
       // A day from the neighboring month flips the view to that month.
       const d = new Date(d0);
       if (d.getMonth() !== view.m) view = { y: d.getFullYear(), m: d.getMonth() };
-    } else if (b.dataset.month === 'prev' || b.dataset.month === 'next') {
-      const d = new Date(view.y, view.m + (b.dataset.month === 'next' ? 1 : -1), 1);
-      view = { y: d.getFullYear(), m: d.getMonth() };
-      selected = null;
-    } else if (b.dataset.month === 'today') {
-      view = { y: new Date().getFullYear(), m: new Date().getMonth() };
-      selected = null;
-    } else if (b.dataset.month === 'close') {
-      selected = null;
-    } else if (b.dataset.month === 'add') {
-      openEventEditor({ day: selected });
+      pick(shownDay() === d0 ? null : d0);
+      jiggle = null;
+      $(`[data-day="${b.dataset.day}"]`)?.focus();
       return;
     }
+    if (b.dataset.month === 'prev' || b.dataset.month === 'next') {
+      const d = new Date(view.y, view.m + (b.dataset.month === 'next' ? 1 : -1), 1);
+      view = { y: d.getFullYear(), m: d.getMonth() };
+    } else if (b.dataset.month === 'today') {
+      view = { y: new Date().getFullYear(), m: new Date().getMonth() };
+      showDay(null);
+      renderAgenda(settingsRef);
+    }
     renderMonth();
-    if (b.dataset.day) $(`[data-day="${b.dataset.day}"]`)?.focus();
+  });
+  // Back to today, on the Today card.
+  $('#today-back').addEventListener('click', () => {
+    view = { y: new Date().getFullYear(), m: new Date().getMonth() };
+    pick(null);
   });
   renderMonth();
 }

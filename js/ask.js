@@ -1,10 +1,11 @@
 // Ask Claude, ChatGPT or Gemini from the search box. With an API key saved in Settings, the
 // answer streams into a bubble under the search box and follow-ups continue the same
-// conversation. Without a key, the question opens in claude.ai, chatgpt.com or
-// gemini.google.com, where you are signed in.
+// conversation. Without a key, the AI's own site opens in the bubble, signed in with your account
+// in Chrome, and the next question opens that conversation on the site, typed in and waiting.
 // Keys stay in chrome.storage.local on this computer; they never sync with your profile.
 import { $, esc, safeUrl, local, showPop } from './util.js';
-import { icon } from './icons.js';
+import { icon, aiMark } from './icons.js';
+import { allowFrames, dropFrames } from './frames.js';
 
 export const AI_DEFAULTS = { anthropicKey: '', claudeModel: 'claude-opus-5-5', openaiKey: '', openaiModel: 'gpt-5', geminiKey: '', geminiModel: 'gemini-flash-latest' };
 
@@ -216,12 +217,16 @@ let controller = null;
 function close() {
   controller?.abort();
   controller = null;
+  if (convo.site) dropFrames(FRAME_RULE);
   convo = { engine: null, messages: [] };
   showPop(bubble, false);
+  bubble.classList.remove('site');
 }
 
 function paint() {
   const p = PROVIDERS[convo.engine];
+  bubble.classList.toggle('site', Boolean(convo.site));
+  if (convo.site) return paintSite(p);
   const last = convo.messages.findLast((m) => m.role === 'user')?.content || '';
   bubble.innerHTML = `<header class="ask-head">
       <span class="ask-who">${esc(p.label)}</span>
@@ -242,8 +247,9 @@ function paint() {
 }
 
 export async function ask(engine, question) {
-  if (convo.engine !== engine) {
+  if (convo.engine !== engine || convo.site) {
     controller?.abort();
+    if (convo.site) dropFrames(FRAME_RULE);
     convo = { engine, messages: [] };
   }
   controller?.abort();
@@ -285,8 +291,88 @@ export async function ask(engine, question) {
   paint();
 }
 
+// ---- The site in the bubble ----------------------------------------------------------
+// Without an API key, the AI's own site opens in the bubble, signed in with your account in
+// Chrome, so it answers on your plan with no key. The sites don't let other pages show them, so
+// a session rule lets them, in this tab's frames only, while the bubble is open (frames.js).
+// js/ai-page.js, inside the frame, says which conversation is showing; the next question you
+// type opens that conversation on the site, with the question typed in and ready to send.
+
+const FRAME_RULE = 4103;
+const HOSTS = { claude: 'claude.ai', chatgpt: 'chatgpt.com', gemini: 'gemini.google.com' };
+export const SIGN_IN = { claude: 'https://claude.ai/login', chatgpt: 'https://chatgpt.com/auth/login', gemini: 'https://gemini.google.com/app' };
+// What opens in the frame. ChatGPT sends a question in its link itself; for Claude and Gemini,
+// js/ai-page.js types it in and sends it.
+const frameUrl = (engine, q) =>
+  engine === 'chatgpt' ? siteUrl(engine, q) : `https://${HOSTS[engine]}/${engine === 'claude' ? 'new' : 'app'}#daybook-q=${encodeURIComponent(q)}`;
+
+// Buttons to sign in to each site, for Settings and first-run setup.
+export const aiSignIns = () =>
+  `<div class="row-actions ai-signins">${Object.keys(HOSTS)
+    .map((k) => `<a class="btn small" href="${esc(SIGN_IN[k])}" target="_blank" rel="noopener">${aiMark(k)}Sign in to ${esc(PROVIDERS[k].label)}</a>`)
+    .join('')}</div>`;
+
+let myTab = null;
+chrome.tabs?.getCurrent?.().then((t) => (myTab = t?.id ?? null)).catch(() => {});
+
+function paintSite(p) {
+  const { engine, question } = convo;
+  bubble.innerHTML = `<header class="ask-head">
+      <span class="ask-who">${esc(p.label)}</span>
+      <span class="ask-hint">Your next question opens this chat on ${esc(p.site)}</span>
+      <a class="icon-btn small" data-ask="open" href="${esc(convo.url || `https://${HOSTS[engine]}/`)}" title="Open this chat on ${esc(p.site)}" aria-label="Open this chat on ${esc(p.site)}">${icon('external')}</a>
+      <button type="button" class="icon-btn small" data-ask="close" title="Close (Esc)" aria-label="Close">${icon('close')}</button>
+    </header>
+    <div class="ask-site">
+      <iframe src="${esc(frameUrl(engine, question))}" title="${esc(p.label)}" allow="clipboard-write" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"></iframe>
+      <div class="ask-slow" hidden>
+        <p>${esc(p.label)} didn’t open here. If you aren’t signed in to ${esc(p.site)} in Chrome, sign in once and ask again.</p>
+        <div class="row-actions"><a class="btn small primary" href="${esc(SIGN_IN[engine])}" target="_blank" rel="noopener">Sign in to ${esc(p.site)}</a><a class="btn small" href="${esc(siteUrl(engine, question))}">Ask on ${esc(p.site)}</a></div>
+      </div>
+    </div>`;
+}
+
+// Asks on the AI's site: in the bubble the first time, and after that on the site itself, in the
+// same conversation. Returns the address to go to for that, or null when the bubble took it.
+export async function askOnSite(engine, question) {
+  if (convo.site && convo.engine === engine && !bubble.hidden) {
+    return convo.url ? `${convo.url}#daybook-draft=${encodeURIComponent(question)}` : siteUrl(engine, question);
+  }
+  controller?.abort();
+  controller = null;
+  convo = { engine, messages: [], site: true, url: null, question };
+  await allowFrames(FRAME_RULE, Object.values(HOSTS));
+  paint();
+  showPop(bubble, true);
+  const mine = convo;
+  // Nothing heard from the page: it didn't load here, or asked to sign in somewhere it can't.
+  setTimeout(() => {
+    if (convo === mine && !mine.url) bubble.querySelector('.ask-slow')?.removeAttribute('hidden');
+  }, 15000);
+  return null;
+}
+
+function heardFromSite(msg, sender) {
+  if (msg?.type !== 'ai-page' || !convo.site || sender.id !== chrome.runtime.id || (myTab !== null && sender.tab?.id !== myTab)) return;
+  let u;
+  try {
+    u = new URL(msg.url);
+  } catch {
+    return;
+  }
+  if (u.hostname !== HOSTS[convo.engine]) return;
+  // Without the question in the link, so opening it doesn't ask again.
+  u.searchParams.delete('q');
+  u.hash = '';
+  convo.url = u.href;
+  bubble.querySelector('.ask-slow')?.setAttribute('hidden', '');
+  const open = bubble.querySelector('[data-ask="open"]');
+  if (open) open.href = convo.url;
+}
+
 export function initAsk(input) {
   bubble = $('#ask');
+  chrome.runtime.onMessage.addListener(heardFromSite);
   bubble.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-ask]');
     if (!b) return;

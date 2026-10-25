@@ -23,7 +23,7 @@ import { msAccount } from './msauth.js';
 import { icon, aiMark } from './icons.js';
 import { groupTiles } from './sites.js';
 import { initDeliveries } from './packages.js';
-import { initAsk, ask, hasKey } from './ask.js';
+import { initAsk, ask, askOnSite, hasKey } from './ask.js';
 import { applyLayout, initLayout } from './layout.js';
 import { setCredit } from './credits.js';
 import { initFlipCard } from './flipcard.js';
@@ -252,11 +252,13 @@ function initSearch() {
       }
     }
     const looksLikeUrl = !/\s/.test(q) && /^(https?:\/\/)?(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?(\/\S*)?$/i.test(q) && !bang;
-    // Claude, ChatGPT and Gemini answer on the page when there's an API key; otherwise (or
-    // with Ctrl/Cmd+Enter) the question opens on their site, where you're signed in.
-    if (ENGINES[use].ask && !looksLikeUrl && !newTab && hasKey(use)) {
-      ask(use, q);
+    // Claude, ChatGPT and Gemini answer in the bubble under the search box: through the API
+    // with a key, or otherwise on their own site, signed in with your account. A follow-up
+    // without a key, and Ctrl/Cmd+Enter, open the site.
+    if (ENGINES[use].ask && !looksLikeUrl && !newTab) {
       input.value = '';
+      if (hasKey(use)) return ask(use, q);
+      askOnSite(use, q).then((url) => url && navigate(url, false));
       return;
     }
     const url = looksLikeUrl ? (/^https?:\/\//i.test(q) ? q : `https://${q}`) : ENGINES[use].url.replace('%s', encodeURIComponent(q));

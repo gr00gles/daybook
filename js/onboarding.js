@@ -1,12 +1,13 @@
-// First-run setup: connect Google, connect Outlook, then a few personal touches.
+// First-run setup: connect Google, connect Outlook, sign in to the AIs, then a few personal touches.
 // Shown on the first new tab after installing, and again from Settings → Run setup again.
 import { $, esc } from './util.js';
 import { saveSettings, NEWS_TOPICS } from './settings.js';
 import { googleConfigured } from './gauth.js';
 import { mountGoogle, mountGmail, mountOutlook, mountLocation } from './setup-ui.js';
+import { aiSignIns } from './ask.js';
 
-const STEPS = ['welcome', 'google', 'outlook', 'yours'];
-const LABELS = { google: 'Google', outlook: 'Outlook', yours: 'Your page' };
+const STEPS = ['welcome', 'google', 'outlook', 'ai', 'yours'];
+const LABELS = { google: 'Google', outlook: 'Outlook', ai: 'AI', yours: 'Your page' };
 
 let draft;
 let step = 0;
@@ -67,6 +68,12 @@ function body() {
           <p>Work or school accounts often need an IT admin to approve Daybook first. If so, you’ll get a link to send them.</p>
         </div>
         <div id="wiz-outlook" class="wiz-gap"></div>`;
+    case 'ai':
+      return `
+        <h1 class="wiz-title">Sign in to Claude, ChatGPT and Gemini</h1>
+        <p class="wiz-lede">Click the circle at the start of the search box to ask one of them. The answer drops down right there, from the AI’s own site, using your own account and plan. Skip the ones you don’t use.</p>
+        <div class="wiz-heads-up"><p>Each button opens the site in a new tab. Sign in there, then come back to this tab. If you’re already signed in, there’s nothing to do.</p></div>
+        ${aiSignIns()}`;
     case 'yours':
       return `
         <h1 class="wiz-title">Make it yours</h1>

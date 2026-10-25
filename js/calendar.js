@@ -7,6 +7,7 @@ import { describe } from './weather.js';
 import { tripInfo, leaveText, tripSources } from './trip.js';
 import { setTicker } from './ticker.js';
 import { setCredit } from './credits.js';
+import { holidaysOn, coveredBy, holidayBadge } from './sky.js';
 
 const DAYS_AHEAD = 7;
 
@@ -517,17 +518,37 @@ export function allDayChips(list) {
     .join('')}</div>`;
 }
 
+// The day the Today card shows: today, or a day picked on the month calendar (month.js).
+let pickedDay = null;
+export const shownDay = () => pickedDay;
+export function showDay(d0) {
+  pickedDay = d0 == null || d0 === startOfDay() ? null : startOfDay(d0);
+}
+
+function dayTitle(d0, today) {
+  const days = Math.round((d0 - today) / 86400e3);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days === -1) return 'Yesterday';
+  return new Date(d0).toLocaleDateString(undefined, { weekday: 'long' });
+}
+
 export function renderAgenda(S) {
   const body = $('#today-body');
   if (!body) return;
   // The month view draws right after this and adds its own.
   onScreen.clear();
   const now = Date.now();
-  const today = startOfDay(now);
+  const realToday = startOfDay(now);
+  const today = pickedDay ?? realToday;
   const tomorrow = addDays(today, 1);
   const h24 = S.clock24;
-  const events = allEvents();
-  $('#today-date').textContent = new Date(now).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  // Today's come with every refresh; another day may be in a month loaded for the month view.
+  const events = pickedDay === null ? allEvents() : eventsBetween(today, addDays(today, DAYS_AHEAD));
+  $('#today-h').textContent = dayTitle(today, realToday);
+  $('#today-date').textContent = new Date(today).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  $('#today-back').hidden = pickedDay === null;
+  $('#card-today').classList.toggle('picked', pickedDay !== null);
 
   const configured = googleState === 'connected' || S.calendars.some((c) => c.enabled && c.url) || outlookOn;
   const parts = [];
@@ -535,13 +556,17 @@ export function renderAgenda(S) {
   if (configured) {
     const todayAll = events.filter((e) => e.allDay && e.start < tomorrow && e.end > today);
     const todayTimed = events.filter((e) => !e.allDay && e.start < tomorrow && e.end > today);
+    // The day's holidays, unless a calendar already names them.
+    const hols = S.show.sky ? holidaysOn(today).filter((h) => !coveredBy(h, todayAll.map((e) => e.title))) : [];
+    if (hols.length) parts.push(`<p class="day-hols">${hols.map((h) => holidayBadge(h)).join('')}</p>`);
     parts.push(ruler(todayTimed, today, now, h24));
     parts.push(allDayChips(todayAll));
     const remaining = todayTimed.filter((e) => e.end > now).length;
+    const quiet = pickedDay === null ? 'today' : 'this day';
     parts.push(
       todayTimed.length
-        ? `<ol class="ev-list">${todayTimed.map((e) => timedRow(e, now, h24)).join('')}</ol>${remaining ? '' : '<p class="quiet">That was everything today.</p>'}`
-        : `<p class="quiet">${todayAll.length ? 'No timed events today.' : 'Nothing on the calendar today.'}</p>`,
+        ? `<ol class="ev-list">${todayTimed.map((e) => timedRow(e, now, h24)).join('')}</ol>${remaining || today < realToday ? '' : `<p class="quiet">That was everything ${quiet}.</p>`}`
+        : `<p class="quiet">${todayAll.length ? `No timed events ${quiet}.` : `Nothing on the calendar ${quiet}.`}</p>`,
     );
 
     const days = [];
@@ -551,7 +576,7 @@ export function renderAgenda(S) {
       const allDay = events.filter((e) => e.allDay && e.start < d1 && e.end > d0);
       const timed = events.filter((e) => !e.allDay && e.start >= d0 && e.start < d1);
       if (!allDay.length && !timed.length) continue;
-      const label = i === 1 ? 'Tomorrow' : new Date(d0).toLocaleDateString(undefined, { weekday: 'long' });
+      const label = d0 === addDays(realToday, 1) ? 'Tomorrow' : d0 === realToday ? 'Today' : new Date(d0).toLocaleDateString(undefined, { weekday: 'long' });
       const date = new Date(d0).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       days.push(`<section class="day">
         <h3><span>${label}</span><span class="day-date">${date}</span></h3>
@@ -559,10 +584,11 @@ export function renderAgenda(S) {
         ${timed.length ? `<ol class="ev-list compact">${timed.map((e) => timedRow(e, now, h24, { compact: true })).join('')}</ol>` : ''}
       </section>`);
     }
+    const after = pickedDay === null ? 'Coming up' : 'The days after';
     parts.push(
       days.length
-        ? `<div class="upcoming"><h3 class="eyebrow">Coming up</h3>${days.join('')}</div>`
-        : '<div class="upcoming"><h3 class="eyebrow">Coming up</h3><p class="quiet">Nothing scheduled for the rest of the week.</p></div>',
+        ? `<div class="upcoming"><h3 class="eyebrow">${after}</h3>${days.join('')}</div>`
+        : `<div class="upcoming"><h3 class="eyebrow">${after}</h3><p class="quiet">Nothing scheduled ${pickedDay === null ? 'for the rest of the week' : 'in the six days after'}.</p></div>`,
     );
   }
 
@@ -601,7 +627,8 @@ export function renderAgenda(S) {
   const upcoming = body.querySelector('.upcoming');
   if (upcoming) upcoming.classList.toggle('scrolls', upcoming.scrollHeight > upcoming.clientHeight + 4);
 
-  setTicker('today', configured ? tickerEvents(events.filter((e) => e.end > now && e.start < tomorrow), (e) => (e.allDay ? 'All day' : e.start <= now ? 'Now' : fmtTime(e.start, h24))) : []);
+  const endOfToday = addDays(realToday, 1);
+  setTicker('today', configured ? tickerEvents(allEvents().filter((e) => e.end > now && e.start < endOfToday), (e) => (e.allDay ? 'All day' : e.start <= now ? 'Now' : fmtTime(e.start, h24))) : []);
 }
 
 // Events as ticker items, in order: `when` says when each is, a game shows its two logos.

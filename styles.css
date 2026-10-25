@@ -522,7 +522,7 @@ kbd {
   .places-map { min-height: 240px; border-left: 0; border-top: 1px solid var(--hair); }
   .places-list { max-height: 220px; }
 }
-/* Claude / ChatGPT answers: a bubble under the engine chips, so you can switch while it's open. */
+/* Claude, ChatGPT and Gemini answers: a bubble that drops down from the search box. */
 .ask {
   position: absolute;
   top: calc(100% + 10px);
@@ -539,6 +539,13 @@ kbd {
   text-align: left;
 }
 .ask[hidden] { display: none; }
+/* Without an API key the AI's own site shows in the bubble (ask.js), as tall as the window allows. */
+.ask.site { height: min(74vh, 680px); max-height: none; }
+.ask-site { position: relative; min-height: 0; background: var(--raised); }
+.ask-site iframe { display: block; width: 100%; height: 100%; border: 0; }
+.ask-slow { position: absolute; inset: auto 12px 12px; padding: 14px 16px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-lift); font-size: 13.5px; color: var(--ink-2); }
+.ask-slow[hidden] { display: none; }
+.ask-slow p { margin: 0 0 10px; }
 .ask-head { display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 18px; border-bottom: 1px solid var(--hair); }
 .ask-who { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--accent); }
 .ask-hint { flex: 1; margin-left: 6px; font-size: 12.5px; color: var(--muted); }
@@ -1016,6 +1023,7 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .btn.ghost { background: var(--glass-strong); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
 .btn:disabled { cursor: default; opacity: .6; }
 .btn .ui-icon { width: 14px; height: 14px; }
+.btn .ai-mark { width: 16px; height: 16px; }
 .notice .btn { color: var(--ink); }
 .notice .btn.primary { color: var(--accent-ink); }
 
@@ -1281,28 +1289,9 @@ a.chip:hover { background: var(--fill-2); }
 .mev.all { padding-left: 6px; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--ink); }
 .mev.all::before { display: none; }
 .mmore { padding-left: 3px; font-size: 11px; font-weight: 600; color: var(--muted); }
-/* Holidays wear their own color (--hol) on the day, with their emblem. */
-.mhol { display: block; padding: 0 4px; border-radius: 5px; font-size: 10.5px; font-weight: 650; line-height: 1.35; color: color-mix(in srgb, var(--hol, var(--serious)) 68%, var(--ink)); background: color-mix(in srgb, var(--hol, var(--serious)) 14%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mhol .hol-glyph { margin-right: 3px; font-size: 10px; }
-.mhol.clock { color: var(--muted); font-weight: 500; background: none; }
-/* A holiday's whole day is a little party: washed in its color and sprinkled with confetti, its
-   number on a badge of that color, and its emblem big in the corner, wiggling under the pointer. */
-.mday.hol {
-  --dot: color-mix(in srgb, var(--hol) 60%, transparent);
-  position: relative;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 16% 84%, var(--dot) 0 1.7px, transparent 2.3px),
-    radial-gradient(circle at 44% 94%, var(--dot) 0 1.3px, transparent 1.9px),
-    radial-gradient(circle at 84% 16%, var(--dot) 0 1.5px, transparent 2.1px),
-    radial-gradient(circle at 64% 40%, var(--dot) 0 1.1px, transparent 1.7px),
-    radial-gradient(circle at 92% 58%, var(--dot) 0 1.3px, transparent 1.9px),
-    linear-gradient(150deg, color-mix(in srgb, var(--hol) 26%, transparent), color-mix(in srgb, var(--hol) 8%, transparent) 80%);
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--hol) 50%, transparent);
-}
-.mday.hol:hover { background-color: color-mix(in srgb, var(--hol) 10%, transparent); }
-.mday.hol.sel { box-shadow: inset 0 0 0 2px var(--accent); }
-.mday.hol.out { opacity: .6; }
+/* A holiday's day looks like any other, with its emblem in the corner, which wiggles under the
+   pointer and when the day is clicked (month.js). Its name is on the Today card. */
+.mday.hol { position: relative; overflow: hidden; }
 .mday.hol > * { position: relative; z-index: 1; }
 .mday.hol::after {
   content: attr(data-glyph);
@@ -1310,21 +1299,17 @@ a.chip:hover { background: var(--fill-2); }
   right: -2px;
   bottom: -4px;
   font: 30px/1 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-  opacity: .6;
+  opacity: .75;
   transform: rotate(-12deg);
   pointer-events: none;
 }
-.mday.hol:hover::after { opacity: .9; animation: hol-wiggle .7s ease-in-out; }
+.mday.hol.out::after { opacity: .4; }
+.mday.hol:hover::after, .mday.hol.jiggle::after { opacity: 1; animation: hol-wiggle .7s ease-in-out; }
 @keyframes hol-wiggle {
   25% { transform: rotate(-26deg) scale(1.15); }
   60% { transform: rotate(6deg) scale(1.15); }
 }
-@media (prefers-reduced-motion: reduce) { .mday.hol:hover::after { animation: none; } }
-.mday.hol:not(.today) .mnum { background: var(--hol); color: #fff; font-weight: 700; box-shadow: 0 2px 6px -2px var(--hol); }
-.mdetail-hol { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
-.mdetail { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hair); }
-.mdetail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.mdetail-head h3 { flex: 1; margin: 0; font: 600 16px var(--font-display); letter-spacing: -0.01em; }
+@media (prefers-reduced-motion: reduce) { .mday.hol:hover::after, .mday.hol.jiggle::after { animation: none; } }
 
 /* Narrow columns: dots instead of titles. */
 @container (max-width: 390px) {
@@ -1334,7 +1319,6 @@ a.chip:hover { background: var(--fill-2); }
   .mev, .mev.all { width: 6px; height: 6px; padding: 0; border-radius: 50%; background: var(--c); font-size: 0; }
   .mev::before { display: none; }
   .mmore { display: none; }
-  .mhol { display: none; }
   .mday.hol::after { right: -3px; bottom: -3px; font-size: 20px; }
   .mwd { font-size: 10.5px; letter-spacing: 0; }
   .mweek { --bar-top: 31px; --bar-step: 6px; }
@@ -2063,21 +2047,53 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 }
 .tab:hover { color: var(--ink); background: var(--fill); }
 .tab.on { background: var(--selected); color: var(--ink); box-shadow: 0 1px 3px var(--glass-shade); }
-/* Headlines flip like the YouTube stack (see .rolo), each card a headline. */
-.news-link { align-content: start; gap: 8px; min-height: 108px; padding: 16px 18px 14px; }
+/* Headlines: the topics beside the title, the top story large, then the rest as rows, each led
+   by its source's icon. */
+.news-head { flex-wrap: nowrap; align-items: center; }
+.news-head .tabs { flex: 1 1 auto; min-width: 0; justify-content: flex-end; margin: -2px -6px -2px 0; padding: 2px; }
+.news-head .tab { padding: 4px 11px; font-size: 12.5px; }
+/* In the flip card its tab already says Headlines. */
+.flip-face#card-news .news-head h2 { display: none; }
+.flip-face#card-news .news-head .tabs { justify-content: flex-start; margin-left: -4px; }
+.news-list { list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 0; }
+.news-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 2px 10px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color .12s ease;
+}
+.news-item:hover { background: var(--fill); }
+.news-fav { grid-row: span 2; width: 16px; height: 16px; margin-top: 2px; border-radius: 4px; }
+.news-fav.letter { display: grid; place-items: center; background: var(--fill-2); color: var(--ink-2); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .news-title {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
-  letter-spacing: -0.005em;
   text-wrap: pretty;
 }
-.news-link:hover .news-title { color: var(--accent); }
+.news-item:hover .news-title { color: var(--accent); }
 .news-meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The top story: its source above it, the headline bigger, on a soft panel. */
+.news-lead { margin-bottom: 4px; }
+.news-lead .news-item {
+  grid-template-columns: 16px minmax(0, 1fr);
+  padding: 10px 12px 12px;
+  background: linear-gradient(135deg, var(--accent-soft), transparent 85%);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.news-lead .news-item:hover { background: linear-gradient(135deg, var(--accent-soft), var(--fill) 85%); }
+.news-lead .news-fav { grid-row: 1; }
+.news-lead .news-meta { grid-row: 1; grid-column: 2; align-self: center; font-weight: 600; color: var(--ink-2); }
+.news-lead .news-title { grid-column: 1 / -1; -webkit-line-clamp: 3; margin-top: 4px; font: 650 17px/1.3 var(--font-display); letter-spacing: -0.01em; }
 
 /* ---- Dialogs: thick glass over a dimmed, blurred page ------------------------ */
 
@@ -2094,6 +2110,11 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 #card-today:hover .add-event, .add-event:focus-visible { opacity: 1; }
 @media (hover: none) { .add-event { opacity: 1; } }
 #card-today > .card-head { margin-bottom: 6px; }
+.today-back { margin-left: auto; align-self: center; padding-block: 4px; }
+.today-back + .add-event { margin-left: 0; }
+/* Another day picked on the month: its title in the accent color, so it doesn't pass for today. */
+#card-today.picked #today-h { color: var(--accent); }
+.day-hols { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .event-dialog {
   width: min(500px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
@@ -2431,6 +2452,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 .cal-pick .check { width: 100%; min-width: 0; }
 .cal-pick .check > span:not(.cal-dot):not(.src):not(.count) { min-width: 0; overflow-wrap: anywhere; }
 .cal-pick .cal-dot { width: 10px; height: 10px; }
+.folder-pick { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 .cal-pick .count { margin-left: auto; padding-left: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 12px; }
 .field.inline { display: inline-flex; align-items: center; gap: 8px; flex: none; }
@@ -2579,7 +2601,6 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 /* Each week is at least as tall as its events (js/layout.js keeps the card that tall), and they share what's left. */
 #card-month.fixed .mgrid { flex: 1 1 0; min-height: 0; grid-template-rows: auto; grid-auto-rows: minmax(min-content, 1fr); }
 #card-month.fixed .mday { min-height: 0; overflow: hidden; }
-#card-month.fixed .mdetail { flex: none; max-height: 45%; overflow-y: auto; scrollbar-width: thin; }
 /* Headings whose items were all dropped go with them. A day in Today's Coming up shows the
    events that fit, and the days after a day cut short go too (items go from the end), even ones
    with only all-day events. */

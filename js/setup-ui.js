@@ -5,8 +5,8 @@ import { esc, colorVar, getJSON } from './util.js';
 import { googleConfigured, googleAccount, connectGoogle, disconnectGoogle } from './gauth.js';
 import { listGoogleCalendars } from './calendar.js';
 import { discoverGmailAccounts, gmailAllowed, GMAIL_SIGN_IN } from './mail.js';
-import { connect as msConnect, disconnect as msDisconnect, msAccount, adminConsentUrl } from './msauth.js';
-import { msClientId, GMAIL_FEEDS } from './settings.js';
+import { connect as msConnect, disconnect as msDisconnect, msAccount, adminConsentUrl, graph } from './msauth.js';
+import { msClientId, GMAIL_FOLDERS } from './settings.js';
 import { icon } from './icons.js';
 
 const check = '<svg class="ok-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -143,8 +143,14 @@ export function mountGmail(el, draft, changed) {
           )
           .join('')}
       </fieldset>
+      <fieldset class="cal-pick folder-pick"><legend>Show unread mail from</legend>
+        ${Object.entries(GMAIL_FOLDERS)
+          .map(([k, f]) => `<label class="check"><input type="checkbox" data-m-folder="${k}"${draft.gmail.folders.includes(k) ? ' checked' : ''}><span>${esc(f.label)}</span></label>`)
+          .join('')}
+      </fieldset>
+      <label class="field"><span>Labels of your own</span><input type="text" data-m="labels" value="${esc(draft.gmail.labels)}" placeholder="Receipts, Family" spellcheck="false" autocomplete="off"></label>
+      <p class="hint small">The inbox already holds its tabs (Primary, Social and the rest), so tick a tab instead of the inbox to see only that one. Type labels as Gmail names them, separated by commas. The same choices apply to every account.</p>
       <div class="row-actions">
-        <label class="field inline"><span>Show</span><select data-m="feed">${Object.entries(GMAIL_FEEDS).map(([k, f]) => opt(k, f.label, draft.gmail.feed)).join('')}</select></label>
         <a class="btn small" href="${GMAIL_SIGN_IN}" target="_blank" rel="noopener">${icon('plus')}Add another account</a>
         <button class="btn small" type="button" data-m="rescan">${icon('refresh')}Look again</button>
       </div>`;
@@ -166,8 +172,11 @@ export function mountGmail(el, draft, changed) {
     if (e.target.dataset.gmail !== undefined) {
       draft.gmail.hidden = [...el.querySelectorAll('[data-gmail]')].filter((i) => !i.checked).map((i) => i.dataset.gmail);
       changed('gmail');
-    } else if (e.target.dataset.m === 'feed') {
-      draft.gmail.feed = e.target.value;
+    } else if (e.target.dataset.mFolder) {
+      draft.gmail.folders = [...el.querySelectorAll('[data-m-folder]')].filter((i) => i.checked).map((i) => i.dataset.mFolder);
+      changed('gmail');
+    } else if (e.target.dataset.m === 'labels') {
+      draft.gmail.labels = e.target.value.trim();
       changed('gmail');
     }
   });
@@ -200,7 +209,8 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
         <div class="row-actions">
           <label class="check"><input type="checkbox" data-o="mail"${draft.outlook.mail ? ' checked' : ''}><span>Show Outlook mail</span></label>
           <label class="check"><input type="checkbox" data-o="calendar"${draft.outlook.calendar ? ' checked' : ''}><span>Show Outlook calendar</span></label>
-        </div>`;
+        </div>
+        ${draft.outlook.mail ? folderPick() : ''}`;
       return;
     }
     el.innerHTML = `
@@ -238,6 +248,7 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
         }
         changed('outlook');
         onConnected?.(auth);
+        loadFolders();
       } catch (err) {
         if (err.code === 'needs-admin') s.adminUrl = err.adminUrl;
         else s.error = err.message || String(err);
@@ -263,13 +274,41 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
     if (k === 'mail' || k === 'calendar') {
       draft.outlook[k] = e.target.checked;
       changed('outlook');
+      if (k === 'mail') paint();
+    } else if (e.target.dataset.oFolder) {
+      draft.outlook.folders = [...el.querySelectorAll('[data-o-folder]')].filter((i) => i.checked).map((i) => i.dataset.oFolder);
+      changed('outlook');
     }
   });
+
+  // The account's top-level mail folders, the inbox first, each by id ('inbox' for the inbox, so
+  // the setting means the same after Outlook renumbers it).
+  const folderPick = () => {
+    if (!s.folders) return '<p class="hint">Looking for your Outlook folders…</p>';
+    if (!s.folders.length) return '<p class="hint">Couldn’t list your Outlook folders; showing the inbox.</p>';
+    const picked = draft.outlook.folders?.length ? draft.outlook.folders : ['inbox'];
+    return `<fieldset class="cal-pick folder-pick"><legend>Show unread mail from</legend>${s.folders
+      .map((f) => `<label class="check"><input type="checkbox" data-o-folder="${esc(f.id)}"${picked.includes(f.id) ? ' checked' : ''}><span>${esc(f.name)}</span>${f.unread ? `<span class="count">${f.unread} unread</span>` : ''}</label>`)
+      .join('')}</fieldset>`;
+  };
+  const loadFolders = async () => {
+    try {
+      const id = msClientId(draft);
+      const [inbox, list] = await Promise.all([graph(id, '/me/mailFolders/inbox?$select=id'), graph(id, '/me/mailFolders?$top=100&$select=id,displayName,unreadItemCount')]);
+      s.folders = list.value
+        .map((f) => ({ id: f.id === inbox.id ? 'inbox' : f.id, name: f.displayName, unread: f.unreadItemCount }))
+        .sort((a, b) => (b.id === 'inbox') - (a.id === 'inbox'));
+    } catch {
+      s.folders = [];
+    }
+    paint();
+  };
 
   (async () => {
     s.account = await msAccount();
     s.loading = false;
     paint();
+    if (s.account) loadFolders();
   })();
   paint();
 }

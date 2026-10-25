@@ -24,17 +24,24 @@ export const ENGINES = {
   maps: { label: 'Maps', bang: 'm', url: 'https://www.google.com/maps/search/%s' },
   claude: { label: 'Claude', bang: 'c', url: 'https://claude.ai/new?q=%s', ask: true },
   chatgpt: { label: 'ChatGPT', bang: 'gpt', url: 'https://chatgpt.com/?q=%s', ask: true },
-  // Gemini's site takes no question in its link; js/gemini-page.js types the one after #daybook-q= in.
+  // Gemini's site takes no question in its link; js/ai-page.js types the one after #daybook-q= in.
   gemini: { label: 'Gemini', bang: 'gem', url: 'https://gemini.google.com/app#daybook-q=%s', ask: true },
   wikipedia: { label: 'Wikipedia', bang: 'w', url: 'https://en.wikipedia.org/w/index.php?search=%s' },
   amazon: { label: 'Amazon', bang: 'a', url: 'https://www.amazon.com/s?k=%s' },
   gmail: { label: 'Gmail', bang: 'e', url: 'https://mail.google.com/mail/u/0/#search/%s' },
 };
 
-export const GMAIL_FEEDS = {
-  inbox: { label: 'Whole inbox', path: '' },
-  primary: { label: 'Primary tab only', path: '^sq_ig_i_personal' },
-  important: { label: 'Important only', path: 'important' },
+// Gmail's folders Daybook can show, as the paths of their unread feeds: the whole inbox, one of
+// its tabs, Important or Starred. Labels of your own go by name (gmail.labels).
+export const GMAIL_FOLDERS = {
+  inbox: { label: 'Inbox (every tab)', path: '' },
+  primary: { label: 'Primary', path: '^sq_ig_i_personal' },
+  social: { label: 'Social', path: '^sq_ig_i_social' },
+  promotions: { label: 'Promotions', path: '^sq_ig_i_promo' },
+  updates: { label: 'Updates', path: '^sq_ig_i_notification' },
+  forums: { label: 'Forums', path: '^sq_ig_i_group' },
+  important: { label: 'Important', path: 'important' },
+  starred: { label: 'Starred', path: '^t' },
 };
 
 // Hosts the manifest already grants. A calendar or feed elsewhere needs a runtime grant.
@@ -60,9 +67,12 @@ export const DEFAULTS = {
   searchEngine: 'google',
   location: { mode: 'auto', name: '', lat: null, lon: null },
   google: { calendars: null }, // null: the calendars Google Calendar itself shows
-  gmail: { feed: 'inbox', hidden: [] }, // every signed-in Gmail account except `hidden`
+  // Every signed-in Gmail account except `hidden`; the folders to show unread mail from, and
+  // labels of your own by name, separated by commas.
+  gmail: { folders: ['inbox'], labels: '', hidden: [] },
   calendars: [], // extra calendars added by iCal link
-  outlook: { clientId: '', mail: true, calendar: true, color: 5 }, // clientId overrides config.js
+  // clientId overrides config.js; folders are Outlook folder ids, or 'inbox'.
+  outlook: { clientId: '', mail: true, calendar: true, color: 5, folders: ['inbox'] },
   news: { topics: ['top', 'us', 'technology'], custom: [] },
   // Each card or top-bar part: 'card' (on the page), 'both' (and in the ticker), 'ticker' (in the
   // ticker only), 'flip' (a card taking turns in the flip card) or 'off'. `show` below follows: a section is on while any of its parts is.
@@ -135,6 +145,9 @@ export async function loadSettings() {
     if (!settings?.ticker?.news) s.ticker.news = s.news.style;
     delete s.news.style;
   }
+  // Gmail showed one feed (inbox, primary or important); it can show several folders now.
+  if (settings?.gmail?.feed && !settings.gmail.folders) s.gmail.folders = [settings.gmail.feed];
+  delete s.gmail.feed;
   // Package tracking briefly went through 17TRACK, with a key; carriers' own pages need none.
   delete s.packages.trackKey;
   // NYS jobs started with a words box and a counties box; those are rules now.
