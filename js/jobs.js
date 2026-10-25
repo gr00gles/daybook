@@ -675,10 +675,12 @@ function list(jobs) {
   return day ? `${html}</ol>` : html;
 }
 
-// The card shows as many as fit; the whole list is a click away. n counts the postings you
-// haven't reviewed.
-function paintLinks(n) {
-  $('#jobs-links').innerHTML = n === null ? '' : `<a class="foot-link" href="jobs.html">${icon('chevron-right')}${n ? `See all ${n}` : 'See all postings'}</a>`;
+// The card shows as many as fit; the whole list is a click away, on the count at the top right
+// (of the postings you haven't reviewed, 0 included, so the page is always there to open).
+function paintCount(n) {
+  const a = $('#jobs-count');
+  a.textContent = n === null ? '' : String(n);
+  a.title = n === null ? '' : `See ${n === 1 ? 'the 1 posting' : `all ${n} postings`} you haven’t reviewed`;
 }
 
 let card = null; // what the card last drew: { S, data, meta }
@@ -691,8 +693,7 @@ async function render() {
   $('#jobs-updated').textContent = meta.error && data ? "couldn't refresh" : '';
   if (!data) {
     setTicker('jobs', []);
-    $('#jobs-count').textContent = '';
-    paintLinks(null);
+    paintCount(null);
     body.innerHTML = `<p class="notice warn">NYS jobs aren’t loading: ${esc(errorText(meta.error).replace(/\.$/, ''))}.</p>`;
     return;
   }
@@ -702,8 +703,7 @@ async function render() {
   const jobs = matching.filter((j) => !reviewed[j.id]);
   // Rules about details leave out postings whose pages haven't been read.
   const note = unreadText(unread(pick(all, J, { rules: false }), data, J, details));
-  $('#jobs-count').textContent = jobs.length || '';
-  paintLinks(jobs.length);
+  paintCount(jobs.length);
   setTicker(
     'jobs',
     jobs.map((j) => ({ tag: dayLabel(j.posted), title: j.title, meta: salaryText(j) || agencyName(j.agency), href: postingUrl(j.id), newTab: true })),
