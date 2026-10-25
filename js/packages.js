@@ -215,14 +215,23 @@ const short = (s, n = 70) => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/
 // Who sent a package, in a carrier's notice about it ("Shipped from: Acme").
 const shipperIn = (body) => body.match(/^(?:shipped from|ship from|shipper|sender|from shipper)\s*:?\s*(\S.{1,60})$/im)?.[1] || '';
 
+// The products an email names (items, from its product links and pictures) as one title: the
+// first, and how many more.
+function itemsText(items = []) {
+  if (!items.length) return '';
+  return items.length === 1 ? items[0] : `${short(items[0], 52)} and ${items.length - 1} more`;
+}
+
 // Subjects that only say something happened to "your order", or when it's due.
-const GENERIC = /\b(?:your|the|an?) (?:[\w’']+ ){0,2}(?:order|package|parcel|shipment|item|delivery|purchase)s?\b|^(?:is |has |was |has been )?(?:shipped|delivered|out for delivery|on (?:its|the) way|arriving|arrived|order)\b|^\d+ items?\b|^it[’']s time\b|^(?:let us know|how did we do|how was|rate|review|tell us|thank(?:s| you))\b|^(?:usps|ups|fedex|dhl)?\W*(?:expected|scheduled|estimated) delivery\b/i;
+const GENERIC = /\b(?:your|the|an?) (?:[\w’'.]+ ){0,2}(?:order|package|parcel|shipment|item|delivery|purchase)s?\b|^(?:is |has |was |has been )?(?:shipped|delivered|out for delivery|on (?:its|the) way|arriving|arrived|order)\b|^\d+ items?\b|^it[’']s time\b|^(?:let us know|how did we do|how was|rate|review|tell us|thank(?:s| you))\b|^(?:usps|ups|fedex|dhl)?\W*(?:expected|scheduled|estimated) delivery\b|^(?:now )?arriving\b|^\W*$/i;
 
 function titleOf(subject, from, item) {
   const t = subject
     .replace(/^(?:(?:fwd?|fw|re):\s*)+/i, '')
     .replace(/^order\s*#?\s*[\w-]*\d[\w-]*\s*/i, '')
     .replace(/^(?:shipped|delivered|out for delivery|arriving[^:]*|ordered|(?:\w+ )?update)\s*:\s*/i, '')
+    // "Ordered 1 item: …", "Shipped 2 items: …"
+    .replace(/^(?:(?:ordered|shipped|delivered)\s+)?\d+\s+items?\s*:\s*/i, '')
     .replace(/^(?:"([^"]+)"|“([^”]+)”|'([^']+)'(?=\s|$))/, (all, a, b, c) => a || b || c)
     .trim();
   // "Your package has been delivered" says less than what's in it, or who sent it.
@@ -265,7 +274,7 @@ function readMail(m) {
   const strong = found && !found.plain && (upTop || !PROMO.test(subject));
   if (!strong && (!(status || found) || !ABOUT_ORDER.test(`${subject} ${found ? lead : ''}`) || PROMO.test(subject))) return null;
   const sender = SENDERS.find(([, re]) => re.test(`${from} ${subject}`))?.[0] || '';
-  const title = titleOf(subject, from, body ? itemIn(body) || shipperIn(body) : '');
+  const title = titleOf(subject, from, itemsText(m.items) || (body ? itemIn(body) || shipperIn(body) : ''));
   const order = `${subject}\n${body.slice(0, 4000)}`.match(ORDER)?.[1]?.toUpperCase() || '';
   return {
     msgId: m.msgId || m.id || '',
