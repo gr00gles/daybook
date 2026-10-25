@@ -1681,20 +1681,6 @@ a.chip:hover { background: var(--fill-2); }
 .tm-score { font: 500 17px var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tm-score.won { color: var(--good); }
 .tm-score.lost { color: var(--critical); }
-/* For a day after a win, the team's row wears its color (--c), with a Win chip on the final. */
-.team.won .tm-game { background: color-mix(in srgb, var(--c) 11%, transparent); box-shadow: inset 3px 0 0 var(--c); }
-.team.won .tm-game:hover { background: color-mix(in srgb, var(--c) 17%, transparent); }
-.tm-win {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--good);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-}
-.tm-won { color: var(--good); font-weight: 600; }
 .tm-none { margin: 0; padding: 8px 10px; font-size: 13.5px; color: var(--muted); }
 .tm-meta { margin: -2px 0 0; padding: 0 10px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .tm-news-wrap:not(:empty) { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--hair); }

@@ -290,7 +290,7 @@ ${showBlock('stocks')}
 ${showBlock('teams')}
   <section id="set-teams">
     <h3>Teams</h3>
-    <p class="hint">Follow teams to get a card with each one’s next game (and the score while it’s on), their games on your calendar with the team’s logo, and recent team news. For a day after a game, the two logos and the score take a turn in the bubble at the end of the search bar, green for a win and red for a loss, and after a win the team’s row on the card wears its colors. Schedules come from ESPN; news from Google News.</p>
+    <p class="hint">Follow teams to get a card with each one’s next game (and the score while it’s on), their games on your calendar with the team’s logo, and recent team news. For a day after a game, the two logos and the score take a turn in the bubble at the end of the search bar, green for a win and red for a loss (the card leaves it out of the team’s last result). Schedules come from ESPN; news from Google News.</p>
     <div id="sheet-teams"></div>
     <div class="topics">
       ${check('teams.calendar', 'Show games on the calendar', d.teams.calendar)}
