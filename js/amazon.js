@@ -17,6 +17,8 @@ const FORGET = 30 * 86400e3;
 // An Amazon order number: 113-7709954-3007449.
 export const isAmazonOrder = (o) => /^\d{3}-\d{7}-\d{7}$/.test(o || '');
 export const loadAmazonOrders = async () => (await local.get(KEY)) || {};
+// An order's printable invoice on amazon.com.
+export const invoiceUrl = (order) => `https://www.amazon.com/gp/css/summary/print.html?orderID=${encodeURIComponent(order)}`;
 local.remove(['amazon:orders', 'amazon:orders:v2', 'amazon:orders:v3']);
 const pageUrl = (order) => `https://www.amazon.com/gp/your-account/order-details?orderID=${encodeURIComponent(order)}`;
 
