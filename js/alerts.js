@@ -3,6 +3,7 @@
 import { $, esc, local, cached, hash, fmtTime } from './util.js';
 import { icon } from './icons.js';
 import { openWeekWeather } from './weather.js';
+import { setTicker, offBoard } from './ticker.js';
 
 const POINT_KEY = 'nws:point';
 const SEVERITY = { Extreme: 'critical', Severe: 'serious', Moderate: 'warning', Minor: 'minor', Unknown: 'minor' };
@@ -92,9 +93,16 @@ const sameDay = (t) => new Date(t).toDateString() === new Date().toDateString();
 let painted = '';
 
 function render() {
-  const box = $('#wx-alerts');
-  const chip = $('#nw-alert');
+  // Set to the ticker only, the alerts stay out of the top bar and the week's weather.
+  const onPage = !settingsRef || !offBoard(settingsRef, 'alerts');
+  const box = onPage ? $('#wx-alerts') : null;
+  const chip = onPage ? $('#nw-alert') : null;
   const list = current.list;
+  const nws = `https://forecast.weather.gov/MapClick.php?lat=${current.lat}&lon=${current.lon}`;
+  setTicker(
+    'alerts',
+    list.map((a) => ({ tag: 'Alert', title: a.event, meta: until(a).trim(), tone: 'down', href: nws, newTab: true })),
+  );
   const html = list
     .slice(0, 3)
     .map(
@@ -103,7 +111,7 @@ function render() {
           ${a.headline ? `<p class="wx-alert-head">${esc(a.headline)}</p>` : ''}
           ${a.description ? `<p class="wx-alert-text">${esc(a.description)}</p>` : ''}
           ${a.instruction ? `<p class="wx-alert-text"><strong>What to do:</strong> ${esc(a.instruction)}</p>` : ''}
-          <a class="foot-link" href="https://forecast.weather.gov/MapClick.php?lat=${current.lat}&lon=${current.lon}">${icon('external')}National Weather Service</a>
+          <a class="foot-link" href="${nws}">${icon('external')}National Weather Service</a>
         </details>`,
     )
     .join('');

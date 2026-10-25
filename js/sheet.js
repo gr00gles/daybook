@@ -1,4 +1,7 @@
-// The Settings sheet. Every change saves as you make it; closing the sheet reloads the page
+// The Settings sheet: a page for each part of Daybook, picked from the list down the side, and a
+// search box that looks through all of them. Every card and part of the top bar can be shown on
+// the page, in the ticker, both or not at all, all of them together under Cards and ticker and
+// each on its own page too. Every change saves as you make it; closing the sheet reloads the page
 // so each card picks up the new settings.
 import { $, $$, esc } from './util.js';
 import { saveSettings, NEWS_TOPICS, ENGINES } from './settings.js';
@@ -11,13 +14,15 @@ import { mountTeams } from './teams.js';
 import { loadAi, saveAi, CLAUDE_MODELS } from './ask.js';
 import { AREA_KINDS } from './area.js';
 import { mountJobs } from './jobs.js';
-import { TICKER_CARDS, TICKER_MODES } from './ticker.js';
+import { TICKER_CARDS, tickerMode, tickerModes } from './ticker.js';
 import { mountTracking } from './tracking.js';
 
 let draft;
 let aiDraft;
 let dirty = false;
 let saveTimer;
+let page = 'display'; // the page shown, kept between openings
+let query = '';
 
 const COLORS = [1, 2, 3, 4, 5, 6, 7, 8];
 const COLOR_NAMES = ['Blue', 'Orange', 'Aqua', 'Yellow', 'Magenta', 'Green', 'Violet', 'Red'];
@@ -30,14 +35,94 @@ function colorSelect(attrs, current) {
   return `<span class="swatch-wrap"><span class="cal-dot" style="--c: var(--cat-${current})"></span><select class="swatch" ${attrs} aria-label="Color">${COLORS.map((c) => opt(c, COLOR_NAMES[c - 1], current)).join('')}</select></span>`;
 }
 
+const PAGES = {
+  display: { label: 'Cards and ticker', icon: 'eye' },
+  general: { label: 'General', icon: 'gear' },
+  accounts: { label: 'Accounts', icon: 'person' },
+  search: { label: 'Search and AI', icon: 'search' },
+  weather: { label: 'Weather', icon: 'drop', show: ['weather', 'alerts'] },
+  calendar: { label: 'Calendar', icon: 'clock', show: ['today', 'month', 'holidays'] },
+  mail: { label: 'Mail and deliveries', icon: 'mail', show: ['mail', 'deliveries'] },
+  news: { label: 'Headlines', icon: 'globe', show: ['news'] },
+  youtube: { label: 'YouTube', icon: 'video', show: ['youtube'] },
+  stocks: { label: 'Markets', icon: 'money', show: ['stocks'] },
+  teams: { label: 'Teams', icon: 'star', show: ['teams'] },
+  area: { label: 'Around you', icon: 'pin', show: ['area'] },
+  jobs: { label: 'NYS jobs', icon: 'building', show: ['jobs'] },
+  shortcuts: { label: 'Shortcuts and notes', icon: 'link', show: ['shortcuts', 'notes'] },
+};
+const pageOf = (key) => Object.keys(PAGES).find((id) => PAGES[id].show?.includes(key));
+const pageAttr = (id) => (id === page || query ? '' : ' hidden');
+
+// Where one card or part of the top bar shows: on the page, in the ticker, both or neither.
+// It's drawn twice (under Cards and ticker and on its own page), as two sets of radios kept in step.
+function display(key, where) {
+  const c = TICKER_CARDS[key];
+  const mode = tickerMode(draft, key);
+  const names = { card: c.board, both: `${c.board} + ticker`, ticker: 'Ticker only', off: 'Off' };
+  return `<div class="disp${mode === 'off' ? ' is-off' : ''}" data-disp="${key}">
+    <span class="disp-name">${icon(c.icon)}<span>${esc(c.label)}</span>${
+      where === 'all' ? `<button class="disp-go" type="button" data-goto="${pageOf(key)}" title="${esc(c.label)} settings">Options${icon('chevron-right')}</button>` : ''
+    }</span>
+    <span class="seg disp-seg" role="radiogroup" aria-label="Where ${esc(c.label)} shows">${tickerModes(key)
+      .map((m) => `<label><input type="radio" name="disp-${key}-${where}" value="${m}" data-display="${key}"${m === mode ? ' checked' : ''}><span>${esc(names[m])}</span></label>`)
+      .join('')}</span>
+  </div>`;
+}
+
+const showBlock = (id) => `<section id="set-show-${id}" class="set-show">
+    <h3>Where it shows</h3>
+    ${PAGES[id].show.map((k) => display(k, 'page')).join('')}
+  </section>`;
+
+function overview() {
+  const keys = Object.keys(TICKER_CARDS);
+  const group = (board) => keys.filter((k) => TICKER_CARDS[k].board === board).map((k) => display(k, 'all')).join('');
+  return `<section id="set-ticker">
+    <p class="hint">Pick where each part of Daybook shows: on the page, in the ticker, both, or not at all. The ticker is a bar under the top band that crawls through the latest from everything you put in it, taking turns. Hover over it to hold it still, scroll it to look along it, and click anything to open it. <strong>Options</strong> opens that part’s own settings.</p>
+  </section>
+  <section id="set-sections">
+    <h3>Top bar</h3>
+    ${group('Top bar')}
+  </section>
+  <section id="set-cards">
+    <h3>Cards</h3>
+    ${group('Card')}
+  </section>`;
+}
+
 function build() {
   const d = draft;
   return `<form method="dialog" class="sheet-inner" id="settings-form" novalidate>
   <header class="sheet-head">
     <h2>Settings</h2>
+    <label class="sheet-find">${icon('search')}<input id="set-q" type="search" placeholder="Search settings" value="${esc(query)}" autocomplete="off" spellcheck="false" aria-label="Search settings"></label>
     <button class="icon-btn" type="submit" value="done" aria-label="Close settings">${icon('close')}</button>
   </header>
 
+  <div class="sheet-body">
+  <nav class="sheet-nav" aria-label="Settings pages">${Object.entries(PAGES)
+    .map(([id, p]) => `<button type="button" data-goto="${id}"${id === page && !query ? ' aria-current="page"' : ''}>${icon(p.icon)}<span>${esc(p.label)}</span></button>`)
+    .join('')}</nav>
+  <div class="sheet-pages">
+  <div class="set-page" data-page="display"${pageAttr('display')}>
+    <h2 class="page-title">${PAGES.display.label}</h2>
+${overview()}
+  </div>
+  <div class="set-page" data-page="general"${pageAttr('general')}>
+    <h2 class="page-title">${PAGES.general.label}</h2>
+  <section id="set-you">
+    <h3>You</h3>
+    <div class="grid2">
+      <label class="field"><span>Name for the greeting</span><input id="s-name" type="text" data-path="name" value="${esc(d.name)}" autocomplete="off"></label>
+      <label class="field"><span>Theme</span><select id="s-theme" data-path="theme">${opt('system', 'Match my computer', d.theme)}${opt('light', 'Light', d.theme)}${opt('dark', 'Dark', d.theme)}</select></label>
+      <label class="field"><span>Clock</span><select id="s-clock" data-path="clock24" data-type="bool">${opt(false, '12-hour (3:30 PM)', d.clock24)}${opt(true, '24-hour (15:30)', d.clock24)}</select></label>
+      <label class="field"><span>Temperature</span><select id="s-units" data-path="units">${opt('F', 'Fahrenheit (°F)', d.units)}${opt('C', 'Celsius (°C)', d.units)}</select></label>
+    </div>
+  </section>
+  </div>
+  <div class="set-page" data-page="accounts"${pageAttr('accounts')}>
+    <h2 class="page-title">${PAGES.accounts.label}</h2>
   <section id="set-accounts">
     <h3>Accounts</h3>
     <div class="acct">
@@ -55,20 +140,25 @@ function build() {
     </div>
     <button class="btn small" type="button" data-action="rerun">${icon('refresh')}Run first-time setup again</button>
   </section>
-
-  <section id="set-you">
-    <h3>You</h3>
+  <section id="set-advanced">
+    <details>
+      <summary>Advanced</summary>
+      <label class="field"><span>Microsoft app (client) ID</span><input id="s-ms-client" type="text" data-path="outlook.clientId" value="${esc(d.outlook.clientId)}" placeholder="Leave empty to use the one built into this copy" spellcheck="false" autocomplete="off"></label>
+      <p class="hint">Only needed if you registered your own Microsoft app. Redirect URI: <code>${esc(chrome.identity?.getRedirectURL?.() || '')}</code></p>
+    </details>
+  </section>
+  </div>
+  <div class="set-page" data-page="search"${pageAttr('search')}>
+    <h2 class="page-title">${PAGES.search.label}</h2>
+  <section id="set-search">
+    <h3>Search</h3>
     <div class="grid2">
-      <label class="field"><span>Name for the greeting</span><input id="s-name" type="text" data-path="name" value="${esc(d.name)}" autocomplete="off"></label>
-      <label class="field"><span>Theme</span><select id="s-theme" data-path="theme">${opt('system', 'Match my computer', d.theme)}${opt('light', 'Light', d.theme)}${opt('dark', 'Dark', d.theme)}</select></label>
-      <label class="field"><span>Clock</span><select id="s-clock" data-path="clock24" data-type="bool">${opt(false, '12-hour (3:30 PM)', d.clock24)}${opt(true, '24-hour (15:30)', d.clock24)}</select></label>
-      <label class="field"><span>Temperature</span><select id="s-units" data-path="units">${opt('F', 'Fahrenheit (°F)', d.units)}${opt('C', 'Celsius (°C)', d.units)}</select></label>
       <label class="field"><span>Default search</span><select id="s-engine" data-path="searchEngine">${Object.entries(ENGINES).map(([k, e]) => opt(k, e.label, d.searchEngine)).join('')}</select></label>
     </div>
+    <p class="hint">Start a search with <code>!g</code>, <code>!y</code>, <code>!m</code>, <code>!w</code>, <code>!a</code>, <code>!e</code>, <code>!c</code> or <code>!gpt</code> to use another engine just once, and press <code>/</code> anywhere on the page to jump to the search box.</p>
   </section>
-
   <section id="set-ai">
-    <h3>Claude and ChatGPT</h3>
+    <h3>Answers from Claude and ChatGPT</h3>
     <p class="hint">Pick Claude or ChatGPT under the search box (or start with <code>!c</code> or <code>!gpt</code>) to ask a question. Without a key, it opens claude.ai or chatgpt.com, where you’re already signed in. With an API key, the answer appears right here on the page. Claude Pro and ChatGPT Plus sign-ins can’t be used for this, and API use is billed separately by Anthropic or OpenAI. Keys stay on this computer and don’t sync.</p>
     <div class="grid2">
       <label class="field"><span>Anthropic API key</span><input id="s-anthropic" type="password" data-ai="anthropicKey" value="${esc(aiDraft.anthropicKey)}" placeholder="sk-ant-…" spellcheck="false" autocomplete="off"></label>
@@ -78,12 +168,18 @@ function build() {
     </div>
     <p class="hint">Get an Anthropic key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> and an OpenAI key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>.</p>
   </section>
-
+  </div>
+  <div class="set-page" data-page="weather"${pageAttr('weather')}>
+    <h2 class="page-title">${PAGES.weather.label}</h2>
+${showBlock('weather')}
   <section id="set-location">
     <h3>Weather location</h3>
     <div id="sheet-location"></div>
   </section>
-
+  </div>
+  <div class="set-page" data-page="calendar"${pageAttr('calendar')}>
+    <h2 class="page-title">${PAGES.calendar.label}</h2>
+${showBlock('calendar')}
   <section id="set-calendars">
     <h3>Other calendars</h3>
     <p class="hint">Add any calendar that has an iCal (.ics) link: an Outlook calendar published from Outlook.com (Settings → Calendar → Shared calendars → <em>Publish a calendar</em>), an iCloud calendar shared publicly, a sports schedule or a school calendar. Treat private links like passwords.</p>
@@ -102,13 +198,38 @@ function build() {
       .join('')}
     <button class="btn small" type="button" data-action="add-calendar">${icon('plus')}Add a calendar link</button>
   </section>
-
   <section id="set-holidays">
     <h3>Holidays</h3>
-    <p class="hint">Pick the holidays to show under the date and on the month calendar. Each one has its own colors and emblem.${d.show.sky ? '' : ' They show once <em>Moon and holidays</em> is on under Sections.'}</p>
+    <p class="hint">Pick the holidays to show under the date and on the month calendar. Each one has its own colors and emblem.</p>
     <div class="topics hol-choices" id="sheet-holidays"><p class="quiet">Loading holidays…</p></div>
   </section>
-
+  <section id="set-travel">
+    <h3>Travel time</h3>
+    <p class="hint">For events with an address, Daybook shows the weather there and, for the next 24 hours, when to leave from where you are. Addresses are looked up with Photon (OpenStreetMap), and drive times come from OSRM, which doesn’t know about traffic.</p>
+    <div class="trk-mail">${check('show.travel', 'Show travel time and event weather', d.show.travel)}</div>
+    <div class="grid2">
+      <label class="field"><span>Extra time before leaving</span><select id="s-buffer" data-path="travel.buffer" data-type="number">${[0, 5, 10, 15, 20, 30].map((m) => opt(m, m ? `${m} minutes` : 'None', d.travel.buffer)).join('')}</select></label>
+      <label class="field"><span>TomTom key for live traffic (optional)</span><input id="s-tomtom" type="text" data-path="travel.tomtomKey" value="${esc(d.travel.tomtomKey)}" placeholder="Paste your TomTom API key" spellcheck="false" autocomplete="off"></label>
+    </div>
+    <p class="hint">To get a TomTom key, sign up free at <a href="https://developer.tomtom.com/" target="_blank" rel="noopener">developer.tomtom.com</a> and copy the key from your dashboard.</p>
+  </section>
+  </div>
+  <div class="set-page" data-page="mail"${pageAttr('mail')}>
+    <h2 class="page-title">${PAGES.mail.label}</h2>
+${showBlock('mail')}
+  <section id="set-packages">
+    <h3>Package tracking</h3>
+    <p class="hint">Daybook reads your shipping emails from the last two weeks in full, read or not, for the tracking number, the delivery day and what’s in the box: Gmail through Gmail’s own page with the sign-in already in Chrome (no setup, nothing changed in your mailbox), Outlook through its sign-in under Accounts. It also follows each package on the carrier’s own site, free and without a key: it opens the tracking page at UPS, USPS, FedEx, DHL or Amazon out of sight and reads the status and delivery day off it, the way you would, every couple of hours while a new tab is open. When a page can’t be read, the newest email about the package stands in. Carriers change their pages now and then; a package whose page can’t be read still links to it.</p>
+    <div class="trk-mail">${check('packages.checkSites', 'Check carriers’ tracking pages for the latest status', d.packages.checkSites)}</div>
+    <div class="trk-mail">${check('packages.fromMail', 'Find packages in shipping emails too', d.packages.fromMail)}</div>
+    <p class="hint">To hear about every package coming to your address without entering anything, sign up (free) for <a href="https://www.ups.com/us/en/services/tracking/mychoice" target="_blank" rel="noopener">UPS My Choice</a>, <a href="https://www.fedex.com/en-us/delivery-manager.html" target="_blank" rel="noopener">FedEx Delivery Manager</a> and <a href="https://informeddelivery.usps.com/" target="_blank" rel="noopener">USPS Informed Delivery</a>: they email you as each one moves, and Daybook reads those emails.</p>
+    <h4>Packages you’re tracking</h4>
+    <div id="sheet-tracking"></div>
+  </section>
+  </div>
+  <div class="set-page" data-page="news"${pageAttr('news')}>
+    <h2 class="page-title">${PAGES.news.label}</h2>
+${showBlock('news')}
   <section id="set-news">
     <h3>Headlines</h3>
     <div class="topics">${Object.entries(NEWS_TOPICS)
@@ -125,33 +246,19 @@ function build() {
       .join('')}
     <button class="btn small" type="button" data-action="add-feed">${icon('plus')}Add a feed</button>
   </section>
-
+  </div>
+  <div class="set-page" data-page="youtube"${pageAttr('youtube')}>
+    <h2 class="page-title">${PAGES.youtube.label}</h2>
+${showBlock('youtube')}
   <section id="set-youtube">
     <h3>YouTube</h3>
     <p class="hint">New uploads from the channels you subscribe to, from the last week.</p>
     ${check('youtube.hideShorts', 'Hide Shorts', d.youtube.hideShorts)}
   </section>
-
-  <section id="set-travel">
-    <h3>Travel time</h3>
-    <p class="hint">For events with an address, Daybook shows the weather there and, for the next 24 hours, when to leave from where you are. Addresses are looked up with Photon (OpenStreetMap), and drive times come from OSRM, which doesn’t know about traffic.</p>
-    <div class="grid2">
-      <label class="field"><span>Extra time before leaving</span><select id="s-buffer" data-path="travel.buffer" data-type="number">${[0, 5, 10, 15, 20, 30].map((m) => opt(m, m ? `${m} minutes` : 'None', d.travel.buffer)).join('')}</select></label>
-      <label class="field"><span>TomTom key for live traffic (optional)</span><input id="s-tomtom" type="text" data-path="travel.tomtomKey" value="${esc(d.travel.tomtomKey)}" placeholder="Paste your TomTom API key" spellcheck="false" autocomplete="off"></label>
-    </div>
-    <p class="hint">To get a TomTom key, sign up free at <a href="https://developer.tomtom.com/" target="_blank" rel="noopener">developer.tomtom.com</a> and copy the key from your dashboard.</p>
-  </section>
-
-  <section id="set-packages">
-    <h3>Package tracking</h3>
-    <p class="hint">Daybook reads your shipping emails from the last two weeks in full, read or not, for the tracking number, the delivery day and what’s in the box: Gmail through Gmail’s own page with the sign-in already in Chrome (no setup, nothing changed in your mailbox), Outlook through its sign-in under Accounts. It also follows each package on the carrier’s own site, free and without a key: it opens the tracking page at UPS, USPS, FedEx, DHL or Amazon out of sight and reads the status and delivery day off it, the way you would, every couple of hours while a new tab is open. When a page can’t be read, the newest email about the package stands in. Carriers change their pages now and then; a package whose page can’t be read still links to it.</p>
-    <div class="trk-mail">${check('packages.checkSites', 'Check carriers’ tracking pages for the latest status', d.packages.checkSites)}</div>
-    <div class="trk-mail">${check('packages.fromMail', 'Find packages in shipping emails too', d.packages.fromMail)}</div>
-    <p class="hint">To hear about every package coming to your address without entering anything, sign up (free) for <a href="https://www.ups.com/us/en/services/tracking/mychoice" target="_blank" rel="noopener">UPS My Choice</a>, <a href="https://www.fedex.com/en-us/delivery-manager.html" target="_blank" rel="noopener">FedEx Delivery Manager</a> and <a href="https://informeddelivery.usps.com/" target="_blank" rel="noopener">USPS Informed Delivery</a>: they email you as each one moves, and Daybook reads those emails.</p>
-    <h4>Packages you’re tracking</h4>
-    <div id="sheet-tracking"></div>
-  </section>
-
+  </div>
+  <div class="set-page" data-page="stocks"${pageAttr('stocks')}>
+    <h2 class="page-title">${PAGES.stocks.label}</h2>
+${showBlock('stocks')}
   <section id="set-stocks">
     <h3>Stocks</h3>
     <p class="hint">A watchlist card under the weather. It needs a free key from Finnhub: sign up at <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io</a> and copy the API key from your dashboard.</p>
@@ -160,15 +267,10 @@ function build() {
       <label class="field"><span>Symbols, separated by commas</span><input id="s-symbols" type="text" data-path="stocks.symbols" data-type="list" value="${esc(d.stocks.symbols.join(', '))}" placeholder="SPY, AAPL, MSFT" spellcheck="false" autocomplete="off"></label>
     </div>
   </section>
-
-  <section id="set-sites">
-    <h3>Site groups</h3>
-    <p class="hint">Groups sit at the start of the shortcuts row. Hover over one to see its sites; <strong>Edit</strong> at the end changes it.</p>
-    <div class="group-rows" id="sheet-groups"></div>
-    <button class="btn small" type="button" data-action="add-group">${icon('plus')}Add a group</button>
-    <p class="hint small">Your companies have their own pages: <a href="companies.html">open Companies</a>.</p>
-  </section>
-
+  </div>
+  <div class="set-page" data-page="teams"${pageAttr('teams')}>
+    <h2 class="page-title">${PAGES.teams.label}</h2>
+${showBlock('teams')}
   <section id="set-teams">
     <h3>Teams</h3>
     <p class="hint">Follow teams to get a card with each one’s next game (and the score while it’s on), their games on your calendar with the team’s logo, and recent team news. For a day after a win, the win takes a turn in the bubble at the end of the search bar and the team’s row on the card wears its colors. Schedules come from ESPN; news from Google News.</p>
@@ -179,7 +281,10 @@ function build() {
       ${check('teams.wins', 'Celebrate wins in the search bar for a day', d.teams.wins)}
     </div>
   </section>
-
+  </div>
+  <div class="set-page" data-page="area"${pageAttr('area')}>
+    <h2 class="page-title">${PAGES.area.label}</h2>
+${showBlock('area')}
   <section id="set-area">
     <h3>Area events</h3>
     <p class="hint">Concerts, shows, festivals and games around your weather location, from Ticketmaster. It needs a free key: sign up at <a href="https://developer-acct.ticketmaster.com/user/register" target="_blank" rel="noopener">developer.ticketmaster.com</a>, open <strong>My Apps</strong> and copy the <strong>Consumer Key</strong>. Brewery nights and other small local events are rarely on Ticketmaster, so the card also has quick searches for those.</p>
@@ -192,50 +297,31 @@ function build() {
       .map(([k, t]) => `<label class="check"><input type="checkbox" data-area-kind="${k}"${d.area.kinds.includes(k) ? ' checked' : ''}><span>${t.label}</span></label>`)
       .join('')}</div>
   </section>
-
+  </div>
+  <div class="set-page" data-page="jobs"${pageAttr('jobs')}>
+    <h2 class="page-title">${PAGES.jobs.label}</h2>
+${showBlock('jobs')}
   <section id="set-jobs">
     <h3>NYS jobs</h3>
     <p class="hint">New vacancies open to the general public on <a href="https://statejobs.ny.gov/public/search.cfm" target="_blank" rel="noopener">StateJobsNY</a>, New York State’s jobs site. These are the options of the site’s own search; the card shows the postings that match all of the ones you set, and any rules of your own below them. Daybook keeps two weeks of postings, and reads each one’s page for the salary and the rest.</p>
     <div id="sheet-jobs"></div>
   </section>
-
-  <section id="set-ticker">
-    <h3>Ticker</h3>
-    <p class="hint">A bar under the top band that crawls through the latest from the cards you put in it, taking turns: your next events, unread mail, deliveries, scores, quotes, headlines and more. Hover over it to hold it still, scroll it to look along it, and click anything to open it. A card can be in the ticker as well as on the board, or only in the ticker.</p>
-    <div class="grid2 ticker-picks">${Object.entries(TICKER_CARDS)
-      .map(([k, c]) => `<label class="field"><span>${esc(c.label)}</span><select id="s-ticker-${k}" data-path="ticker.${k}">${Object.entries(TICKER_MODES).map(([m, l]) => opt(m, l, d.ticker[k])).join('')}</select></label>`)
-      .join('')}</div>
+  </div>
+  <div class="set-page" data-page="shortcuts"${pageAttr('shortcuts')}>
+    <h2 class="page-title">${PAGES.shortcuts.label}</h2>
+${showBlock('shortcuts')}
+  <section id="set-sites">
+    <h3>Site groups</h3>
+    <p class="hint">Groups sit at the start of the shortcuts row. Hover over one to see its sites; <strong>Edit</strong> at the end changes it.</p>
+    <div class="trk-mail">${check('show.companies', 'Show your companies in the shortcuts', d.show.companies)}</div>
+    <div class="group-rows" id="sheet-groups"></div>
+    <button class="btn small" type="button" data-action="add-group">${icon('plus')}Add a group</button>
+    <p class="hint small">Your companies have their own pages: <a href="companies.html">open Companies</a>.</p>
   </section>
-
-  <section id="set-sections">
-    <h3>Sections</h3>
-    <div class="topics">
-      ${check('show.weather', 'Weather', d.show.weather)}
-      ${check('show.alerts', 'Weather alerts', d.show.alerts)}
-      ${check('show.sky', 'Moon and holidays', d.show.sky)}
-      ${check('show.calendar', 'Calendar', d.show.calendar)}
-      ${check('show.travel', 'Travel time and event weather', d.show.travel)}
-      ${check('show.mail', 'Mail', d.show.mail)}
-      ${check('show.packages', 'Deliveries', d.show.packages)}
-      ${check('show.news', 'Headlines', d.show.news)}
-      ${check('show.stocks', 'Stocks', d.show.stocks)}
-      ${check('show.teams', 'Teams', d.show.teams)}
-      ${check('show.area', 'Area events', d.show.area)}
-      ${check('show.jobs', 'NYS jobs', d.show.jobs)}
-      ${check('show.notes', 'Notes', d.show.notes)}
-      ${check('show.youtube', 'YouTube', d.show.youtube)}
-      ${check('show.shortcuts', 'Shortcuts', d.show.shortcuts)}
-      ${check('show.companies', 'Companies in the shortcuts', d.show.companies)}
-    </div>
-  </section>
-
-  <section id="set-advanced">
-    <details>
-      <summary>Advanced</summary>
-      <label class="field"><span>Microsoft app (client) ID</span><input id="s-ms-client" type="text" data-path="outlook.clientId" value="${esc(d.outlook.clientId)}" placeholder="Leave empty to use the one built into this copy" spellcheck="false" autocomplete="off"></label>
-      <p class="hint">Only needed if you registered your own Microsoft app. Redirect URI: <code>${esc(chrome.identity?.getRedirectURL?.() || '')}</code></p>
-    </details>
-  </section>
+  </div>
+  <p class="quiet set-none" id="set-none" hidden>No settings match.</p>
+  </div>
+  </div>
 
   <footer class="sheet-foot">
     <span class="hint" id="save-state">Changes save as you go.</span>
@@ -326,7 +412,56 @@ function rerender() {
   const scroll = dlg.scrollTop;
   dlg.innerHTML = build();
   mountAll();
+  if (query) find(query);
   dlg.scrollTop = scroll;
+}
+
+function showPage(id) {
+  page = PAGES[id] ? id : 'display';
+  query = '';
+  const q = $('#set-q');
+  if (q) q.value = '';
+  for (const el of $$('#settings .set-page')) el.hidden = el.dataset.page !== page;
+  for (const el of $$('#settings .set-page section')) el.hidden = false;
+  for (const b of $$('#settings .sheet-nav [data-goto]')) {
+    if (b.dataset.goto !== page) b.removeAttribute('aria-current');
+    else {
+      b.setAttribute('aria-current', 'page');
+      b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
+  $('#set-none').hidden = true;
+  $('#settings').scrollTop = 0;
+}
+
+// Searching shows every page at once, with only the parts that mention what was typed (or all
+// of a page whose name matches).
+function find(text) {
+  query = text.trim();
+  if (!query) return showPage(page);
+  const q = query.toLowerCase();
+  let any = false;
+  for (const p of $$('#settings .set-page')) {
+    const whole = PAGES[p.dataset.page].label.toLowerCase().includes(q);
+    let shown = 0;
+    for (const sec of $$('section', p)) {
+      sec.hidden = !whole && !sec.textContent.toLowerCase().includes(q);
+      if (!sec.hidden) shown++;
+    }
+    p.hidden = !shown;
+    any ||= shown > 0;
+  }
+  for (const b of $$('#settings .sheet-nav [aria-current]')) b.removeAttribute('aria-current');
+  $('#set-none').hidden = any;
+}
+
+// The same choice is drawn on Cards and ticker and on the card's own page.
+function setDisplay(key, mode) {
+  draft.ticker[key] = mode;
+  const sec = TICKER_CARDS[key].section;
+  draft.show[sec] = Object.keys(TICKER_CARDS).some((k) => TICKER_CARDS[k].section === sec && tickerMode(draft, k) !== 'off');
+  for (const r of $$(`#settings [data-display="${key}"]`)) r.checked = r.value === mode;
+  for (const row of $$(`#settings [data-disp="${key}"]`)) row.classList.toggle('is-off', mode === 'off');
 }
 
 let wired = false;
@@ -337,6 +472,12 @@ function wire(dlg) {
   const onEdit = (e) => {
     const el = e.target;
     if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-jobs, #sheet-tracking')) return;
+    if (el.id === 'set-q') return find(el.value);
+    if (el.dataset.display) {
+      if (el.checked) setDisplay(el.dataset.display, el.value);
+      queueSave();
+      return;
+    }
     if (el.dataset.ai) {
       // Saved straight to this computer; the search box picks it up without a reload.
       aiDraft[el.dataset.ai] = el.value.trim();
@@ -365,10 +506,19 @@ function wire(dlg) {
   };
   dlg.addEventListener('input', onEdit);
   dlg.addEventListener('change', onEdit);
+  // Enter in the search box would submit the form, which closes the sheet.
+  dlg.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.id === 'set-q') e.preventDefault();
+  });
 
   dlg.addEventListener('click', async (e) => {
     if (e.target === dlg) {
       dlg.requestClose ? dlg.requestClose() : dlg.close();
+      return;
+    }
+    const go = e.target.closest('[data-goto]');
+    if (go) {
+      showPage(go.dataset.goto);
       return;
     }
     const btn = e.target.closest('[data-action]');
@@ -423,11 +573,14 @@ export async function openSettings(S, section) {
   aiDraft = await loadAi();
   draft = structuredClone(S);
   dirty = false;
+  query = '';
   wire(dlg);
   dlg.innerHTML = build();
   mountAll();
   dlg.showModal();
-  const target = section && $(`#set-${section}`);
+  // Other parts of Daybook open Settings at a whole page (`weather`) or a part of one (`location`).
+  const target = section && !PAGES[section] && $(`#set-${section}`);
+  showPage(PAGES[section] ? section : target ? target.closest('.set-page').dataset.page : page);
   if (target) {
     target.scrollIntoView({ block: 'start' });
     target.classList.add('flash');

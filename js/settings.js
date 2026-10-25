@@ -1,6 +1,7 @@
 // Everything the page can be told lives here. Saved to chrome.storage.sync so it follows
 // your Chrome profile; tokens and cached data stay in chrome.storage.local on this machine.
 import { MICROSOFT_CLIENT_ID } from '../config.js';
+import { settleSections } from './ticker.js';
 
 const GN = 'hl=en-US&gl=US&ceid=US:en';
 const topic = (t) => `https://news.google.com/rss/headlines/section/topic/${t}?${GN}`;
@@ -61,9 +62,10 @@ export const DEFAULTS = {
   calendars: [], // extra calendars added by iCal link
   outlook: { clientId: '', mail: true, calendar: true, color: 5 }, // clientId overrides config.js
   news: { topics: ['top', 'us', 'technology'], custom: [] },
-  // Each card: 'card' (on the board), 'both' (and in the ticker) or 'ticker' (in the ticker only).
+  // Each card or top-bar part: 'card' (on the page), 'both' (and in the ticker), 'ticker' (in the
+  // ticker only) or 'off'. `show` below follows: a section is on while any of its parts is.
   ticker: {
-    today: 'card', month: 'card', notes: 'card', stocks: 'card', teams: 'card', news: 'card',
+    weather: 'card', alerts: 'card', holidays: 'card', shortcuts: 'off', today: 'card', month: 'card', notes: 'card', stocks: 'card', teams: 'card', news: 'card',
     jobs: 'card', deliveries: 'card', mail: 'card', area: 'card', youtube: 'card',
   },
   youtube: { hideShorts: true },
@@ -126,6 +128,7 @@ export async function loadSettings() {
   if (keywords) jobs.rules = [{ field: 'any', op: 'has', value: keywords }, ...jobs.rules];
   if (counties) jobs.rules = [...jobs.rules, { field: 'County', op: 'has', value: counties }];
   s.jobs = jobs;
+  settleSections(s);
   return s;
 }
 

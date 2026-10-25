@@ -2,6 +2,7 @@
 // computed; other countries' public holidays come from Nager.Date (no key). Settings picks
 // which holidays show, and each has its own look (Halloween orange with a pumpkin, say).
 import { $, esc, local, startOfDay, addDays } from './util.js';
+import { setTicker } from './ticker.js';
 
 // ---- Moon -------------------------------------------------------------------------------
 // Times of new moon, quarters and full moon from Meeus, Astronomical Algorithms ch. 49,
@@ -113,6 +114,21 @@ export function renderMoon(lat) {
   const next = /full|new/i.test(m.name) ? '' : upcoming ? `${upcoming[0]} ${dayName(upcoming[1])}` : '';
   el.innerHTML = `${moonSvg(m.f, 26, lat < 0)}<span class="moon-text"><span class="moon-name">${esc(m.name)}</span><span class="moon-sub">${pct}% lit${next ? ` · ${esc(next)}` : ''}</span></span>`;
   el.title = `${m.name}, ${pct}% of the moon is lit`;
+  moonItem = { tag: 'Moon', title: m.name, meta: `${pct}% lit${next ? ` · ${next}` : ''}` };
+  skyTicker();
+}
+
+// In the ticker: the moon, then the holidays of the next two months.
+let moonItem = null;
+let onPage = true;
+export const setSkyOnPage = (on) => (onPage = on);
+
+function skyTicker() {
+  const d0 = startOfDay();
+  const y = new Date(d0).getFullYear();
+  const soon = [...(years.get(y) || []), ...(years.get(y + 1) || [])].filter((h) => h.at >= d0 && h.at < addDays(d0, 62) && picked(h));
+  const when = (t) => (t === d0 ? 'Today' : dayName(t).replace(/^t/, 'T'));
+  setTicker('holidays', [...(moonItem ? [moonItem] : []), ...soon.slice(0, 8).map((h) => ({ tag: when(h.at), title: `${holidayTheme(h).glyph} ${h.name}` }))]);
 }
 
 // ---- Holidays ---------------------------------------------------------------------------
@@ -344,7 +360,8 @@ export function holidayBadge(h, { text = h.name, today = false, tag = 'span' } =
 export function renderHoliday() {
   const el = $('#holiday-line');
   if (!el) return;
-  const h = nextHoliday();
+  skyTicker();
+  const h = onPage ? nextHoliday() : null;
   el.hidden = !h;
   if (!h) return;
   const days = Math.round((h.at - startOfDay()) / 86400000);

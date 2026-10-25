@@ -4,7 +4,7 @@ import { refreshWeather, renderSun, lastWeather, todayIndex, initWeather } from 
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp, allEvents, setGames } from './calendar.js';
 import { initAlerts, refreshAlerts } from './alerts.js';
-import { renderMoon, loadHolidays, renderHoliday, setHolidayChoices } from './sky.js';
+import { renderMoon, loadHolidays, renderHoliday, setHolidayChoices, setSkyOnPage } from './sky.js';
 import { planTrips, tripInfo, leaveText } from './trip.js';
 import { refreshStocks } from './stocks.js';
 import { refreshTeams } from './teams.js';
@@ -33,16 +33,17 @@ if (S.theme !== 'system') document.documentElement.dataset.theme = S.theme;
 for (const [section, on] of Object.entries(S.show)) {
   for (const el of $$(`[data-section="${section}"]`)) el.toggleAttribute('hidden', !on);
 }
+// Any card or part of the top bar can be in the ticker under the top band as well, or instead:
+// those set to the ticker only are off the page, though they still load what they show there.
+for (const [key, c] of Object.entries(TICKER_CARDS)) if (offBoard(S, key)) $(`#${c.card}`).hidden = true;
+const skyOnPage = S.show.sky && !offBoard(S, 'holidays');
 // The sun's day and the moon are in the week bubble, but the moon has its own switch: without
-// the weather, it sits where the weather would be, and the hemisphere (which way the moon is
-// lit) comes from the city in Settings or the last location fix.
-if (S.show.sky && !S.show.weather) {
+// the weather in the top bar, it sits where the weather would be, and the hemisphere (which way
+// the moon is lit) comes from the city in Settings or the last location fix.
+if (skyOnPage && offBoard(S, 'weather')) {
   $('.now-weather').hidden = false;
   $('.now-weather').append($('.nw-sky'));
 }
-// Any card can be in the ticker under the top band as well, or instead: those set to the ticker
-// only are off the board, though they still load what they show there.
-for (const [key, c] of Object.entries(TICKER_CARDS)) if (offBoard(S, key)) $(`#${c.card}`).hidden = true;
 const newsCard = S.show.news && !offBoard(S, 'news');
 const newsTicker = onTicker(S, 'news');
 const homeLat = S.location.lat ?? (await local.get('geo'))?.lat;
@@ -282,6 +283,7 @@ async function initShortcuts() {
     list.push({ title: siteName(s.title, host), url: s.url });
     if (list.length >= 10) break;
   }
+  setTicker('shortcuts', list.map((s) => ({ title: s.title, href: s.url })));
   const sites = list
     .map((s) => `<a class="shortcut" href="${esc(s.url)}" title="${esc(s.url)}"><img src="${favicon(s.url)}" alt="" width="20" height="20"><span>${esc(s.title)}</span></a>`)
     .join('');
@@ -410,11 +412,12 @@ if (S.show.calendar) {
   initDetails(S);
 }
 setHolidayChoices(S.holidays.choices);
+setSkyOnPage(skyOnPage);
 if (S.show.sky) loadHolidays(() => {
   renderHoliday();
   if (S.show.calendar) renderMonth();
 });
-$('#moon').hidden = !S.show.sky;
+$('#moon').hidden = !skyOnPage;
 if (S.show.youtube) await initYouTube(S);
 initNews();
 initTicker(S);

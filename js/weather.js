@@ -2,6 +2,7 @@
 // city you pick in Settings.
 import { $, esc, cached, hash, local, getJSON, fmtTime, fmtHour, updatedText, errorText, showPop } from './util.js';
 import { weatherIcon, icon } from './icons.js';
+import { setTicker } from './ticker.js';
 
 const WMO = {
   0: ['Clear', 'clear'], 1: ['Mostly clear', 'clear'], 2: ['Partly cloudy', 'partly'], 3: ['Overcast', 'cloud'],
@@ -201,6 +202,21 @@ function renderNow(d) {
     </button>
     <ol class="nw-hours" aria-label="Next hours">${hours.join('')}</ol>`;
   renderSun();
+  // In the ticker: now, then the days ahead.
+  const dly = d.daily;
+  const ahead = [];
+  for (let k = i + 1; k < Math.min(i + 5, dly.time.length); k++) {
+    const pop = dly.precipitation_probability_max[k];
+    ahead.push({
+      tag: new Date(dly.time[k] * 1000).toLocaleDateString(undefined, { weekday: 'short' }),
+      title: `${round(dly.temperature_2m_max[k])}° / ${round(dly.temperature_2m_min[k])}°`,
+      meta: `${describe(dly.weather_code[k], 1).label}${pop >= 20 ? ` · ${pop}% rain` : ''}`,
+    });
+  }
+  setTicker('weather', [
+    { tag: d.place || 'Now', title: `${round(c.temperature_2m)}° ${label}`, meta: `H ${round(dly.temperature_2m_max[i])}° · L ${round(dly.temperature_2m_min[i])}°${rain >= 20 ? ` · ${rain}% rain` : ''}` },
+    ...ahead,
+  ]);
 }
 
 export function openWeekWeather(show = true) {

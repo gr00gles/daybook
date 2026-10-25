@@ -1,6 +1,6 @@
 // The ticker: one bar under the top band where any card can show its latest, the cards taking
 // turns. Each card hands over its items with setTicker(card, items) whenever it draws; Settings →
-// Ticker says which cards are in it, and whether each card still shows on the board too. It
+// Cards and ticker says, for each, whether it shows on the page, in the ticker, both or neither. It
 // crawls along on its own and stops while the pointer or focus is on it; the wheel, a trackpad
 // or the arrow keys scroll it by hand. With reduced motion it only moves by hand.
 //
@@ -10,22 +10,29 @@
 import { $, esc, safeUrl } from './util.js';
 import { icon } from './icons.js';
 
-// Every card that can be in the ticker, in Settings' order: its name, the Sections switch it
-// goes with, its card on the board, and the icon its items wear when cards share the ticker.
+// Everything that can be on the page, in the ticker, both or neither, in Settings' order: its
+// name, the Sections switch it goes with (on while any of its parts is shown somewhere), where it
+// sits on the page (`board`: a card, or the top bar), what to hide when it's off the page, and the
+// icon its items wear when they share the ticker. `modes` limits the choices: the shortcut
+// circles are hidden from the top bar for now (styles.css), so the sites can be in the ticker or off.
 export const TICKER_CARDS = {
-  today: { label: 'Today', section: 'calendar', card: 'card-today', icon: 'clock' },
-  month: { label: 'Month', section: 'calendar', card: 'card-month', icon: 'clock' },
-  notes: { label: 'Notes', section: 'notes', card: 'card-notes', icon: 'edit' },
-  stocks: { label: 'Markets', section: 'stocks', card: 'card-stocks', icon: 'money' },
-  teams: { label: 'Teams', section: 'teams', card: 'card-teams', icon: 'star' },
-  news: { label: 'Headlines', section: 'news', card: 'card-news', icon: 'globe' },
-  jobs: { label: 'NYS jobs', section: 'jobs', card: 'card-jobs', icon: 'building' },
-  deliveries: { label: 'Deliveries', section: 'packages', card: 'card-deliveries', icon: 'box' },
-  mail: { label: 'Unread', section: 'mail', card: 'card-mail', icon: 'mail' },
-  area: { label: 'Around you', section: 'area', card: 'card-area', icon: 'pin' },
-  youtube: { label: 'YouTube', section: 'youtube', card: 'card-youtube', icon: 'video' },
+  weather: { label: 'Weather', section: 'weather', board: 'Top bar', card: 'now-weather', icon: 'drop' },
+  alerts: { label: 'Weather alerts', section: 'alerts', board: 'Top bar', card: 'nw-alert', icon: 'alert' },
+  holidays: { label: 'Moon and holidays', section: 'sky', board: 'Top bar', card: 'moon', icon: 'heart' },
+  shortcuts: { label: 'Most visited sites', section: 'shortcuts', board: 'Top bar', card: 'shortcuts', icon: 'link', modes: ['ticker', 'off'] },
+  today: { label: 'Today', section: 'calendar', board: 'Card', card: 'card-today', icon: 'clock' },
+  month: { label: 'Month', section: 'calendar', board: 'Card', card: 'card-month', icon: 'clock' },
+  mail: { label: 'Unread mail', section: 'mail', board: 'Card', card: 'card-mail', icon: 'mail' },
+  deliveries: { label: 'Deliveries', section: 'packages', board: 'Card', card: 'card-deliveries', icon: 'box' },
+  news: { label: 'Headlines', section: 'news', board: 'Card', card: 'card-news', icon: 'globe' },
+  notes: { label: 'Notes', section: 'notes', board: 'Card', card: 'card-notes', icon: 'edit' },
+  stocks: { label: 'Markets', section: 'stocks', board: 'Card', card: 'card-stocks', icon: 'money' },
+  teams: { label: 'Teams', section: 'teams', board: 'Card', card: 'card-teams', icon: 'star' },
+  area: { label: 'Around you', section: 'area', board: 'Card', card: 'card-area', icon: 'pin' },
+  jobs: { label: 'NYS jobs', section: 'jobs', board: 'Card', card: 'card-jobs', icon: 'building' },
+  youtube: { label: 'YouTube', section: 'youtube', board: 'Card', card: 'card-youtube', icon: 'video' },
 };
-export const TICKER_MODES = { card: 'Card', both: 'Card and ticker', ticker: 'Ticker only' };
+export const TICKER_MODES = { card: 'Card', both: 'Card and ticker', ticker: 'Ticker only', off: 'Off' };
 
 const PER_CARD = 10;
 const MAX = 60;
@@ -39,11 +46,25 @@ let painted = '';
 let pos = 0; // where the strip is scrolled to, kept in fractions of a pixel
 let held = false;
 
-export const tickerMode = (S, key) => (TICKER_MODES[S.ticker?.[key]] ? S.ticker[key] : 'card');
-// A card is in the ticker when it's switched on under Sections and set to the ticker.
-export const onTicker = (S, key) => tickerMode(S, key) !== 'card' && S.show[TICKER_CARDS[key].section] !== false;
-// ...and off the board when it's in the ticker only.
-export const offBoard = (S, key) => tickerMode(S, key) === 'ticker';
+export const tickerModes = (key) => TICKER_CARDS[key].modes || Object.keys(TICKER_MODES);
+export function tickerMode(S, key) {
+  const ok = tickerModes(key);
+  return ok.includes(S.ticker?.[key]) ? S.ticker[key] : ok.includes('card') ? 'card' : 'off';
+}
+// A card is in the ticker when it's set to the ticker and its section is on...
+export const onTicker = (S, key) => ['both', 'ticker'].includes(tickerMode(S, key)) && S.show[TICKER_CARDS[key].section] !== false;
+// ...and off the board when it's in the ticker only, or off altogether.
+export const offBoard = (S, key) => ['ticker', 'off'].includes(tickerMode(S, key)) || S.show[TICKER_CARDS[key].section] === false;
+
+// A section is on while any of its parts shows somewhere. Turning a section off under the old
+// Sections switches turns all of its parts off.
+export function settleSections(S) {
+  for (const sec of new Set(Object.values(TICKER_CARDS).map((c) => c.section))) {
+    const keys = Object.keys(TICKER_CARDS).filter((k) => TICKER_CARDS[k].section === sec);
+    if (S.show[sec] === false) for (const k of keys) S.ticker[k] = 'off';
+    else S.show[sec] = keys.some((k) => tickerMode(S, k) !== 'off');
+  }
+}
 const shared = (S) => Object.keys(TICKER_CARDS).filter((k) => onTicker(S, k));
 
 export function setTicker(key, items) {
