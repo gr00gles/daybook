@@ -908,9 +908,9 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 }
 /* The flip card: other cards take turns inside it (flipcard.js), each drawn without its own
    glass, turning about the vertical axis. Tabs along the top pick one. */
-.flip-head { flex-wrap: nowrap; align-items: center; margin-bottom: 8px; }
+.card-head.flip-head { flex-wrap: nowrap; align-items: center; margin-bottom: 8px; }
 .flip-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.flip-tabs { flex: 1; min-width: 0; margin: -4px -6px 0; }
+.flip-head > .flip-tabs { flex: 1; min-width: 0; margin: -4px -6px 0; }
 .flip-tabs .tab { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 10px; }
 .flip-tabs .ui-icon { width: 15px; height: 15px; flex: none; }
 .flip-tabs .tab:not(.on) { padding-inline: 9px; }
@@ -1535,6 +1535,7 @@ a.chip:hover { background: var(--fill-2); }
 .rolo-card[data-pos="0"]:hover .rolo-watched, .rolo-watched:focus-visible { opacity: 1; }
 @media (hover: none) { .rolo-card[data-pos="0"] .rolo-watched { opacity: 1; } }
 .rolo-stack { display: grid; padding-top: 18px; perspective: 900px; }
+.rolo-stack:has(> .rolo-card:only-child) { padding-top: 0; } /* no cards behind to peek over it */
 .rolo-card {
   grid-area: 1 / 1;
   display: grid;
@@ -2649,6 +2650,15 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 .card.fixed > textarea, .flip-card.fixed .flip-face > textarea { flex: 1 1 auto; min-height: 0; resize: none; }
 .flip-card.fixed > .flip-deck { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .flip-card.fixed .flip-face:not(.flip-off):has(> textarea) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* YouTube fills its fixed height: the front video's picture grows (cropped at the sides, as
+   YouTube's own pictures are) or shrinks to fit, so no empty band is left above or below. */
+#card-youtube.fixed, .flip-card.fixed #card-youtube:not(.flip-off) { display: flex; flex-direction: column; }
+.flip-card.fixed #card-youtube:not(.flip-off) { flex: 1 1 auto; min-height: 0; }
+.fixed #yt-body, .fixed #yt-body > .rolo { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.fixed #yt-body .rolo-stack { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.fixed #yt-body .rolo-card { grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.fixed #yt-body .rolo-link { grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+.fixed #yt-body .rolo-thumb { aspect-ratio: auto; min-height: 0; }
 #card-month.fixed > #month-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 /* Each week is at least as tall as its events (js/layout.js keeps the card that tall), and they share what's left. */
 #card-month.fixed .mgrid { flex: 1 1 0; min-height: 0; grid-template-rows: auto; grid-auto-rows: minmax(min-content, 1fr); }

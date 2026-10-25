@@ -306,7 +306,6 @@ function render() {
   if (!body) return;
   const today = unwatched().filter(isNew).length;
   $('#yt-count').textContent = today ? `${today} new` : '';
-  $('#yt-updated').textContent = state.at ? `checked ${relTime(state.at) === 'now' ? 'just now' : `${relTime(state.at)} ago`}` : '';
   const foot = $('#yt-foot');
 
   if (state.status === 'loading') {
