@@ -2,30 +2,31 @@
 // edge to set its height, drag the lines between columns to change their widths, switch
 // the board between three columns and four, and turn fitting the window on or off.
 // The layout is saved under its own key in chrome.storage.sync, apart from Settings:
-//   { v: 1, rev: 5, count: 3 | 4, fit: false, cols: { day: [card ids], mail: [...], out: [...] },
+//   { v: 1, rev: 6, count: 3 | 4, fit: false, cols: { day: [card ids], mail: [...], out: [...] },
 //     cols4: { day, mail, out, more }, widths: [fr × 3], widths4: [fr × 4], heights: { id: px } }
 // Three and four columns each keep their own arrangement and widths; heights are shared. With
 // no count saved, windows at least AUTO_FOUR wide get four, arranged as FOUR. Layouts saved
-// before rev 5 keep only their count: the cards moved to the default board.
+// before rev 6 keep only their count: the cards moved to the default board.
 // Cards are a fixed size: their height comes from the layout, never from what's in them, so
 // they stay put as they refresh. While the columns sit side by side, each column fills the
 // window and its cards split it by SHARE (see split); otherwise each card is its SHARE times
 // UNIT tall. A height set by dragging overrides either. A card with more than fits drops whole
-// items (emails, games, events, list rows) from the end, never a scroll bar.
+// items (emails, games, events, list rows) from the end, never a scroll bar. The one exception:
+// Unread and Teams in one column share their room by how much mail there is (see lean).
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
 import { $, $$, esc, showPop } from './util.js';
 import { icon } from './icons.js';
 import { loadSettings, saveSettings, defaultBoard } from './settings.js';
 
 const KEY = 'layout';
-const REV = 5;
+const REV = 6;
 const DEFAULT_WIDTHS = { 3: [1.1, 1.2, 1], 4: [1, 1.3, 1, 0.9] };
-// Three columns are as in newtab.html: Today and NYS jobs, the month and Teams, Unread, the flip
-// card, Deliveries and Markets. Four give the flip card and Deliveries a column of their own.
+// Three columns are as in newtab.html: Today and NYS jobs, the month and Markets, Unread, the
+// flip card, Deliveries and Teams. Four give the flip card and Deliveries a column of their own.
 const FOUR = {
   day: ['card-today', 'card-jobs', 'card-notes'],
-  mail: ['card-month', 'card-teams'],
-  out: ['card-mail', 'card-stocks', 'card-area'],
+  mail: ['card-month', 'card-stocks'],
+  out: ['card-mail', 'card-teams', 'card-area'],
   more: ['card-flip', 'card-deliveries', 'card-news', 'card-youtube'],
 };
 const AUTO_FOUR = 1480;
@@ -37,7 +38,7 @@ const SHARE = { 'card-today': 3, 'card-month': 3, 'card-mail': 3, 'card-flip': 3
 const FLOOR = { 'card-month': 320 };
 // Cards that keep at least this many items however short the column, taking the room from the
 // cards beside them. The month keeps every event its days show (up to three a day; see needed).
-const KEEP = { 'card-jobs': 2, 'card-deliveries': 4 };
+const KEEP = { 'card-jobs': 2, 'card-deliveries': 4, 'card-teams': 2 };
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
 
@@ -183,6 +184,21 @@ function split(col, cards, room, floors) {
   return cards.map((c) => h.get(c));
 }
 
+// Unread and Teams in one column, neither with a height set by dragging, share the room the split
+// gave the two of them: Unread takes what its emails need and Teams the rest, so Teams grows as
+// the mail goes down, never below its first KEEP teams. Measured with the cards released.
+function lean(cards, heights, floors) {
+  const mail = cards.findIndex((c) => c.id === 'card-mail');
+  const teams = cards.findIndex((c) => c.id === 'card-teams');
+  if (mail < 0 || teams < 0 || layout.heights['card-mail'] || layout.heights['card-teams']) return heights;
+  const room = heights[mail] + heights[teams];
+  const h = Math.min(Math.max(cards[mail].offsetHeight, floors.get(cards[mail])), room - floors.get(cards[teams]));
+  if (h < floors.get(cards[mail])) return heights; // no room for both floors: keep the split
+  heights[mail] = h;
+  heights[teams] = room - h;
+  return heights;
+}
+
 function fitBoard() {
   const across = layout.fit !== false && allAcross();
   const bottom = innerHeight - FIT_BOTTOM - ($('#credits')?.offsetHeight || 0);
@@ -191,7 +207,7 @@ function fitBoard() {
     cardsIn(col).forEach(release);
     const top = col.getBoundingClientRect().top + scrollY;
     const floors = new Map(cards.map((c) => [c, floorOf(c)]));
-    const heights = across ? split(col, cards, bottom - top, floors) : cards.map((c) => layout.heights[c.id] || Math.max(share(c) * UNIT, floors.get(c)));
+    const heights = lean(cards, across ? split(col, cards, bottom - top, floors) : cards.map((c) => layout.heights[c.id] || Math.max(share(c) * UNIT, floors.get(c))), floors);
     cards.forEach((card, i) => fix(card, heights[i]));
   }
 }

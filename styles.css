@@ -5,8 +5,8 @@
 
 /* Layout: one slim band (the clock, search and today's weather) on a full-bleed backdrop whose
    light follows the real sun (data-phase on <html>), over a board of fixed-size glass panels
-   that fill the window: Today + NYS jobs · Month + Teams · Unread + the flip card, which takes
-   turns showing the rest, + Deliveries + Markets. Cards can be moved and resized, and the
+   that fill the window: Today + NYS jobs · Month + Markets · Unread + the flip card, which takes
+   turns showing the rest, + Deliveries + Teams. Cards can be moved and resized, and the
    board switched between three and four columns (js/layout.js). */
 :root {
   /* Solid surfaces: dialogs, inputs, and rings drawn around marks on the glass. */
