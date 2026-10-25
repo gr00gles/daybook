@@ -37,6 +37,7 @@ function colorSelect(attrs, current) {
 
 const PAGES = {
   display: { label: 'Cards and ticker', icon: 'eye' },
+  flip: { label: 'Flip card', icon: 'refresh' },
   general: { label: 'General', icon: 'gear' },
   accounts: { label: 'Accounts', icon: 'person' },
   search: { label: 'Search and AI', icon: 'search' },
@@ -79,7 +80,7 @@ function overview() {
   const keys = Object.keys(TICKER_CARDS);
   const group = (board) => keys.filter((k) => TICKER_CARDS[k].board === board).map((k) => display(k, 'all')).join('');
   return `<section id="set-ticker">
-    <p class="hint">Pick where each part of Daybook shows: on the page, in the ticker, both, in the flip card, or not at all. The ticker is a bar under the top band that crawls through the latest from everything you put in it, taking turns. Hover over it to hold it still, scroll it to look along it, and click anything to open it. <strong>Options</strong> opens that part’s own settings.</p>
+    <p class="hint">Pick where each part of Daybook shows: on the page, in the ticker, both, in the flip card (see <button class="linklike" type="button" data-goto="flip">Flip card</button>), or not at all. The ticker is a bar under the top band that crawls through the latest from everything you put in it, taking turns. Hover over it to hold it still, scroll it to look along it, and click anything to open it. <strong>Options</strong> opens that part’s own settings.</p>
   </section>
   <section id="set-sections">
     <h3>Top bar</h3>
@@ -88,10 +89,17 @@ function overview() {
   <section id="set-cards">
     <h3>Cards</h3>
     ${group('Card')}
-  </section>
-  <section id="set-flip">
-    <h3>Flip card</h3>
-    <p class="hint">Cards set to <strong>Flip card</strong> share one spot on the board and take turns, turning over to the next every so often; the tabs along its top pick one by hand. It holds still while the pointer or the keyboard is on it. Move it like any card with <strong>Arrange cards</strong>.</p>
+  </section>`;
+}
+
+// The flip card's own page: which cards take turns in it, and how often it turns.
+function flipPage() {
+  const keys = Object.keys(TICKER_CARDS).filter((k) => tickerModes(k).includes('flip'));
+  return `<section id="set-flip">
+    <p class="hint">Tick the cards to put in the flip card. They leave their own spots and share one card on the board, taking turns: it turns over to the next every so often, and the tabs along its top pick one by hand. It holds still while the pointer or the keyboard is on it. Move it like any card with <strong>Arrange cards</strong>. With nothing ticked, there’s no flip card.</p>
+    <div class="topics">${keys
+      .map((k) => `<label class="check"><input type="checkbox" data-flip-pick="${k}"${tickerMode(draft, k) === 'flip' ? ' checked' : ''}><span>${esc(TICKER_CARDS[k].label)}</span></label>`)
+      .join('')}</div>
     <label class="field inline"><span>Turn to the next</span><select id="s-flip-every" data-path="flip.every" data-type="number">${[[10, 'Every 10 seconds'], [20, 'Every 20 seconds'], [30, 'Every 30 seconds'], [60, 'Every minute'], [0, 'Only when I pick one']].map(([n, l]) => opt(n, l, draft.flip.every)).join('')}</select></label>
   </section>`;
 }
@@ -113,6 +121,10 @@ function build() {
   <div class="set-page" data-page="display"${pageAttr('display')}>
     <h2 class="page-title">${PAGES.display.label}</h2>
 ${overview()}
+  </div>
+  <div class="set-page" data-page="flip"${pageAttr('flip')}>
+    <h2 class="page-title">${PAGES.flip.label}</h2>
+${flipPage()}
   </div>
   <div class="set-page" data-page="general"${pageAttr('general')}>
     <h2 class="page-title">${PAGES.general.label}</h2>
@@ -330,6 +342,7 @@ ${showBlock('shortcuts')}
 
   <footer class="sheet-foot">
     <span class="hint" id="save-state">Changes save as you go.</span>
+    <span class="hint sheet-version" id="sheet-version"></span>
     <button class="btn primary" type="submit" value="done">Done</button>
   </footer>
 </form>`;
@@ -381,7 +394,18 @@ async function mountHolidays() {
     : '<p class="quiet">The holiday list couldn’t be loaded right now.</p>';
 }
 
+// The version in the folder, which is what this page runs, even before Finish update.
+async function paintVersion() {
+  let v = chrome.runtime?.getManifest?.().version || '';
+  try {
+    v = (await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' }).then((r) => r.json())).version || v;
+  } catch {}
+  const el = $('#sheet-version');
+  if (el && v) el.textContent = `Daybook ${v}`;
+}
+
 function mountAll() {
+  paintVersion();
   mountHolidays();
   mountGoogle($('#sheet-google'), draft, queueSave);
   mountGmail($('#sheet-gmail'), draft, queueSave);
@@ -467,6 +491,7 @@ function setDisplay(key, mode) {
   draft.show[sec] = Object.keys(TICKER_CARDS).some((k) => TICKER_CARDS[k].section === sec && tickerMode(draft, k) !== 'off');
   for (const r of $$(`#settings [data-display="${key}"]`)) r.checked = r.value === mode;
   for (const row of $$(`#settings [data-disp="${key}"]`)) row.classList.toggle('is-off', mode === 'off');
+  for (const cb of $$(`#settings [data-flip-pick="${key}"]`)) cb.checked = mode === 'flip';
 }
 
 let wired = false;
@@ -478,6 +503,12 @@ function wire(dlg) {
     const el = e.target;
     if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-jobs, #sheet-tracking')) return;
     if (el.id === 'set-q') return find(el.value);
+    if (el.dataset.flipPick) {
+      // Unticked, a card goes back to its own spot on the board.
+      if (el.checked !== (tickerMode(draft, el.dataset.flipPick) === 'flip')) setDisplay(el.dataset.flipPick, el.checked ? 'flip' : 'card');
+      queueSave();
+      return;
+    }
     if (el.dataset.display) {
       if (el.checked) setDisplay(el.dataset.display, el.value);
       queueSave();
