@@ -279,6 +279,8 @@ function readMail(m) {
   if (!strong && (!(status || found) || !ABOUT_ORDER.test(`${subject} ${found ? lead : ''}`) || PROMO.test(subject))) return null;
   const sender = SENDERS.find(([, re]) => re.test(`${from} ${subject}`))?.[0] || '';
   const items = m.items?.length ? m.items : body ? itemsInText(body) : [];
+  // "1 item: Pants": how many are in this box, of everything in the order.
+  const count = Number(`${subject}\n${body || m.snippet || ''}`.match(/\b(\d{1,2})\s+items?\s*:/i)?.[1]) || 0;
   const title = titleOf(subject, from, itemsText(items) || (body ? shipperIn(body) : ''));
   const order = `${subject}\n${body.slice(0, 4000)}`.match(ORDER)?.[1]?.toUpperCase() || '';
   return {
@@ -297,6 +299,7 @@ function readMail(m) {
     due: status?.day != null ? dueDay(status.day, at) : eta,
     title,
     items,
+    count,
     at,
     picture: m.picture || '',
     full: Boolean(m.full),
@@ -386,6 +389,7 @@ export function deliveriesFrom(items) {
       title: (list.find((p) => p.full) || newest).title,
       items: list.find((p) => p.items?.length)?.items || [],
       order: list.find((p) => p.order)?.order || '',
+      count: list.find((p) => p.count)?.count || 0,
       picture: list.find((p) => p.picture)?.picture || '',
       domain: store?.domain || '',
       carrier: withNumber?.carrier || newest.carrier,
@@ -520,9 +524,12 @@ function added(p) {
 // their carriers' news on each. A few seconds after the page settles, the packages still on
 // their way get a fresh look (tracking.js decides which are due).
 // An Amazon package with what its order page says is in it, in place of the emails' category.
+// An order can come in several boxes: the emails say how many items are in this one.
 function withItems(d) {
-  const names = settingsRef.packages.amazonPages !== false && amazon[d.order]?.items;
-  return names?.length ? { ...d, items: names, title: itemsText(names) } : d;
+  let names = settingsRef.packages.amazonPages !== false && amazon[d.order]?.items;
+  if (!names?.length) return d;
+  if (d.count) names = names.slice(0, d.count);
+  return { ...d, items: names, title: itemsText(names) };
 }
 
 function compose() {
