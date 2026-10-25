@@ -70,8 +70,11 @@ export function gmailPaths(G) {
   return all.length ? all : [''];
 }
 const GMAIL_FOLDERS_PATHS = new Set(Object.values(GMAIL_FOLDERS).map((f) => f.path));
+// A feed path as Deliveries names where an email is: a GMAIL_FOLDERS key, or label:name.
+const folderOfPath = (p) => Object.keys(GMAIL_FOLDERS).find((k) => GMAIL_FOLDERS[k].path === p) || `label:${decodeURIComponent(p).toLowerCase()}`;
 
-// Each folder is a feed of its own; their unread mail goes together, newest first, once each.
+// Each folder is a feed of its own; their unread mail goes together, newest first, once each,
+// each email noting the folders it came from (folders).
 // A label Gmail doesn't know just adds nothing.
 async function fetchGmailFolders(index, G) {
   const paths = gmailPaths(G);
@@ -90,11 +93,14 @@ async function fetchGmailFolders(index, G) {
   const got = feeds.filter(Boolean);
   const out = got.find((d) => d.signedOut);
   if (out || !got.length) return out || { signedOut: true };
-  const seen = new Set();
-  const items = got
-    .flatMap((d) => d.items)
-    .filter((m) => !seen.has(m.id) && seen.add(m.id))
-    .sort((a, b) => b.at - a.at);
+  const byId = new Map();
+  feeds.forEach((d, i) => {
+    for (const m of d?.items || []) {
+      if (byId.has(m.id)) byId.get(m.id).folders.push(folderOfPath(paths[i]));
+      else byId.set(m.id, { ...m, folders: [folderOfPath(paths[i])] });
+    }
+  });
+  const items = [...byId.values()].sort((a, b) => b.at - a.at);
   // Folders overlap (the inbox holds its tabs), so the count is the biggest, not the sum.
   return { email: got[0].email, unread: Math.max(items.length, ...got.map((d) => d.unread)), capped: got.some((d) => d.capped), items };
 }
@@ -148,7 +154,7 @@ async function fetchOutlookMail(clientId, folders) {
         if (ids.length === 1) throw err;
         return [{ unreadItemCount: 0 }, { value: [] }];
       });
-      return { unread: folder.unreadItemCount, messages: list.value };
+      return { unread: folder.unreadItemCount, messages: list.value.map((m) => ({ ...m, folder: id })) };
     }),
   );
   const messages = each
@@ -167,8 +173,23 @@ async function fetchOutlookMail(clientId, folders) {
       fromAddr: m.from?.emailAddress?.address || '',
       at: Date.parse(m.receivedDateTime),
       url: m.webLink,
+      folders: [m.folder],
     })),
   };
+}
+
+// Whether Deliveries looks where an unread email of source s came from (m.folders), so the
+// emails the Unread card has count for Deliveries too, before (or without) its own search
+// reading them. One from before folders were noted counts when Deliveries looks everywhere.
+function inShippingFolders(s, m) {
+  if (s.kind === 'outlook') {
+    const picked = settingsRef.packages.mail.outlook || [];
+    return picked.includes('all') || (m.folders || []).some((f) => picked.includes(f));
+  }
+  const { folders = [], labels = '' } = shippingFolders(settingsRef, s.acct.email);
+  if (folders.includes('all')) return !m.folders || m.folders.some((f) => !['promotions', 'social'].includes(f) || folders.includes(f));
+  const names = String(labels).split(',').map((l) => `label:${l.trim().toLowerCase()}`);
+  return (m.folders || []).some((f) => folders.includes(f) || names.includes(f));
 }
 
 export async function refreshMail(S, force) {
@@ -294,10 +315,12 @@ function render() {
       .map((m) => ({ tag: m.from, title: m.subject, meta: relTime(m.at), href: m.url })),
   );
   const packages = settingsRef.show.packages;
-  // Deliveries come only from the shipping emails found in the folders picked for them (not the
-  // Unread card's); read in full, they tag the rows below too.
+  // Deliveries come from the shipping emails found in the folders picked for them, read in full,
+  // and the unread emails here from those same folders (see inShippingFolders). The ones read in
+  // full go first, so they count over their unread copies; they tag the rows below too.
   const readInFull = new Map(shipping.map((m) => [m.msgId, m]));
-  const deliveries = packages ? deliveriesFrom(shipping) : [];
+  const unreadThere = live.flatMap(([, s]) => s.data.items.filter((m) => inShippingFolders(s, m)).map((m) => ({ ...m, account: sourceLabel(s) })));
+  const deliveries = packages ? deliveriesFrom([...shipping, ...unreadThere]) : [];
   if (packages) renderDeliveries(deliveries);
 
   const rows = items.length

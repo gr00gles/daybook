@@ -18,6 +18,7 @@ import { aboutPackage } from './packages.js';
 import { GMAIL_FOLDERS } from './settings.js';
 
 const KEY = 'pkg:mail';
+const REPORT = 'pkg:mail:report'; // what the last search found in each account, for Settings
 const RULE = 4102; // the session rule that lets Gmail's page load in Daybook's frames
 const DAYS = 14;
 const MAX_ACCOUNTS = 3;
@@ -251,6 +252,8 @@ export function refreshShippingMail({ gmail = [], outlook = '', outlookFolders =
         const old = before?.data || [];
         const kept = (source) => old.filter((m) => m.source === source);
         const out = [];
+        const report = {};
+        const note = (source, list, err) => (report[source] = err ? { error: String(err?.message || err) } : { found: list.length, full: list.filter((m) => m.full).length });
         if (accounts.length) {
           // Let the board draw first; Gmail's page is a big one.
           await sleep(force ? 0 : 3000);
@@ -259,26 +262,37 @@ export function refreshShippingMail({ gmail = [], outlook = '', outlookFolders =
         for (const acct of accounts) {
           const source = `gmail:${acct.email}`;
           try {
-            out.push(...(await readGmail(acct)).map((m) => ({ ...m, source })));
+            const got = await readGmail(acct);
+            note(source, got);
+            out.push(...got.map((m) => ({ ...m, source })));
           } catch (err) {
             console.warn('[daybook] shipping emails, Gmail:', err);
+            note(source, null, err);
             out.push(...kept(source));
           }
         }
         if (accounts.length) dropFrames(RULE);
         if (outlook) {
           try {
-            out.push(...(await readOutlook(outlook, outlookFolders)).map((m) => ({ ...m, source: 'outlook' })));
+            const got = await readOutlook(outlook, outlookFolders);
+            note('outlook', got);
+            out.push(...got.map((m) => ({ ...m, source: 'outlook' })));
           } catch (err) {
             console.warn('[daybook] shipping emails, Outlook:', err);
+            note('outlook', null, err);
             out.push(...kept('outlook'));
           }
         }
+        await local.set(REPORT, { at: Date.now(), sources: report });
         return out.sort((a, b) => b.at - a.at);
       }),
     render: (data) => onData(data || []),
   });
 }
+
+// What the last search found in each account ({ at, sources: { 'gmail:address' or 'outlook':
+// { found, full } or { error } } }), for Settings.
+export const lastShippingReport = async () => (await local.get(REPORT)) || null;
 
 // The shipping emails Daybook last read, for a look-up without reading again.
 export const lastShippingMail = async () => (await local.get(`cache:${KEY}`))?.data || [];

@@ -5,6 +5,7 @@ import { esc, colorVar, getJSON } from './util.js';
 import { googleConfigured, googleAccount, connectGoogle, disconnectGoogle } from './gauth.js';
 import { listGoogleCalendars } from './calendar.js';
 import { discoverGmailAccounts, gmailAllowed, GMAIL_SIGN_IN } from './mail.js';
+import { lastShippingReport } from './shipmail.js';
 import { connect as msConnect, disconnect as msDisconnect, msAccount, adminConsentUrl, graph } from './msauth.js';
 import { msClientId, GMAIL_FOLDERS, unreadFolders, shippingFolders } from './settings.js';
 import { icon } from './icons.js';
@@ -338,8 +339,17 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
 // and the Outlook mailbox: All mail or the whole mailbox, or folders and labels. Its own choice,
 // whatever the Unread card shows. Writes draft.packages.mail.
 export function mountShippingFolders(el, draft, changed) {
-  const s = { accounts: null, outlook: '', folders: null };
+  const s = { accounts: null, outlook: '', folders: null, report: null };
   const M = () => draft.packages.mail;
+  // What the last search found there, or why it couldn't look.
+  const lastLook = (source) => {
+    const r = s.report?.sources?.[source];
+    if (!r) return '';
+    const when = new Date(s.report.at).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    return r.error
+      ? `<p class="notice warn small">The last look (${esc(when)}) couldn’t search here: ${esc(r.error)}.</p>`
+      : `<p class="hint small">The last look (${esc(when)}) found ${r.found} ${r.found === 1 ? 'email' : 'emails'} about orders here${r.found ? `, ${r.full} read in full` : ''}.</p>`;
+  };
 
   const paint = () => {
     if (!s.accounts) {
@@ -357,13 +367,13 @@ export function mountShippingFolders(el, draft, changed) {
     el.innerHTML = `
       ${gmail
         .slice(0, 3)
-        .map((a) => `<div class="acct-mail">${gmailPick(a.email, shippingFolders(draft, a.email), { legend: a.email, attr: 's', all: true })}</div>`)
+        .map((a) => `<div class="acct-mail">${gmailPick(a.email, shippingFolders(draft, a.email), { legend: a.email, attr: 's', all: true })}${lastLook(`gmail:${a.email}`)}</div>`)
         .join('')}
       ${gmail.length > 3 ? `<p class="hint small">Deliveries reads the first three Gmail accounts; ${gmail.slice(3).map((a) => esc(a.email)).join(', ')} ${gmail.length === 4 ? 'isn’t' : 'aren’t'} read.</p>` : ''}
       ${outlook
         ? `<div class="acct-mail"><fieldset class="cal-pick folder-pick"><legend>Outlook (${esc(s.outlook)})</legend>
             ${box('all', 'Whole mailbox')}${s.folders ? s.folders.map((f) => box(f.id, f.name)).join('') : ''}
-          </fieldset>${s.folders ? '' : '<p class="hint small">Looking for your Outlook folders…</p>'}</div>`
+          </fieldset>${s.folders ? '' : '<p class="hint small">Looking for your Outlook folders…</p>'}${lastLook('outlook')}</div>`
         : ''}
       <p class="hint small">These are apart from the Unread card’s folders under Accounts. All mail is the inbox, archived mail and every label, but not Spam or Trash, and it leaves out Promotions and Social unless you tick them too. Outlook’s whole mailbox is every folder. With nothing ticked, Deliveries doesn’t look in that account.</p>`;
   };
@@ -381,6 +391,7 @@ export function mountShippingFolders(el, draft, changed) {
 
   (async () => {
     s.accounts = await discoverGmailAccounts(false).catch(() => []);
+    s.report = await lastShippingReport();
     const clientId = msClientId(draft);
     s.outlook = clientId ? (await msAccount().catch(() => null)) || '' : '';
     paint();
