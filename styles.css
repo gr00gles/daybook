@@ -928,6 +928,13 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 /* Hidden whatever else sets its display, like the one-line look of a card with nothing to show. */
 .flip-deck > .flip-off { display: none !important; }
 .flip-deck > .flip-face > .card-move, .flip-deck > .flip-face > .card-size { display: none; }
+/* The tab names the card showing, so its own title goes, and so does a head left with nothing
+   in it. Notes and Headlines lose their heads whole: Headlines shows the topic last picked on
+   its card. */
+.flip-deck > .flip-face > .card-head > h2 { display: none; }
+.flip-deck > .flip-face > .card-head:not(:has(> :not(h2):not(:empty))),
+.flip-deck > #card-notes > .card-head,
+.flip-deck > #card-news > .card-head { display: none; }
 .card-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 10px; min-height: 28px; }
 .card-head h2 {
   margin: 0;
@@ -2095,9 +2102,6 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .news-head { flex-wrap: nowrap; align-items: center; }
 .news-head .tabs { flex: 1 1 auto; min-width: 0; justify-content: flex-end; margin: -2px -6px -2px 0; padding: 2px; }
 .news-head .tab { padding: 4px 11px; font-size: 12.5px; }
-/* In the flip card its tab already says Headlines. */
-.flip-face#card-news .news-head h2 { display: none; }
-.flip-face#card-news .news-head .tabs { justify-content: flex-start; margin-left: -4px; }
 .news-list { list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 0; }
 .news-item {
   display: grid;
