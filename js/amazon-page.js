@@ -1,6 +1,6 @@
 // Runs on an Amazon order's details page that Daybook opens out of sight, in a frame on the new
 // tab page (amazon.js). It hands Daybook the names of the items in the order, the words of the
-// links to their product pages, and their pictures. The page also shows other products ("Customers also bought" and
+// links to their product pages, their pictures and the pages themselves. The page also shows other products ("Customers also bought" and
 // the like), in carousels and with links Amazon tags differently: the order's own links carry a
 // ref starting "ppx". On an order page you open yourself it does nothing.
 (() => {
@@ -27,7 +27,7 @@
     const byAsin = new Map();
     for (const a of links) {
       const asin = a.getAttribute('href').match(PRODUCT)[1];
-      const item = byAsin.get(asin) || { name: '', image: '' };
+      const item = byAsin.get(asin) || { name: '', image: '', link: `https://www.amazon.com/dp/${asin}` };
       byAsin.set(asin, item);
       const img = a.querySelector('img');
       const src = img?.currentSrc || img?.getAttribute('src') || '';
@@ -51,7 +51,7 @@
     const found = names();
     if (found.length || Date.now() - started > 15000) {
       const top = found.slice(0, 8);
-      chrome.runtime.sendMessage({ type: 'amazon-order', order, items: top.map((i) => i.name), images: top.map((i) => i.image) });
+      chrome.runtime.sendMessage({ type: 'amazon-order', order, items: top.map((i) => i.name), images: top.map((i) => i.image), links: top.map((i) => i.link) });
       return;
     }
     setTimeout(check, 1000);

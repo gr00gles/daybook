@@ -6,8 +6,8 @@
 import { local } from './util.js';
 import { allowFrames, dropFrames, readHidden } from './frames.js';
 
-// v3: with the items' pictures (v2 left out the products Amazon suggests on the page).
-const KEY = 'amazon:orders:v3'; // { [order number]: { at, items: [names], images: [urls] } or { at, error } }
+// v4: with the items' pages (v3 added their pictures; v2 left out the products Amazon suggests).
+const KEY = 'amazon:orders:v4'; // { [order number]: { at, items: [names], images: [urls], links: [urls] } or { at, error } }
 const RULE = 4103; // the session rule that lets amazon.com's order pages load in Daybook's frames
 const PER_RUN = 4; // pages read each time, so a new tab isn't kept busy
 const WAIT = 30e3;
@@ -17,7 +17,7 @@ const FORGET = 30 * 86400e3;
 // An Amazon order number: 113-7709954-3007449.
 export const isAmazonOrder = (o) => /^\d{3}-\d{7}-\d{7}$/.test(o || '');
 export const loadAmazonOrders = async () => (await local.get(KEY)) || {};
-local.remove(['amazon:orders', 'amazon:orders:v2']);
+local.remove(['amazon:orders', 'amazon:orders:v2', 'amazon:orders:v3']);
 const pageUrl = (order) => `https://www.amazon.com/gp/your-account/order-details?orderID=${encodeURIComponent(order)}`;
 
 // Reads the pages of the orders not looked up yet, a few each time. One Daybook tab does this at
@@ -48,7 +48,7 @@ export function refreshAmazonOrders(orders) {
           break;
         }
         known[order] = msg?.items?.length
-          ? { at: Date.now(), items: msg.items.slice(0, 8), images: (msg.images || []).slice(0, 8) }
+          ? { at: Date.now(), items: msg.items.slice(0, 8), images: (msg.images || []).slice(0, 8), links: (msg.links || []).slice(0, 8).map((u) => (/^https:\/\/www\.amazon\.com\/dp\/[A-Z0-9]{10}$/.test(u) ? u : '')) }
           : { at: Date.now(), error: msg ? 'No items on the order page' : 'The order page didn’t load' };
         await local.set(KEY, known);
       }

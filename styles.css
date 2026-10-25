@@ -1487,19 +1487,31 @@ a.chip:hover { background: var(--fill-2); }
 .s-transit .pkg-day { color: var(--ink); }
 .pkg-date { font-size: 12px; color: var(--muted); }
 .pkg-more { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
-/* The Deliveries page (deliveries.html): the card's rows, side by side on a wide screen, with
-   room for the whole title and every item in the box. */
-.dp-body .eyebrow { margin: 18px 0 6px; }
+/* The Deliveries page (deliveries.html): a tile a box, side by side on a wide screen. Its head
+   has when, in a pill of its state's colour, and links to follow it; under that, each thing in
+   the box with its picture, each a link of its own. */
+.dp-body .eyebrow { margin: 22px 0 10px; }
 .dp-body .eyebrow:first-child { margin-top: 4px; }
-.dp-body .pkg-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); column-gap: 20px; row-gap: 4px; }
-.dp-body .pkg { align-items: start; padding-block: 8px; }
-.dp-body .pkg-thumb { width: 48px; height: 48px; }
-.dp-body .pkg { grid-template-columns: 48px minmax(0, 1fr) auto; }
-.dp-body .pkg-title, .dp-body .pkg-meta { white-space: normal; }
-.pkg-items { display: grid; gap: 6px; margin-top: 6px; font-size: 12.5px; color: var(--ink-2); }
-.pkg-item { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.pkg-item:not(:has(img))::before { content: "•"; color: var(--muted); }
-.pkg-item img { flex: none; width: 40px; height: 40px; object-fit: contain; border-radius: 8px; background: #fff; box-shadow: inset 0 0 0 1px var(--hair); }
+.dt-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 14px; align-items: start; }
+.dt { padding: 14px 14px 8px 16px; border-radius: 18px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--hair), 0 10px 24px -20px var(--glass-shade); }
+.dt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dt-when { padding: 4px 11px; border-radius: 999px; font-size: 13px; font-weight: 650; color: var(--st); background: color-mix(in srgb, var(--st) 13%, transparent); }
+.s-transit .dt-when { color: var(--ink); background: var(--fill); }
+.dt-links { margin-left: auto; display: flex; gap: 4px; }
+.dt-links a { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); text-decoration: none; }
+.dt-links a:hover { background: var(--fill); color: var(--ink); }
+.dt-links .ui-icon { width: 14px; height: 14px; }
+.dt-how { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dt-news { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.dt-items { list-style: none; margin: 10px -6px 0 -8px; padding: 8px 0 0; display: grid; gap: 2px; border-top: 1px solid var(--line); }
+.dt-item { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-radius: 12px; font-size: 13.5px; line-height: 1.35; color: var(--ink-2); text-decoration: none; transition: background-color .12s ease; }
+.dt-item:hover { background: var(--fill); color: var(--ink); }
+.dt-item:hover .dt-name { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-2); }
+.dt-item img, .dt-nopic { flex: none; width: 52px; height: 52px; border-radius: 10px; object-fit: contain; background: #fff; box-shadow: inset 0 0 0 1px var(--hair); }
+.dt-nopic { display: grid; place-items: center; color: var(--muted); background: var(--fill); }
+.dt-nopic .ui-icon { width: 20px; height: 20px; }
+.dt-name { min-width: 0; }
+.dt-name strong { font-weight: 650; color: var(--ink); }
 #card-deliveries.is-empty .card-head { margin-bottom: 4px; }
 #card-deliveries.is-empty .quiet { margin: 0; font-size: 13.5px; }
 .pkg-tag {
