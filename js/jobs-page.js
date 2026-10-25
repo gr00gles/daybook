@@ -1,12 +1,14 @@
 // The NYS jobs page: every recent StateJobsNY posting Daybook has, as one table with every
 // column the site lists, plus the salary and employment type from each posting's page. Search
-// it, sort it by any column, look further back, or turn your rules off to see everything. It
-// uses the list the new tab keeps and fetches again only when that copy is old.
+// it, sort it by any column, look further back, or turn your rules off and show the postings
+// you've reviewed to see everything. It uses the list the new tab keeps and fetches again only
+// when that copy is old.
 import { $, esc, updatedText, errorText } from './util.js';
 import { loadSettings } from './settings.js';
 import { icon } from './icons.js';
 import {
   loadJobs, pick, ruleCount, JOB_DAYS, whenText, postingUrl, agencyName, numberIn, shortDate, loadDetails, withDetails, ensureDetails, onDetails, salaryText,
+  REVIEWED, loadReviewed,
 } from './jobs.js';
 
 const S = await loadSettings();
@@ -15,9 +17,11 @@ $('#jp-back').insertAdjacentHTML('afterbegin', icon('chevron-left'));
 $('.jp-search').insertAdjacentHTML('afterbegin', icon('search'));
 $('#jp-edit').insertAdjacentHTML('afterbegin', icon('edit'));
 
-const view = { q: '', days: S.jobs.days, rules: true, sort: null, dir: -1 };
+// Like the card, the page starts without the postings you've marked as reviewed.
+const view = { q: '', days: S.jobs.days, rules: true, unreviewed: true, sort: null, dir: -1 };
 let data = null;
 let details = {};
+let reviewed = await loadReviewed();
 
 const rules = ruleCount(S.jobs);
 $('#jp-rules-wrap').hidden = !rules;
@@ -72,7 +76,7 @@ function paint() {
   if (!data) return;
   const J = { ...S.jobs, days: view.days };
   const jobs = withDetails(data.jobs, details);
-  const base = pick(jobs, J, { rules: view.rules });
+  const base = pick(jobs, J, { rules: view.rules }).filter((j) => !view.unreviewed || !reviewed[j.id]);
   const waiting = pick(jobs, J, { rules: false }).filter((j) => !j.info && !details[j.id]?.error).length;
   const words = view.q.toLowerCase().split(/\s+/).filter(Boolean);
   const cols = columns();
@@ -88,7 +92,8 @@ function paint() {
     shown = [...shown].sort((a, b) => cmp(a, b) || Number(b.id) - Number(a.id));
   }
   const when = whenText(J);
-  const passing = view.rules && rules ? ' that pass your rules' : '';
+  const kept = [view.rules && rules && 'pass your rules', view.unreviewed && 'you haven’t reviewed'].filter(Boolean);
+  const passing = kept.length ? ` that ${kept.join(' and ')}` : '';
   $('#jp-status').textContent = words.length
     ? `${shown.length} of ${base.length} postings ${when}${passing} match`
     : `${base.length} ${base.length === 1 ? 'posting' : 'postings'} ${when}${passing}`;
@@ -124,6 +129,16 @@ $('#jp-days').addEventListener('change', (e) => {
 });
 $('#jp-rules').addEventListener('change', (e) => {
   view.rules = e.target.checked;
+  paint();
+});
+$('#jp-unreviewed').addEventListener('change', (e) => {
+  view.unreviewed = e.target.checked;
+  paint();
+});
+// Marked or unmarked on a new tab while this page is open.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes[REVIEWED]) return;
+  reviewed = changes[REVIEWED].newValue || {};
   paint();
 });
 // A heading sorts by its column; again turns the order around. Dates start newest first.
