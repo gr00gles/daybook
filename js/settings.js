@@ -64,12 +64,12 @@ export const DEFAULTS = {
   news: { topics: ['top', 'us', 'technology'], custom: [] },
   // Each card or top-bar part: 'card' (on the page), 'both' (and in the ticker), 'ticker' (in the
   // ticker only), 'flip' (a card taking turns in the flip card) or 'off'. `show` below follows: a section is on while any of its parts is.
-  // The board starts with Today, the month, Unread, Teams and NYS jobs as cards, and the rest in the flip card.
+  // The board starts with Today, the month, Unread, Teams, NYS jobs, Markets and Deliveries as cards, and the rest in the flip card.
   ticker: {
-    weather: 'card', alerts: 'card', holidays: 'card', shortcuts: 'off', today: 'card', month: 'card', notes: 'flip', stocks: 'flip', teams: 'card', news: 'flip',
-    jobs: 'card', deliveries: 'flip', mail: 'card', area: 'flip', youtube: 'flip',
+    weather: 'card', alerts: 'card', holidays: 'card', shortcuts: 'off', today: 'card', month: 'card', notes: 'flip', stocks: 'card', teams: 'card', news: 'flip',
+    jobs: 'card', deliveries: 'card', mail: 'card', area: 'flip', youtube: 'flip',
   },
-  board: 1, // which default board (card or flip card for each) these settings have had
+  board: 2, // which default board (card or flip card for each) these settings have had
   youtube: { hideShorts: true },
   flip: { every: 20 }, // seconds between turns of the flip card; 0 turns only by hand
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
