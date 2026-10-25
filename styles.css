@@ -1496,8 +1496,10 @@ a.chip:hover { background: var(--fill-2); }
 .dp-body .pkg-thumb { width: 48px; height: 48px; }
 .dp-body .pkg { grid-template-columns: 48px minmax(0, 1fr) auto; }
 .dp-body .pkg-title, .dp-body .pkg-meta { white-space: normal; }
-.pkg-items { display: grid; gap: 2px; margin-top: 4px; font-size: 12.5px; color: var(--ink-2); }
-.pkg-items > span::before { content: "•"; margin-right: 6px; color: var(--muted); }
+.pkg-items { display: grid; gap: 6px; margin-top: 6px; font-size: 12.5px; color: var(--ink-2); }
+.pkg-item { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pkg-item:not(:has(img))::before { content: "•"; color: var(--muted); }
+.pkg-item img { flex: none; width: 40px; height: 40px; object-fit: contain; border-radius: 8px; background: #fff; box-shadow: inset 0 0 0 1px var(--hair); }
 #card-deliveries.is-empty .card-head { margin-bottom: 4px; }
 #card-deliveries.is-empty .quiet { margin: 0; font-size: 13.5px; }
 .pkg-tag {

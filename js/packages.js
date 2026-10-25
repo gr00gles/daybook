@@ -418,6 +418,12 @@ function thumb(d) {
     : `<span class="pkg-thumb">${icon('box')}</span>`;
 }
 
+// A name cut to its first n words.
+const words = (s, n = 9) => {
+  const w = s.split(/\s+/);
+  return w.length <= n ? s : `${w.slice(0, n).join(' ').replace(/[\s,;:|–—-]+$/, '')}…`;
+};
+
 // Package rows, newest word first. Used by the Deliveries card and page and by the company pages.
 // With full (the Deliveries page), every item in a box is listed under its row.
 export function deliveryRows(list, max = 6, { full = false } = {}) {
@@ -428,7 +434,7 @@ export function deliveryRows(list, max = 6, { full = false } = {}) {
       const when = d.state === 'delivered' ? { day: 'Delivered', date: dateParts(d.at).date } : d.due != null ? dateParts(d.due) : null;
       // The day on the right says when; "Arriving Tue" or "Delivered" on the left would say it twice.
       const status = when && (d.state === 'delivered' || /^arriving\b/i.test(d.label)) ? '' : d.label;
-      const tip = [d.title, d.number && `${who} ${d.number}`, `email ${relTime(d.at)}`].filter(Boolean).join(' · ');
+      const tip = [d.items?.length ? d.items.map((i) => words(i)).join(' · ') : d.title, d.number && `${who} ${d.number}`, `email ${relTime(d.at)}`].filter(Boolean).join(' · ');
       // Who sent it and the tracking number, without saying "UPS · UPS".
       const sender = d.from && d.from !== d.title && !(who && d.from.toLowerCase().includes(who.toLowerCase())) ? d.from : '';
       // From the carrier's page: its latest word on the package, and where.
@@ -443,7 +449,16 @@ export function deliveryRows(list, max = 6, { full = false } = {}) {
         <span class="pkg-text">
           <span class="pkg-line">${status ? `<span class="pkg-status">${esc(status)}</span>` : ''}<span class="pkg-title">${esc(title)}</span></span>
           ${meta ? `<span class="pkg-meta">${esc(meta)}</span>` : ''}
-          ${listed ? `<span class="pkg-items">${d.items.map((i) => `<span>${esc(i)}</span>`).join('')}</span>` : ''}
+          ${
+            listed
+              ? `<span class="pkg-items">${d.items
+                  .map((name, i) => {
+                    const src = d.images?.[i];
+                    return `<span class="pkg-item">${src ? `<img src="${esc(safeUrl(src))}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}<span>${esc(words(name))}</span></span>`;
+                  })
+                  .join('')}</span>`
+              : ''
+          }
         </span>
         ${
           when
@@ -523,13 +538,28 @@ function added(p) {
 // The card's list: the email packages (unless that's off) and the ones added by hand, with
 // their carriers' news on each. A few seconds after the page settles, the packages still on
 // their way get a fresh look (tracking.js decides which are due).
-// An Amazon package with what its order page says is in it, in place of the emails' category.
-// An order can come in several boxes: the emails say how many items are in this one.
+// The brand an Amazon product's name starts with: "Wrangler Authentics Men's Comfort Flex…" is
+// Wrangler. A short first word ("Mr.", "LG") takes the next one along when it's a name too.
+function brandOf(name) {
+  const [a = '', b = ''] = name.replace(/[,|(].*$/, '').split(/\s+/);
+  return (a.length <= 3 || a.endsWith('.')) && /^[A-Z][a-z]/.test(b) ? `${a} ${b}` : a;
+}
+
+// An Amazon package with what its order page says is in it, in place of the emails' category:
+// its brands as the title, the full names (items) and pictures (images) for the Deliveries page,
+// and the first picture as its own. An order can come in several boxes: the emails say how many
+// items are in this one.
 function withItems(d) {
-  let names = settingsRef.packages.amazonPages !== false && amazon[d.order]?.items;
-  if (!names?.length) return d;
-  if (d.count) names = names.slice(0, d.count);
-  return { ...d, items: names, title: itemsText(names) };
+  const got = settingsRef.packages.amazonPages !== false && amazon[d.order];
+  if (!got?.items?.length) return d;
+  const n = d.count || got.items.length;
+  const names = got.items.slice(0, n);
+  const images = (got.images || []).slice(0, n);
+  const brands = [...new Set(names.map(brandOf))];
+  // Brands are short: up to two by name ("Attwood, Mr. Heater"), the rest counted.
+  const title =
+    brands.length === 1 ? (names.length > 1 ? `${brands[0]}, ${names.length} items` : brands[0]) : `${brands.slice(0, 2).join(', ')}${brands.length > 2 ? ` and ${brands.length - 2} more` : ''}`;
+  return { ...d, items: names, images, title, picture: images.find(Boolean) || d.picture };
 }
 
 function compose() {
