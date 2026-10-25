@@ -9,7 +9,7 @@ import { setTicker } from './ticker.js';
 import { setCredit } from './credits.js';
 import { holidaysOn, coveredBy, holidayBadge } from './sky.js';
 
-const DAYS_AHEAD = 7;
+const DAYS_AHEAD = 22; // Today lists the three weeks after it, as many days as fit
 
 // First day of the week for this browser's locale (0 = Sunday).
 const locale = new Intl.Locale(navigator.language || 'en-US');
@@ -25,7 +25,7 @@ export function monthGrid(year, month) {
 }
 
 // Fetched on every refresh: this month's grid through next month's, which also covers the
-// next seven days for the Today list.
+// next three weeks for the Today list.
 function mainRange() {
   const now = new Date();
   const thisMonth = monthGrid(now.getFullYear(), now.getMonth());
@@ -576,19 +576,21 @@ export function renderAgenda(S) {
       const allDay = events.filter((e) => e.allDay && e.start < d1 && e.end > d0);
       const timed = events.filter((e) => !e.allDay && e.start >= d0 && e.start < d1);
       if (!allDay.length && !timed.length) continue;
-      const label = d0 === addDays(realToday, 1) ? 'Tomorrow' : d0 === realToday ? 'Today' : new Date(d0).toLocaleDateString(undefined, { weekday: 'long' });
+      // Past the coming week, "Monday" alone would read as this one: those say "Next Monday".
+      const weekday = new Date(d0).toLocaleDateString(undefined, { weekday: 'long' });
+      const label = d0 === addDays(realToday, 1) ? 'Tomorrow' : d0 === realToday ? 'Today' : d0 >= addDays(realToday, 7) && d0 < addDays(realToday, 14) ? `Next ${weekday}` : weekday;
       const date = new Date(d0).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      days.push(`<section class="day">
+      days.push(`<li class="day">
         <h3><span>${label}</span><span class="day-date">${date}</span></h3>
         ${allDayChips(allDay)}
         ${timed.length ? `<ol class="ev-list compact">${timed.map((e) => timedRow(e, now, h24, { compact: true })).join('')}</ol>` : ''}
-      </section>`);
+      </li>`);
     }
     const after = pickedDay === null ? 'Coming up' : 'The days after';
     parts.push(
       days.length
-        ? `<div class="upcoming"><h3 class="eyebrow">${after}</h3>${days.join('')}</div>`
-        : `<div class="upcoming"><h3 class="eyebrow">${after}</h3><p class="quiet">Nothing scheduled ${pickedDay === null ? 'for the rest of the week' : 'in the six days after'}.</p></div>`,
+        ? `<div class="upcoming"><h3 class="eyebrow">${after}</h3><ol class="days">${days.join('')}</ol></div>`
+        : `<div class="upcoming"><h3 class="eyebrow">${after}</h3><p class="quiet">Nothing scheduled ${pickedDay === null ? 'in the next three weeks' : 'in the three weeks after'}.</p></div>`,
     );
   }
 

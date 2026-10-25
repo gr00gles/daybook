@@ -1190,7 +1190,8 @@ a.chip:hover { background: var(--fill-2); }
 .upcoming { margin: 10px -10px 0; padding: 8px 10px 0; background: linear-gradient(var(--hair), var(--hair)) 10px 0 / calc(100% - 20px) 1px no-repeat; max-height: 460px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; }
 .upcoming.scrolls { mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); padding-bottom: 24px; }
 .day h3 { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 2px; font: 600 15px var(--font-display); letter-spacing: -0.01em; }
-.day:first-of-type h3 { margin-top: 2px; }
+.days { list-style: none; margin: 0; padding: 0; }
+.day:first-child h3 { margin-top: 2px; }
 .day-date { font: 400 12.5px var(--font-body); color: var(--muted); }
 .day .allday { margin: 4px 0 4px; }
 
@@ -2693,13 +2694,10 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 /* Each week is at least as tall as its events (js/layout.js keeps the card that tall), and they share what's left. */
 #card-month.fixed .mgrid { flex: 1 1 0; min-height: 0; grid-template-rows: auto; grid-auto-rows: minmax(min-content, 1fr); }
 #card-month.fixed .mday { min-height: 0; overflow: hidden; }
-/* Headings whose items were all dropped go with them. A day in Today's Coming up shows the
-   events that fit, and the days after a day cut short go too (items go from the end), even ones
-   with only all-day events. */
+/* Headings whose items were all dropped go with them. Today's Coming up drops whole days from
+   the end, those with only all-day events too, and goes when none fit. */
 .ev-list:has(> li[data-clip]) ~ .upcoming,
-.upcoming:has(> .day:first-of-type li[data-clip]):not(:has(> .day:first-of-type li:not([data-clip]))),
-.day:has(li[data-clip]):not(:has(li:not([data-clip]))),
-.day:has(li[data-clip]) ~ .day,
+.upcoming:has(.day[data-clip]):not(:has(.day:not([data-clip]))),
 .tm-news-wrap:has(li[data-clip]):not(:has(li:not([data-clip]))),
 .ae-list:has(> li[data-clip]):not(:has(> li:not([data-clip]))),
 .ae-day:has(+ .ae-list > li[data-clip]):not(:has(+ .ae-list > li:not([data-clip]))),
