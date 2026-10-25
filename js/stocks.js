@@ -1,6 +1,6 @@
 // A stock watchlist from Finnhub (free key from finnhub.io). Quotes refresh every 5 minutes
 // while the US market is open and hourly otherwise.
-import { $, esc, cached, hash, updatedText, errorText } from './util.js';
+import { $, esc, cached, hash, errorText } from './util.js';
 import { setTicker, offBoard } from './ticker.js';
 
 const API = 'https://finnhub.io/api/v1';
@@ -102,7 +102,7 @@ function render(data, meta, sig) {
   }
   $('#stocks-state').textContent = marketText(data.market);
   $('#stocks-state').className = `head-meta${data.market.isOpen ? ' open' : ''}`;
-  $('#stocks-updated').textContent = meta.error ? "couldn't refresh" : updatedText(meta.at);
+  $('#stocks-updated').textContent = meta.error ? "couldn't refresh" : '';
   body.innerHTML = `<ol class="tickers">${data.quotes.map(row).join('')}</ol>`;
   setTicker(
     'stocks',

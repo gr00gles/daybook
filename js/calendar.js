@@ -6,6 +6,7 @@ import { icon, weatherIcon } from './icons.js';
 import { describe } from './weather.js';
 import { tripInfo, leaveText, tripSources } from './trip.js';
 import { setTicker } from './ticker.js';
+import { setCredit } from './credits.js';
 
 const DAYS_AHEAD = 7;
 
@@ -587,7 +588,7 @@ export function renderAgenda(S) {
     );
   }
   const trips = tripSources();
-  const credit = trips.places
+  const credit = configured && trips.places
     ? [
         'Places © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         trips.osrm && 'drive times by <a href="https://routing.openstreetmap.de/">FOSSGIS OSRM</a>',
@@ -595,12 +596,11 @@ export function renderAgenda(S) {
         trips.weather && !S.show.weather && 'weather by <a href="https://open-meteo.com/">Open-Meteo.com</a>',
       ].filter(Boolean)
     : [];
-  body.innerHTML = parts.join('') + notices.join('') + (configured && credit.length ? `<p class="credit">${credit.join(' · ')}</p>` : '');
+  setCredit('travel', credit.join(', '));
+  body.innerHTML = parts.join('') + notices.join('');
   const upcoming = body.querySelector('.upcoming');
   if (upcoming) upcoming.classList.toggle('scrolls', upcoming.scrollHeight > upcoming.clientHeight + 4);
 
-  const ats = [...sources.values()].map((s) => s.at).filter(Boolean);
-  $('#today-updated').textContent = ats.length ? updatedText(Math.min(...ats)) : '';
   setTicker('today', configured ? tickerEvents(events.filter((e) => e.end > now && e.start < tomorrow), (e) => (e.allDay ? 'All day' : e.start <= now ? 'Now' : fmtTime(e.start, h24))) : []);
 }
 

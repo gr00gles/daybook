@@ -28,7 +28,7 @@ const AUTO_FOUR = 1480;
 const MIN_WIDTH = 0.5;
 const MIN_HEIGHT = 140;
 const FIT_MIN = 140; // the shortest a card with a list gets when fitting the window
-const FIT_BOTTOM = 16; // room kept under the cards
+const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
 const FIT_SLACK = 1 / 3; // how much of a window the page may scroll to keep the columns fitted
 
 let layout = { v: 1, rev: REV, count: null, fit: true, cols: {}, cols4: null, widths: null, widths4: null, heights: {} };
@@ -187,7 +187,7 @@ function fitBoard() {
   const cols = columns();
   const measured = layout.fit !== false && allAcross() ? cols.map(measureColumn) : [];
   const top = (col) => col.getBoundingClientRect().top + scrollY;
-  const bottom = Math.max(innerHeight - FIT_BOTTOM, ...measured.map((m) => top(m.col) + m.least));
+  const bottom = Math.max(innerHeight - FIT_BOTTOM - ($('#credits')?.offsetHeight || 0), ...measured.map((m) => top(m.col) + m.least));
   if (measured.length && bottom <= innerHeight * (1 + FIT_SLACK)) {
     for (const m of measured) fitColumn(m, bottom - top(m.col));
     return;

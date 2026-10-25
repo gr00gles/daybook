@@ -5,7 +5,7 @@
 // each posting's own page, which is read once per posting. Every column and detail is kept, so
 // the rules in Settings can use any field the site lists. Rules filter the list as it's drawn,
 // so changing them doesn't refetch. The card shows the newest few; jobs.html lists them all.
-import { $, esc, cached, local, updatedText, errorText, addDays } from './util.js';
+import { $, esc, cached, local, errorText, addDays } from './util.js';
 import { icon } from './icons.js';
 import { setTicker } from './ticker.js';
 
@@ -674,7 +674,7 @@ async function render() {
   const body = $('#jobs-body');
   const J = S.jobs;
   const rules = ruleCount(J);
-  $('#jobs-updated').textContent = meta.error && data ? "couldn't refresh" : data ? updatedText(meta.at) : '';
+  $('#jobs-updated').textContent = meta.error && data ? "couldn't refresh" : '';
   $('#jobs-filter').textContent = rules ? `${rules} ${rules === 1 ? 'rule' : 'rules'}` : '';
   if (!data) {
     setTicker('jobs', []);

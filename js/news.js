@@ -1,4 +1,4 @@
-import { $, esc, cached, local, relTime, updatedText, errorText, safeUrl } from './util.js';
+import { $, esc, cached, local, relTime, errorText, safeUrl } from './util.js';
 import { NEWS_TOPICS } from './settings.js';
 import { icon } from './icons.js';
 import { rolodex } from './rolodex.js';
@@ -41,7 +41,6 @@ function load() {
     fetch: () => fetchFeed(feed.url),
     render: (items, meta) => {
       if (active !== feed.id) return;
-      $('#news-updated').textContent = updatedText(meta.at);
       rolo?.stop();
       rolo = null;
       if (!items) {

@@ -1,7 +1,7 @@
 // Teams you follow: each one's next game (or the live score), their games on the calendar,
 // recent team news, and for a day after a game, its result at the top of the page. Schedules come from ESPN's public site API, which needs no key;
 // news comes from a Google News search feed for each team.
-import { $, esc, cached, hash, getJSON, local, fmtTime, relTime, updatedText, errorText, safeUrl, startOfDay, addDays } from './util.js';
+import { $, esc, cached, hash, getJSON, local, fmtTime, relTime, errorText, safeUrl, startOfDay, addDays } from './util.js';
 import { fetchFeed } from './news.js';
 import { icon } from './icons.js';
 import { setTicker, offBoard } from './ticker.js';
@@ -217,7 +217,7 @@ function teamRow(t, info, S) {
 }
 
 function renderCard(S, teams, data, meta) {
-  $('#teams-updated').textContent = meta.error ? "couldn't refresh" : updatedText(meta.at);
+  $('#teams-updated').textContent = meta.error ? "couldn't refresh" : '';
   const body = $('#teams-body');
   if (!data) {
     body.innerHTML = `<p class="notice warn">Schedules aren’t loading: ${esc(errorText(meta.error).replace(/\.$/, ''))}.</p>`;

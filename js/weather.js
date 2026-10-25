@@ -1,6 +1,6 @@
 // Weather from Open-Meteo (free, no key). Location comes from Chrome's geolocation or a
 // city you pick in Settings.
-import { $, esc, cached, hash, local, getJSON, fmtTime, fmtHour, updatedText, errorText, showPop } from './util.js';
+import { $, esc, cached, hash, local, getJSON, fmtTime, fmtHour, errorText, showPop } from './util.js';
 import { weatherIcon, icon } from './icons.js';
 import { setTicker } from './ticker.js';
 
@@ -281,7 +281,7 @@ export function renderSun() {
 function renderCard(d, meta) {
   const body = $('#weather-body');
   $('#weather-place').textContent = d.place;
-  $('#weather-updated').textContent = meta.error ? "couldn't refresh" : updatedText(meta.at);
+  $('#weather-updated').textContent = meta.error ? "couldn't refresh" : '';
   const c = d.current;
   const i = todayIndex(d.daily);
   const dly = d.daily;
@@ -322,8 +322,7 @@ function renderCard(d, meta) {
   body.innerHTML = `
     <div class="hourly" id="wx-hourly"><div class="hourly-tip" id="wx-tip" hidden></div></div>
     <ol class="week">${week}</ol>
-    <dl class="facts">${facts.map(([k, v, sub]) => `<div><dt>${k}</dt><dd>${v}${sub ? `<small>${sub}</small>` : ''}</dd></div>`).join('')}</dl>
-    <p class="credit">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a></p>`;
+    <dl class="facts">${facts.map(([k, v, sub]) => `<div><dt>${k}</dt><dd>${v}${sub ? `<small>${sub}</small>` : ''}</dd></div>`).join('')}</dl>`;
   drawHourly();
 }
 
