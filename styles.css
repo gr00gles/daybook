@@ -250,7 +250,7 @@ svg { flex: none; }
 }
 #date-long { text-wrap: balance; }
 .date-meta { font-size: 12.5px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
-/* The next holiday and what's next, sharing a bubble at the end of the search box: the faces
+/* The next holiday, what's next and a team's win, sharing a bubble at the end of the search box: the faces
    sit on top of each other and flip over, the one going tipping away before the next tips in.
    The bubble steps aside while you type. */
 .flip {
@@ -322,6 +322,47 @@ svg { flex: none; }
 .hol-christmas.today { background: linear-gradient(100deg, #c62828, #e04848); color: #fff; box-shadow: inset 0 0 0 1px #a51f1f, 0 10px 24px -14px #c62828; }
 .hol-christmas { padding-left: 16px; margin-left: 4px; }
 .hol-hat { position: absolute; left: -10px; top: -15px; width: 30px; height: 25px; transform: rotate(-22deg); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .25)); pointer-events: none; }
+
+/* A followed team's win, for a day after the game, in the team's color (--c): its logo, the
+   score and who they beat. A sheen crosses it as it turns up. */
+.win-face {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 3px 14px 3px 10px;
+  border-radius: 16px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-decoration: none;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--c) 34%, var(--glass-strong)), color-mix(in srgb, var(--c) 12%, var(--glass-strong)));
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent), 0 0 0 1px var(--glass-rim), 0 10px 24px -14px var(--c);
+  color: color-mix(in srgb, var(--c) 45%, var(--ink));
+  font-size: 13px;
+}
+.win-face:hover .win-name { text-decoration: underline; text-underline-offset: 3px; }
+.win-glyph { flex: none; font-size: 1.05em; line-height: 1; font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; }
+.win-logo { flex: none; width: 20px; height: 20px; object-fit: contain; }
+.win-logo.none { display: none; }
+.win-name { font-size: 13.5px; font-weight: 700; }
+.win-score { font: 600 14px var(--font-display); font-variant-numeric: tabular-nums; color: var(--ink); }
+.win-opp { color: var(--ink-2); }
+.win-face > :last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.win-face.shown::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .45) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: win-sheen 1.3s .7s ease-out 1;
+  pointer-events: none;
+}
+@keyframes win-sheen { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .win-face.shown::after { display: none; } }
 
 /* What's next, on one line in its calendar's color (--c): the event, when (and when to leave),
    and Join. A long title is cut short to fit the search box. */
@@ -1603,6 +1644,20 @@ a.chip:hover { background: var(--fill-2); }
 .tm-score { font: 500 17px var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tm-score.won { color: var(--good); }
 .tm-score.lost { color: var(--critical); }
+/* For a day after a win, the team's row wears its color (--c), with a Win chip on the final. */
+.team.won .tm-game { background: color-mix(in srgb, var(--c) 11%, transparent); box-shadow: inset 3px 0 0 var(--c); }
+.team.won .tm-game:hover { background: color-mix(in srgb, var(--c) 17%, transparent); }
+.tm-win {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--good);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.tm-won { color: var(--good); font-weight: 600; }
 .tm-none { margin: 0; padding: 8px 10px; font-size: 13.5px; color: var(--muted); }
 .tm-meta { margin: -2px 0 0; padding: 0 10px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .tm-news-wrap:not(:empty) { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--hair); }

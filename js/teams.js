@@ -1,5 +1,5 @@
 // Teams you follow: each one's next game (or the live score), their games on the calendar,
-// and recent team news. Schedules come from ESPN's public site API, which needs no key;
+// recent team news, and for a day after a win, the win at the top of the page. Schedules come from ESPN's public site API, which needs no key;
 // news comes from a Google News search feed for each team.
 import { $, esc, cached, hash, getJSON, local, fmtTime, relTime, updatedText, errorText, safeUrl, startOfDay, addDays } from './util.js';
 import { fetchFeed } from './news.js';
@@ -107,6 +107,15 @@ function featured(games, now = Date.now()) {
   );
 }
 
+// A team's last game, when it was a win that's still news: until a day after the game ended
+// (its start plus the league's usual length). A game since then, won or lost, is the news instead.
+const WIN_FOR = 24 * 3600e3;
+const endOf = (g, t) => g.start + LEAGUES[t.league].hours * 3600e3;
+function recentWin(t, games, now = Date.now()) {
+  const g = games.filter((x) => x.state === 'post').pop();
+  return g?.won === true && !games.some((x) => x.state === 'in') && now < endOf(g, t) + WIN_FOR ? g : null;
+}
+
 // How soon to check again: often while a game is on, less often on game day, else a few hours.
 function freshness(data, now = Date.now()) {
   const games = (data || []).flatMap((t) => t.games || []);
@@ -158,14 +167,18 @@ const oppText = (g) => `${g.home || g.neutral ? 'vs' : 'at'} ${g.opp.rank ? `#${
 const img = (src, cls, size) =>
   src ? `<img class="${cls}" src="${esc(safeUrl(src))}" alt="" width="${size}" height="${size}" loading="lazy">` : `<span class="${cls} none"></span>`;
 
-function teamRow(t, info, h24) {
+function teamRow(t, info, S) {
   const now = Date.now();
   const games = info?.games || [];
   const g = featured(games, now);
+  const win = S.teams.wins !== false ? recentWin(t, games, now) : null;
   const last = games.filter((x) => x.state === 'post' && x !== g).pop();
-  const lastText = last && `Last: ${resultText(last)} ${last.home || last.neutral ? 'vs' : 'at'} `;
+  const lastText = last && `${last === win ? `Won ${last.us}–${last.them}` : `Last: ${resultText(last)}`} ${last.home || last.neutral ? 'vs' : 'at'} `;
   const meta = [info?.record, info?.standing].filter(Boolean).map(esc);
-  if (last) meta.push(`${esc(lastText)}${img(last.opp.logo, 'tm-meta-logo', 14)}${esc(`${last.opp.rank ? `#${last.opp.rank} ` : ''}${last.opp.short}`)}`);
+  if (last) {
+    const text = `${esc(lastText)}${img(last.opp.logo, 'tm-meta-logo', 14)}${esc(`${last.opp.rank ? `#${last.opp.rank} ` : ''}${last.opp.short}`)}`;
+    meta.push(last === win ? `<span class="tm-won">${text}</span>` : text);
+  }
   let main;
   if (!info) {
     main = `<p class="tm-none">Couldn’t load the schedule right now.</p>`;
@@ -178,11 +191,11 @@ function teamRow(t, info, h24) {
       when = `<span class="tm-live">Live</span>${esc(g.detail)}`;
       side = `<span class="tm-score">${esc(g.us ?? '0')}–${esc(g.them ?? '0')}</span>`;
     } else if (g.state === 'post') {
-      when = esc(`Final${g.detail && g.detail !== 'Final' ? ` (${g.detail})` : ''}`);
+      when = `${g === win ? '<span class="tm-win">Win</span>' : ''}${esc(`Final${g.detail && g.detail !== 'Final' ? ` (${g.detail})` : ''}`)}`;
       side = `<span class="tm-score ${g.won ? 'won' : g.won === false ? 'lost' : ''}">${esc(resultText(g))}</span>`;
     } else {
       const date = new Date(g.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-      when = esc([date, g.tbd ? 'Time TBA' : fmtTime(g.start, h24), g.tv].filter(Boolean).join(' · '));
+      when = esc([date, g.tbd ? 'Time TBA' : fmtTime(g.start, S.clock24), g.tv].filter(Boolean).join(' · '));
       side = `<span class="tm-count">${esc(dayText(g.start))}</span>`;
     }
     const where = [g.note, g.venue].filter(Boolean).join(' · ');
@@ -192,7 +205,8 @@ function teamRow(t, info, h24) {
       ${side}
     </a>`;
   }
-  return `<li class="team">
+  // A win wears the team's color for a day.
+  return `<li class="team${win ? ' won' : ''}"${win ? ` style="--c: ${hex(t.color) || 'var(--good)'}"` : ''}>
     ${main}
     ${meta.length ? `<p class="tm-meta">${meta.join(' · ')}</p>` : ''}
   </li>`;
@@ -205,31 +219,67 @@ function renderCard(S, teams, data, meta) {
     body.innerHTML = `<p class="notice warn">Schedules aren’t loading: ${esc(errorText(meta.error).replace(/\.$/, ''))}.</p>`;
     return;
   }
-  body.innerHTML = `<ol class="teams">${teams.map((t, i) => teamRow(t, data[i], S.clock24)).join('')}</ol>`;
+  body.innerHTML = `<ol class="teams">${teams.map((t, i) => teamRow(t, data[i], S)).join('')}</ol>`;
+  const now = Date.now();
+  const wins = S.teams.wins !== false ? teams.map((t, i) => [t, recentWin(t, data[i]?.games || [], now)]).filter(([, g]) => g) : [];
+  const item = (t, g, win) => {
+    const date = new Date(g.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const meta =
+      g.state === 'in'
+        ? `Live · ${g.us ?? 0}–${g.them ?? 0}${g.detail ? ` · ${g.detail}` : ''}`
+        : g.state === 'post'
+          ? `${win ? 'Win' : 'Final'} · ${resultText(g)}`
+          : [date, g.tbd ? 'Time TBA' : fmtTime(g.start, S.clock24), g.tv].filter(Boolean).join(' · ');
+    return {
+      tag: t.short,
+      pair: { us: teamLogo(t), them: g.opp.logo, sep: g.home || g.neutral ? 'vs' : '@' },
+      title: `${g.opp.rank ? `#${g.opp.rank} ` : ''}${g.opp.short}`,
+      meta,
+      tone: g.state === 'in' ? 'now' : win ? 'up' : '',
+      href: g.link || teamUrl(t),
+    };
+  };
   setTicker(
     'teams',
-    teams
-      .map((t, i) => {
-        const g = featured(data[i]?.games || []);
-        if (!g) return null;
-        const date = new Date(g.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-        const meta =
-          g.state === 'in'
-            ? `Live · ${g.us ?? 0}–${g.them ?? 0}${g.detail ? ` · ${g.detail}` : ''}`
-            : g.state === 'post'
-              ? `Final · ${resultText(g)}`
-              : [date, g.tbd ? 'Time TBA' : fmtTime(g.start, S.clock24), g.tv].filter(Boolean).join(' · ');
-        return {
-          tag: t.short,
-          pair: { us: teamLogo(t), them: g.opp.logo, sep: g.home || g.neutral ? 'vs' : '@' },
-          title: `${g.opp.rank ? `#${g.opp.rank} ` : ''}${g.opp.short}`,
-          meta,
-          tone: g.state === 'in' ? 'now' : '',
-          href: g.link || teamUrl(t),
-        };
-      })
-      .filter(Boolean),
+    teams.flatMap((t, i) => {
+      const g = featured(data[i]?.games || []);
+      const win = wins.find(([w]) => w === t)?.[1];
+      // A win stays in the ticker for its day, ahead of the next game.
+      return [win && win !== g && item(t, win, true), g && item(t, g, g === win)].filter(Boolean);
+    }),
   );
+  paintWins(wins);
+  // Redraw when the oldest win stops being news.
+  clearTimeout(winTimer);
+  const ends = wins.map(([t, g]) => endOf(g, t) + WIN_FOR);
+  if (ends.length) winTimer = setTimeout(() => renderCard(S, teams, data, meta), Math.min(Math.min(...ends) - now + 1000, 2 ** 31 - 1));
+}
+
+// ---- Wins in the search box --------------------------------------------------------
+// For a day after a win, the bubble at the end of the search box (app.js) takes a turn on it:
+// the team's logo and color, the score and who they beat.
+
+let winTimer;
+let paintedWins = '';
+
+function paintWins(wins) {
+  const box = $('#flip');
+  if (!box) return;
+  const html = wins
+    .sort(([ta, a], [tb, b]) => endOf(b, tb) - endOf(a, ta))
+    .slice(0, 3)
+    .map(
+      ([t, g]) => `<a class="win-face" href="${esc(safeUrl(g.link || teamUrl(t)))}" style="--c: ${hex(t.color) || 'var(--good)'}" title="${esc(`Final${g.detail && g.detail !== 'Final' ? ` (${g.detail})` : ''}: ${t.short} ${g.us}, ${g.opp.short} ${g.them}`)}">
+        <span class="win-glyph" aria-hidden="true">🎉</span>${img(teamLogo(t), 'win-logo', 20)}<b class="win-name">${esc(t.short)} win</b>
+        <span class="win-score">${esc(`${g.us}–${g.them}`)}</span><span class="win-opp">${g.home || g.neutral ? 'vs' : 'at'}</span>${img(g.opp.logo, 'win-logo', 20)}<span class="win-opp">${esc(g.opp.short)}</span>
+      </a>`,
+    )
+    .join('');
+  // Unchanged: leave the faces be, so a refresh doesn't flip the bubble back.
+  if (html === paintedWins) return;
+  paintedWins = html;
+  for (const f of box.querySelectorAll('.win-face')) f.remove();
+  box.insertAdjacentHTML('beforeend', html);
 }
 
 // ---- News --------------------------------------------------------------------------
@@ -278,6 +328,7 @@ export async function refreshTeams(S, force = false, onGames = () => {}) {
   if (off) {
     onGames([]);
     setTicker('teams', []);
+    paintWins([]);
     return;
   }
   const sig = hash(teams.map((t) => [t.league, t.id]));

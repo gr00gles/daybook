@@ -103,9 +103,10 @@ function renderNextUp() {
 }
 
 // ---- The bubble in the search box ------------------------------------------------------
-// What's next and the coming holiday share a bubble at the end of the search box, flipping
-// over to the other every few seconds. It holds still under the pointer, and stays on what's
-// next when that's soon. Each one shows or hides itself (renderNextUp, renderHoliday).
+// What's next, the coming holiday and a followed team's win share a bubble at the end of the
+// search box, flipping over to the next every few seconds. It holds still under the pointer, and
+// stays on what's next when that's soon. Each one shows or hides itself (renderNextUp,
+// renderHoliday, and teams.js for wins).
 
 const FLIP_EVERY = 6000;
 
