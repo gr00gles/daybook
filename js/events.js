@@ -3,7 +3,7 @@
 // the first time, each asks for permission to add events. Undo deletes it again, or puts the
 // changes back.
 import { $, esc, local, colorVar, showToast, errorText, startOfDay, addDays } from './util.js';
-import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent, unforgetEvent, editPendingEvent } from './calendar.js';
+import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent, unforgetEvent, editPendingEvent, shownDay } from './calendar.js';
 import { calendarWrite } from './gauth.js';
 import { graph, graphWrite } from './msauth.js';
 import { msClientId } from './settings.js';
@@ -550,7 +550,8 @@ export function initEvents(S, { onChange: changed }) {
   const add = $('#add-event');
   if (add) {
     add.innerHTML = icon('plus');
-    add.addEventListener('click', () => openEventEditor());
+    // On the day the Today card shows.
+    add.addEventListener('click', () => openEventEditor(shownDay() === null ? undefined : { day: shownDay() }));
   }
   dlg.addEventListener('click', (e) => {
     const b = e.target.closest('[data-ev]');

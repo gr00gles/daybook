@@ -2,7 +2,7 @@ import { $, esc, cached, hash, local, relTime, updatedText, errorText, safeUrl, 
 import { setTicker } from './ticker.js';
 import { graph, graphWrite, msAccount, msHas } from './msauth.js';
 import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
-import { GMAIL_FEEDS, outlookWebUrl, msClientId } from './settings.js';
+import { GMAIL_FOLDERS, outlookWebUrl, msClientId } from './settings.js';
 import { icon } from './icons.js';
 import { deliveriesFrom, renderDeliveries, deliveryOf, deliveryTag } from './packages.js';
 import { refreshShippingMail } from './shipmail.js';
@@ -22,9 +22,8 @@ async function feedRequest(url) {
 }
 
 // Gmail's Atom feed answers with the Google session already in Chrome: no API keys,
-// unread mail only, newest 20.
-async function fetchGmail(index, feedKey = 'inbox') {
-  const path = GMAIL_FEEDS[feedKey]?.path ?? '';
+// unread mail only, newest 20. `path` picks the folder: '' for the inbox, or a tab or label.
+async function fetchGmail(index, path = '') {
   const r = await feedRequest(`https://mail.google.com/mail/u/${index}/feed/atom/${path}`);
   if (r.status === 401 || r.status === 403) return { signedOut: true };
   const final = new URL(r.url);
@@ -59,7 +58,44 @@ async function fetchGmail(index, feedKey = 'inbox') {
   });
   const unread = Math.max(Number(text(feed, 'fullcount')) || 0, items.length);
   // Label feeds (Primary, Important) stop counting at 20.
-  return { email, unread, capped: feedKey !== 'inbox' && unread >= 20, items };
+  return { email, unread, capped: path !== '' && unread >= 20, items };
+}
+
+// The feeds for the folders picked in Settings, and labels of your own by name.
+export function gmailPaths(G) {
+  const paths = (G.folders || []).filter((k) => GMAIL_FOLDERS[k]).map((k) => GMAIL_FOLDERS[k].path);
+  const labels = String(G.labels || '').split(',').map((l) => l.trim()).filter(Boolean).map(encodeURIComponent);
+  const all = [...new Set([...paths, ...labels])].slice(0, 8);
+  return all.length ? all : [''];
+}
+const GMAIL_FOLDERS_PATHS = new Set(Object.values(GMAIL_FOLDERS).map((f) => f.path));
+
+// Each folder is a feed of its own; their unread mail goes together, newest first, once each.
+// A label Gmail doesn't know just adds nothing.
+async function fetchGmailFolders(index, G) {
+  const paths = gmailPaths(G);
+  const feeds = await Promise.all(
+    paths.map(async (p) => {
+      const label = !GMAIL_FOLDERS_PATHS.has(p);
+      try {
+        const d = await fetchGmail(index, p);
+        return label && d.signedOut ? null : d;
+      } catch (err) {
+        if (label) return null;
+        throw err;
+      }
+    }),
+  );
+  const got = feeds.filter(Boolean);
+  const out = got.find((d) => d.signedOut);
+  if (out || !got.length) return out || { signedOut: true };
+  const seen = new Set();
+  const items = got
+    .flatMap((d) => d.items)
+    .filter((m) => !seen.has(m.id) && seen.add(m.id))
+    .sort((a, b) => b.at - a.at);
+  // Folders overlap (the inbox holds its tabs), so the count is the biggest, not the sum.
+  return { email: got[0].email, unread: Math.max(items.length, ...got.map((d) => d.unread)), capped: got.some((d) => d.capped), items };
 }
 
 // Finds every Gmail account signed into this browser by walking /u/0/, /u/1/, … until
@@ -94,21 +130,35 @@ export const gmailAllowed = () =>
 export const gmailInboxUrl = (email) => `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(email)}`;
 export const GMAIL_SIGN_IN = 'https://accounts.google.com/AddSession?continue=https%3A%2F%2Fmail.google.com%2Fmail%2F';
 
-async function fetchOutlookMail(clientId) {
+// Unread mail from each folder picked in Settings (the inbox unless changed), newest first.
+async function fetchOutlookMail(clientId, folders) {
   const unreadQuery = new URLSearchParams({
     $filter: 'receivedDateTime ge 1900-01-01T00:00:00Z and isRead eq false',
     $orderby: 'receivedDateTime desc',
     $top: '25',
     $select: 'id,subject,from,receivedDateTime,bodyPreview,webLink',
   });
-  const [folder, list] = await Promise.all([
-    graph(clientId, '/me/mailFolders/inbox?$select=unreadItemCount'),
-    graph(clientId, `/me/mailFolders/inbox/messages?${unreadQuery}`),
-  ]);
+  const ids = folders?.length ? folders.slice(0, 8) : ['inbox'];
+  const each = await Promise.all(
+    ids.map(async (id) => {
+      const f = `/me/mailFolders/${encodeURIComponent(id)}`;
+      // A folder deleted since it was picked is skipped, unless it's the only one.
+      const [folder, list] = await Promise.all([graph(clientId, `${f}?$select=unreadItemCount`), graph(clientId, `${f}/messages?${unreadQuery}`)]).catch((err) => {
+        if (ids.length === 1) throw err;
+        return [{ unreadItemCount: 0 }, { value: [] }];
+      });
+      return { unread: folder.unreadItemCount, messages: list.value };
+    }),
+  );
+  const messages = each
+    .flatMap((f) => f.messages)
+    .sort((a, b) => Date.parse(b.receivedDateTime) - Date.parse(a.receivedDateTime))
+    .slice(0, 25);
   return {
     email: await msAccount(),
-    unread: folder.unreadItemCount,
-    items: list.value.map((m) => ({
+    // Outlook's folders don't overlap, so their counts add up.
+    unread: each.reduce((sum, f) => sum + f.unread, 0),
+    items: messages.map((m) => ({
       id: m.id,
       subject: m.subject || '(no subject)',
       snippet: m.bodyPreview || '',
@@ -150,11 +200,11 @@ export async function refreshMail(S, force) {
       if (!sources.has(key)) sources.set(key, { kind: 'gmail', acct, letter: 'G', order: i });
       cached({
         key,
-        sig: hash([acct.index, S.gmail.feed]),
+        sig: hash([acct.index, gmailPaths(S.gmail)]),
         maxAge: 60e3,
         force,
         fetch: async () => {
-          const d = await fetchGmail(acct.index, S.gmail.feed);
+          const d = await fetchGmailFolders(acct.index, S.gmail);
           // Accounts were added or removed since the last look, so the numbers shifted.
           if (d.signedOut || d.email !== acct.email) {
             local.remove('gmail:accounts');
@@ -172,10 +222,10 @@ export async function refreshMail(S, force) {
     wanted.add('outlook');
     cached({
       key: 'outlook-mail',
-      sig: clientId,
+      sig: hash([clientId, S.outlook.folders]),
       maxAge: 2 * 60e3,
       force,
-      fetch: () => fetchOutlookMail(clientId),
+      fetch: () => fetchOutlookMail(clientId, S.outlook.folders),
       render: (data, meta) => {
         sources.set('outlook', { kind: 'outlook', letter: 'O', order: 99, data, ...meta });
         render();

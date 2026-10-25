@@ -98,10 +98,9 @@ function place(n) {
   scheduleFit();
 }
 
-// The items a card can drop: entries of its lists, outermost only, in page order. Lists inside
-// [data-keep] (a day's schedule opened under the month) always show whole.
+// The items a card can drop: entries of its lists, outermost only, in page order.
 const itemsOf = (card) =>
-  [...card.querySelectorAll(':scope > :not(.card-head, .card-foot) :is(ol, ul) > li')].filter((li) => !li.parentElement.closest('li, [data-keep], .flip-off'));
+  [...card.querySelectorAll(':scope > :not(.card-head, .card-foot) :is(ol, ul) > li')].filter((li) => !li.parentElement.closest('li, .flip-off'));
 
 // Shows only the first k items.
 function showFirst(items, k) {
@@ -130,16 +129,9 @@ function fitItems(card, h) {
 const share = (card) => SHARE[card.id] || 2;
 
 // The height a card needs to show what it keeps, measured at its own height (see release): its
-// first KEEP items, or the whole month with every event its days show. A day opened under the
-// month isn't counted.
+// first KEEP items, or the whole month with every event its days show.
 function needed(card) {
-  if (card.id === 'card-month') {
-    const detail = $('.mdetail', card);
-    if (detail) detail.style.display = 'none';
-    const h = card.offsetHeight;
-    if (detail) detail.style.display = '';
-    return h;
-  }
+  if (card.id === 'card-month') return card.offsetHeight;
   const k = KEEP[card.id];
   if (!k) return 0;
   const items = itemsOf(card);

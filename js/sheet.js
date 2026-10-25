@@ -11,7 +11,7 @@ import { holidayChoices } from './sky.js';
 import { icon, hasIcon } from './icons.js';
 import { groupList, openGroupEditor } from './sites.js';
 import { mountTeams } from './teams.js';
-import { loadAi, saveAi, CLAUDE_MODELS } from './ask.js';
+import { loadAi, saveAi, CLAUDE_MODELS, aiSignIns } from './ask.js';
 import { AREA_KINDS } from './area.js';
 import { mountJobs } from './jobs.js';
 import { TICKER_CARDS, tickerMode, tickerModes } from './ticker.js';
@@ -176,7 +176,9 @@ ${flipPage()}
   </section>
   <section id="set-ai">
     <h3>Answers from Claude, ChatGPT and Gemini</h3>
-    <p class="hint">Click the circle at the start of the search box until it shows Claude, ChatGPT or Gemini (or start with <code>!c</code>, <code>!gpt</code> or <code>!gem</code>) to ask a question. Without a key, it opens claude.ai, chatgpt.com or gemini.google.com, where you’re already signed in. With an API key, the answer appears right here on the page. Claude Pro, ChatGPT Plus and Google AI subscriptions can’t be used for this, and API use is billed separately by Anthropic, OpenAI or Google. Keys stay on this computer and don’t sync.</p>
+    <p class="hint">Click the circle at the start of the search box until it shows Claude, ChatGPT or Gemini (or start with <code>!c</code>, <code>!gpt</code> or <code>!gem</code>) to ask a question. The answer drops down under the search box. Without an API key, that’s the AI’s own site, signed in with your account in Chrome, so it uses your own plan (Claude Pro, ChatGPT Plus, Google AI) and nothing else is needed; your next question opens that chat on the site, typed in and ready to send. Sign in to each once:</p>
+    ${aiSignIns()}
+    <p class="hint">Or add an API key and the answer is written right on the page, with follow-ups there too. API use is billed separately by Anthropic, OpenAI or Google. Keys stay on this computer and don’t sync.</p>
     <div class="grid2">
       <label class="field"><span>Anthropic API key</span><input id="s-anthropic" type="password" data-ai="anthropicKey" value="${esc(aiDraft.anthropicKey)}" placeholder="sk-ant-…" spellcheck="false" autocomplete="off"></label>
       <label class="field"><span>Claude model</span><select id="s-claude-model" data-ai="claudeModel">${Object.entries(CLAUDE_MODELS).map(([k, label]) => opt(k, label, aiDraft.claudeModel)).join('')}</select></label>

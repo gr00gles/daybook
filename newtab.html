@@ -70,6 +70,7 @@
       <header class="card-head">
         <h2 id="today-h">Today</h2>
         <span class="head-meta" id="today-date"></span>
+        <button class="btn small today-back" type="button" id="today-back" hidden>Back to today</button>
         <button class="icon-btn small add-event" type="button" id="add-event" title="Add event" aria-label="Add event"></button>
       </header>
       <div class="card-body" id="today-body"><p class="quiet">Loading your calendars…</p></div>
@@ -118,10 +119,10 @@
     </section>
 
     <section class="card" id="card-news" data-section="news" aria-labelledby="news-h">
-      <header class="card-head">
+      <header class="card-head news-head">
         <h2 id="news-h">Headlines</h2>
+        <div class="tabs" id="news-tabs" role="tablist" aria-label="Headline topics"></div>
       </header>
-      <div class="tabs" id="news-tabs" role="tablist" aria-label="Headline topics"></div>
       <div class="card-body" id="news-body"><p class="quiet">Loading headlines…</p></div>
     </section>
   </div>
