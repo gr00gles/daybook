@@ -6,7 +6,8 @@
 import { local } from './util.js';
 import { allowFrames, dropFrames, readHidden } from './frames.js';
 
-const KEY = 'amazon:orders'; // { [order number]: { at, items: [names] } or { at, error } }
+// v2: the first version also took the products Amazon suggests on the order's page.
+const KEY = 'amazon:orders:v2'; // { [order number]: { at, items: [names] } or { at, error } }
 const RULE = 4103; // the session rule that lets amazon.com's order pages load in Daybook's frames
 const PER_RUN = 4; // pages read each time, so a new tab isn't kept busy
 const WAIT = 30e3;
@@ -16,6 +17,7 @@ const FORGET = 30 * 86400e3;
 // An Amazon order number: 113-7709954-3007449.
 export const isAmazonOrder = (o) => /^\d{3}-\d{7}-\d{7}$/.test(o || '');
 export const loadAmazonOrders = async () => (await local.get(KEY)) || {};
+local.remove('amazon:orders');
 const pageUrl = (order) => `https://www.amazon.com/gp/your-account/order-details?orderID=${encodeURIComponent(order)}`;
 
 // Reads the pages of the orders not looked up yet, a few each time. One Daybook tab does this at
