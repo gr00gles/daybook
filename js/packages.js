@@ -8,7 +8,7 @@ import { $, esc, safeUrl, relTime, startOfDay, addDays, local } from './util.js'
 import { setTicker } from './ticker.js';
 import { loadTracking, refreshTracking, onTracking, trackedState, carrierOf, dateIn, PAGES } from './tracking.js';
 import { lastShippingMail } from './shipmail.js';
-import { loadAmazonOrders, refreshAmazonOrders, onAmazonOrders, isAmazonOrder } from './amazon.js';
+import { loadAmazonOrders, refreshAmazonOrders, onAmazonOrders, isAmazonOrder, invoiceUrl } from './amazon.js';
 import { icon } from './icons.js';
 import { domainOf, logoUrl } from './companies-store.js';
 
@@ -469,7 +469,8 @@ export function deliveryTiles(list) {
       const news = d.event?.text ? [d.event.text, d.event.place].filter(Boolean).join(' · ') : '';
       const links = [
         d.number && CARRIERS[d.carrier] && `<a href="${esc(CARRIERS[d.carrier].track(d.number))}">${icon('box')}Track</a>`,
-        d.mailUrl && `<a href="${esc(d.mailUrl)}">${icon('mail')}Email</a>`,
+        d.invoice && `<a href="${esc(d.invoice)}">${icon('money')}Invoice</a>`,
+        d.mailUrl && d.mailUrl !== '#' && `<a href="${esc(d.mailUrl)}">${icon('mail')}Email</a>`,
       ].filter(Boolean);
       const names = d.items?.length ? d.items : [d.title];
       const items = names.map((name, i) => {
@@ -587,7 +588,9 @@ function withItems(d) {
 function compose() {
   const P = settingsRef.packages;
   const mail = P.fromMail === false ? [] : fromMail;
-  const list = mail.map(withLive).filter(Boolean).map(withItems);
+  // An Amazon package opens its order's invoice.
+  const withInvoice = (d) => (isAmazonOrder(d.order) ? { ...d, invoice: invoiceUrl(d.order), href: invoiceUrl(d.order) } : d);
+  const list = mail.map(withLive).filter(Boolean).map(withItems).map(withInvoice);
   for (const p of P.tracked || []) {
     // A package added by hand that was delivered days ago drops off (added() gives null).
     const d = !list.some((x) => x.number === p.number) && added(p);
