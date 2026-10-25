@@ -1,4 +1,4 @@
-// A stock watchlist from Finnhub (free key from finnhub.io). Quotes refresh every 5 minutes
+// A stock watchlist of up to MAX_SYMBOLS from Finnhub (free key from finnhub.io). Quotes refresh every 5 minutes
 // while the US market is open and hourly otherwise.
 import { $, esc, cached, hash, errorText } from './util.js';
 import { setTicker, offBoard } from './ticker.js';
@@ -74,11 +74,11 @@ function row(q) {
   const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '';
   const span = q.high - q.low;
   const pos = span > 0 ? Math.min(100, Math.max(0, ((q.price - q.low) / span) * 100)) : 50;
-  return `<li><a class="tk ${dir}" href="${esc(href)}" title="${esc(`${q.symbol}: day range ${money(q.low)} – ${money(q.high)}, previous close ${money(q.prev)}`)}">
+  return `<li><a class="tk ${dir}" href="${esc(href)}" title="${esc(`${q.symbol}: ${q.change == null ? '' : `${q.change < 0 ? '−' : '+'}${money(Math.abs(q.change))} today, `}day range ${money(q.low)} – ${money(q.high)}, previous close ${money(q.prev)}`)}">
     <span class="tk-sym">${esc(q.symbol)}</span>
     <span class="tk-range" aria-hidden="true"><span class="tk-dot" style="left:${pos.toFixed(1)}%"></span></span>
     <span class="tk-price">${money(q.price)}</span>
-    <span class="tk-chg">${arrow}${q.change == null ? '' : money(Math.abs(q.change))} <small>${q.pct == null ? '' : `${Math.abs(q.pct).toFixed(2)}%`}</small></span>
+    <span class="tk-chg">${arrow}<span class="tk-abs">${q.change == null ? '' : money(Math.abs(q.change))} </span><small>${q.pct == null ? '' : `${Math.abs(q.pct).toFixed(2)}%`}</small></span>
   </a></li>`;
 }
 
@@ -103,7 +103,8 @@ function render(data, meta, sig) {
   $('#stocks-state').textContent = marketText(data.market);
   $('#stocks-state').className = `head-meta${data.market.isOpen ? ' open' : ''}`;
   $('#stocks-updated').textContent = meta.error ? "couldn't refresh" : '';
-  body.innerHTML = `<ol class="tickers">${data.quotes.map(row).join('')}</ol>`;
+  // Up to four in a column; five to eight in two (styles.css).
+  body.innerHTML = `<ol class="tickers${data.quotes.length > 4 ? ' two' : ''}">${data.quotes.map(row).join('')}</ol>`;
   setTicker(
     'stocks',
     data.quotes
@@ -118,8 +119,10 @@ function render(data, meta, sig) {
   );
 }
 
+export const MAX_SYMBOLS = 8;
+
 export const stockSymbols = (S) =>
-  [...new Set((S.stocks.symbols || []).map((s) => String(s).trim().toUpperCase()).filter((s) => /^[A-Z0-9.:^=-]{1,20}$/.test(s)))].slice(0, 15);
+  [...new Set((S.stocks.symbols || []).map((s) => String(s).trim().toUpperCase()).filter((s) => /^[A-Z0-9.:^=-]{1,20}$/.test(s)))].slice(0, MAX_SYMBOLS);
 
 let partial = false; // some quotes failed last time: try again sooner
 

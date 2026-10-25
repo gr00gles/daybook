@@ -285,7 +285,7 @@ ${showBlock('stocks')}
     <p class="hint">A watchlist card under the weather. It needs a free key from Finnhub: sign up at <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io</a> and copy the API key from your dashboard.</p>
     <div class="grid2">
       <label class="field"><span>Finnhub API key</span><input id="s-finnhub" type="text" data-path="stocks.key" value="${esc(d.stocks.key)}" placeholder="Paste your Finnhub API key" spellcheck="false" autocomplete="off"></label>
-      <label class="field"><span>Symbols, separated by commas</span><input id="s-symbols" type="text" data-path="stocks.symbols" data-type="list" value="${esc(d.stocks.symbols.join(', '))}" placeholder="SPY, AAPL, MSFT" spellcheck="false" autocomplete="off"></label>
+      <label class="field"><span>Symbols, separated by commas (up to 8)</span><input id="s-symbols" type="text" data-path="stocks.symbols" data-type="list" value="${esc(d.stocks.symbols.join(', '))}" placeholder="SPY, AAPL, MSFT" spellcheck="false" autocomplete="off"></label>
     </div>
   </section>
   </div>
