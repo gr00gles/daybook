@@ -197,17 +197,19 @@ function forwarded(body) {
 // "Order #: WK12345678", "Order # 112-1234567-1234567": a number, not the next word.
 const ORDER = /\border\s*(?:#|number|no\.?|id)\s*:?\s*#?\s*((?=[A-Z-]*\d)[A-Z0-9][A-Z0-9-]{4,30})/i;
 
-// What's in the box: the line above the first "Qty", "SKU" or "Item #" in a store's email.
+// What's in the box: in a store's email, the line above each "Qty", "SKU" or "Item #", once each.
 const ITEM_NEXT = /^(?:qty|quantity|sku|item\s*(?:#|no\.?|number)|model\s*(?:#|no\.?|number)|unit price)\b/i;
 const NOT_ITEM = /^(?:order|ship|deliver|track|status|total|subtotal|tax|arriv|qty|quantity|sku|item\s*#|model|price|view|manage|return|sold by|size|colou?r)\b|\$\s?\d|@/i;
-function itemIn(body) {
+const isItem = (l) => l.length >= 12 && l.length <= 200 && /[a-z]{3}\S*\s+\S*[a-z]{3}/i.test(l) && !NOT_ITEM.test(l) && !STEP.test(l);
+function itemsInText(body) {
   const lines = body.split('\n');
-  const at = lines.findIndex((l, i) => i > 0 && ITEM_NEXT.test(l));
-  for (let i = at - 1; at > 0 && i >= Math.max(0, at - 3); i--) {
-    const l = lines[i];
-    if (l.length >= 12 && l.length <= 200 && /[a-z]{3}\S*\s+\S*[a-z]{3}/i.test(l) && !NOT_ITEM.test(l) && !STEP.test(l)) return l;
-  }
-  return '';
+  const out = [];
+  lines.forEach((l, at) => {
+    if (!at || !ITEM_NEXT.test(l)) return;
+    const item = lines.slice(Math.max(0, at - 3), at).reverse().find(isItem);
+    if (item && !out.includes(item)) out.push(item);
+  });
+  return out.slice(0, 8);
 }
 
 const short = (s, n = 70) => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
@@ -250,7 +252,8 @@ function readMail(m) {
   const fwd = fw && body ? forwarded(body) : null;
   if (fwd) ({ subject, from, fromAddr, body, at } = { ...fwd, at: fwd.at || at });
   // Only the preview: it starts "From: Acme <orders@acme.com> Sent: …".
-  const fwdFrom = fw && !body && (m.snippet || '').match(/^\s*from:\s*([^<]*?)\s*<([^>\s]+@[^>\s]+)>/i);
+  // A note typed above the forwarded email comes first ("FYI From: …").
+  const fwdFrom = fw && !body && (m.snippet || '').slice(0, 300).match(/(?:^|\s)from:\s*([^<]*?)\s*<([^>\s]+@[^>\s]+)>/i);
   if (fwdFrom) ({ subject, from, fromAddr } = { subject: subject.replace(/^(?:(?:fwd?|fw)\s*:\s*)+/i, ''), from: fwdFrom[1] || fwdFrom[2], fromAddr: fwdFrom[2] });
   // Bounced email, but not a carrier's own "undeliverable" notice about a package.
   if (BOUNCE_FROM.test(from) || (BOUNCE_SUBJECT.test(subject) && !SENDERS.some(([, re]) => re.test(from)))) return null;
@@ -274,7 +277,7 @@ function readMail(m) {
   const strong = found && !found.plain && (upTop || !PROMO.test(subject));
   if (!strong && (!(status || found) || !ABOUT_ORDER.test(`${subject} ${found ? lead : ''}`) || PROMO.test(subject))) return null;
   const sender = SENDERS.find(([, re]) => re.test(`${from} ${subject}`))?.[0] || '';
-  const title = titleOf(subject, from, itemsText(m.items) || (body ? itemIn(body) || shipperIn(body) : ''));
+  const title = titleOf(subject, from, itemsText(m.items?.length ? m.items : body ? itemsInText(body) : []) || (body ? shipperIn(body) : ''));
   const order = `${subject}\n${body.slice(0, 4000)}`.match(ORDER)?.[1]?.toUpperCase() || '';
   return {
     msgId: m.msgId || m.id || '',
