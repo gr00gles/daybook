@@ -242,6 +242,8 @@ ${showBlock('mail')}
     <h3>Package tracking</h3>
     <p class="hint">Daybook reads your shipping emails from the last two weeks in full, read or not, for the tracking number, the delivery day and what’s in the box: Gmail through Gmail’s own page with the sign-in already in Chrome (no setup, nothing changed in your mailbox), Outlook through its sign-in under Accounts. It also follows each package on the carrier’s own site, free and without a key: it opens the tracking page at UPS, USPS, FedEx, DHL or Amazon out of sight and reads the status and delivery day off it, the way you would, every couple of hours while a new tab is open. When a page can’t be read, the newest email about the package stands in. Carriers change their pages now and then; a package whose page can’t be read still links to it.</p>
     <div class="trk-mail">${check('packages.checkSites', 'Check carriers’ tracking pages for the latest status', d.packages.checkSites)}</div>
+    <div class="trk-mail">${check('packages.amazonPages', 'Read what’s in Amazon packages from their order pages', d.packages.amazonPages)}</div>
+    <p class="hint">Amazon’s shipping emails name only a category, like “Boating Accessories”. With this on, Daybook opens each order’s page on amazon.com out of sight, signed in the way you are in this browser, and takes the item names from it, once an order. Nothing on your account changes.</p>
     <div class="trk-mail">${check('packages.fromMail', 'Find packages in shipping emails too', d.packages.fromMail)}</div>
     <h4>Where to look for shipping emails</h4>
     <div id="sheet-ship-folders"></div>
