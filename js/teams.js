@@ -1,6 +1,7 @@
 // Teams you follow: each one's next game (or the live score), their games on the calendar,
 // recent team news, and for a day after a game, its result at the top of the page. Schedules come from ESPN's public site API, which needs no key;
-// news comes from a Google News search feed for each team.
+// news comes from a Google News search feed for each team. Each followed team can be left off
+// the card (its games still go on the calendar) or out of the news, in Settings.
 import { $, esc, cached, hash, getJSON, local, fmtTime, relTime, errorText, safeUrl, startOfDay, addDays } from './util.js';
 import { fetchFeed } from './news.js';
 import { icon } from './icons.js';
@@ -34,6 +35,10 @@ function cdnLogo(league, t) {
 const teamLogo = (t) => t.logo || cdnLogo(t.league, t);
 const hex = (c) => (/^[0-9a-f]{6}$/i.test(c || '') ? `#${c}` : '');
 const followed = (S) => (S.teams?.list || []).filter((t) => LEAGUES[t.league] && t.id);
+// Set per team: `hide` leaves it off the card, the ticker and the search bar; `noNews` out of
+// the team news.
+const onCard = (t) => !t.hide;
+const inNews = (t) => !t.noNews;
 const teamUrl = (t) => `https://www.google.com/search?q=${encodeURIComponent(`${t.name} schedule`)}`;
 
 // ---- Schedules ---------------------------------------------------------------------
@@ -212,14 +217,18 @@ function teamRow(t, info, S) {
   </li>`;
 }
 
-function renderCard(S, teams, data, meta) {
+function renderCard(S, all, allData, meta) {
   $('#teams-updated').textContent = meta.error ? "couldn't refresh" : '';
   const body = $('#teams-body');
-  if (!data) {
+  if (!allData) {
     body.innerHTML = `<p class="notice warn">Schedules aren’t loading: ${esc(errorText(meta.error).replace(/\.$/, ''))}.</p>`;
     return;
   }
-  body.innerHTML = `<ol class="teams">${teams.map((t, i) => teamRow(t, data[i], S)).join('')}</ol>`;
+  const teams = all.filter(onCard);
+  const data = allData.filter((_, i) => onCard(all[i]));
+  body.innerHTML = teams.length
+    ? `<ol class="teams">${teams.map((t, i) => teamRow(t, data[i], S)).join('')}</ol>`
+    : '<p class="tm-none">Every team is off the card. <button class="linklike" type="button" data-open-settings="teams">Choose teams</button></p>';
   const now = Date.now();
   const results = S.teams.wins !== false ? teams.map((t, i) => [t, recentResult(t, data[i]?.games || [], now)]).filter(([, g]) => g) : [];
   const wins = results.filter(([, g]) => g.won);
@@ -253,7 +262,7 @@ function renderCard(S, teams, data, meta) {
   // Redraw when the oldest result stops being news.
   clearTimeout(winTimer);
   const ends = results.map(([t, g]) => endOf(g, t) + WIN_FOR);
-  if (ends.length) winTimer = setTimeout(() => renderCard(S, teams, data, meta), Math.min(Math.min(...ends) - now + 1000, 2 ** 31 - 1));
+  if (ends.length) winTimer = setTimeout(() => renderCard(S, all, allData, meta), Math.min(Math.min(...ends) - now + 1000, 2 ** 31 - 1));
 }
 
 // ---- Results in the search box -----------------------------------------------------
@@ -349,14 +358,15 @@ export async function refreshTeams(S, force = false, onGames = () => {}) {
       onGames(S.teams.calendar ? calendarGames(teams, data) : []);
     },
   });
-  if (S.teams.news) {
+  const news = teams.filter(inNews);
+  if (S.teams.news && news.length) {
     cached({
       key: 'teams:news',
-      sig: hash(teams.map(newsQuery)),
+      sig: hash(news.map(newsQuery)),
       maxAge: 30 * 60e3,
       force,
-      fetch: () => fetchNews(teams),
-      render: (items, meta) => renderNews(teams, items, meta),
+      fetch: () => fetchNews(news),
+      render: (items, meta) => renderNews(news, items, meta),
     });
   } else {
     $('#teams-news').innerHTML = '';
@@ -404,7 +414,8 @@ function matches(list, q) {
     .map(([, t]) => t);
 }
 
-// The followed-teams list and the team finder in Settings. Writes draft.teams.list.
+// The followed-teams list, with each team's Card and News boxes, and the team finder in
+// Settings. Writes draft.teams.list.
 export function mountTeams(el, draft, changed) {
   const s = { league: 'nfl', q: '', list: null, error: '', loading: false };
   const list = () => draft.teams.list;
@@ -441,6 +452,8 @@ export function mountTeams(el, draft, changed) {
         ? `<ul class="tm-following">${list()
             .map(
               (t, i) => `<li>${img(t.logo, 'tm-pick-logo', 20)}<span>${esc(t.name)}</span><small>${esc(LEAGUES[t.league]?.label || '')}</small>
+              <label class="check small"><input type="checkbox" data-t-i="${i}" data-t-flag="hide"${onCard(t) ? ' checked' : ''}><span>Card</span></label>
+              <label class="check small"><input type="checkbox" data-t-i="${i}" data-t-flag="noNews"${inNews(t) ? ' checked' : ''}><span>News</span></label>
               <button class="icon-btn" type="button" data-t-remove="${i}" aria-label="Stop following ${esc(t.name)}">${icon('close')}</button></li>`,
             )
             .join('')}</ul>`
@@ -482,6 +495,16 @@ export function mountTeams(el, draft, changed) {
     paintResults();
   });
   el.addEventListener('change', (e) => {
+    const box = e.target.closest('[data-t-flag]');
+    if (box) {
+      const t = list()[Number(box.dataset.tI)];
+      if (!t) return;
+      // Both flags are stored as "off", so teams saved before them show everywhere.
+      if (box.checked) delete t[box.dataset.tFlag];
+      else t[box.dataset.tFlag] = true;
+      changed();
+      return;
+    }
     if (!e.target.matches('[data-t-league]')) return;
     s.league = e.target.value;
     load();
