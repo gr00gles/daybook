@@ -4,7 +4,7 @@
 // come from the mail card as a subject and a preview. Nothing leaves your computer. Packages
 // with a tracking number, and the ones added by hand in Settings, get their status and
 // delivery day from the carrier's own tracking page (tracking.js) instead.
-import { $, esc, safeUrl, relTime, startOfDay, addDays } from './util.js';
+import { $, esc, safeUrl, relTime, startOfDay, addDays, local } from './util.js';
 import { setTicker } from './ticker.js';
 import { loadTracking, refreshTracking, onTracking, trackedState, carrierOf, dateIn, PAGES } from './tracking.js';
 import { lastShippingMail } from './shipmail.js';
@@ -277,7 +277,8 @@ function readMail(m) {
   const strong = found && !found.plain && (upTop || !PROMO.test(subject));
   if (!strong && (!(status || found) || !ABOUT_ORDER.test(`${subject} ${found ? lead : ''}`) || PROMO.test(subject))) return null;
   const sender = SENDERS.find(([, re]) => re.test(`${from} ${subject}`))?.[0] || '';
-  const title = titleOf(subject, from, itemsText(m.items?.length ? m.items : body ? itemsInText(body) : []) || (body ? shipperIn(body) : ''));
+  const items = m.items?.length ? m.items : body ? itemsInText(body) : [];
+  const title = titleOf(subject, from, itemsText(items) || (body ? shipperIn(body) : ''));
   const order = `${subject}\n${body.slice(0, 4000)}`.match(ORDER)?.[1]?.toUpperCase() || '';
   return {
     msgId: m.msgId || m.id || '',
@@ -293,6 +294,7 @@ function readMail(m) {
     tracking: !status,
     due: status?.day != null ? dueDay(status.day, at) : eta,
     title,
+    items,
     at,
     picture: m.picture || '',
     full: Boolean(m.full),
@@ -380,6 +382,7 @@ export function deliveriesFrom(items) {
       ...now,
       due,
       title: (list.find((p) => p.full) || newest).title,
+      items: list.find((p) => p.items?.length)?.items || [],
       picture: list.find((p) => p.picture)?.picture || '',
       domain: store?.domain || '',
       carrier: withNumber?.carrier || newest.carrier,
@@ -408,8 +411,9 @@ function thumb(d) {
     : `<span class="pkg-thumb">${icon('box')}</span>`;
 }
 
-// Package rows, newest word first. Used by the Deliveries card and by the company pages.
-export function deliveryRows(list, max = 6) {
+// Package rows, newest word first. Used by the Deliveries card and page and by the company pages.
+// With full (the Deliveries page), every item in a box is listed under its row.
+export function deliveryRows(list, max = 6, { full = false } = {}) {
   return `<ol class="pkg-list">${list
     .slice(0, max)
     .map((d) => {
@@ -422,11 +426,15 @@ export function deliveryRows(list, max = 6) {
       const meta = d.event?.text
         ? [who, d.event.text, d.event.place].filter(Boolean).join(' · ')
         : [sender, who && d.number ? `${who} ${d.number}` : sender ? '' : who].filter(Boolean).join(' · ');
+      // Every item listed under it (full), the title just counts them.
+      const listed = full && (d.items?.length > 1 || (d.items?.length === 1 && d.items[0] !== d.title));
+      const title = listed && d.items.length > 1 ? `${d.items.length} items` : d.title;
       return `<li><a class="pkg s-${d.state}" href="${esc(d.href)}" title="${esc(tip)}">
         ${thumb(d)}
         <span class="pkg-text">
-          <span class="pkg-line"><span class="pkg-status">${esc(d.label)}</span><span class="pkg-title">${esc(d.title)}</span></span>
+          <span class="pkg-line"><span class="pkg-status">${esc(d.label)}</span><span class="pkg-title">${esc(title)}</span></span>
           ${meta ? `<span class="pkg-meta">${esc(meta)}</span>` : ''}
+          ${listed ? `<span class="pkg-items">${d.items.map((i) => `<span>${esc(i)}</span>`).join('')}</span>` : ''}
         </span>
         ${
           when
@@ -518,11 +526,23 @@ function compose() {
   trackTimer = setTimeout(() => refreshTracking(numbers, { mailAbout: mailStatusFor }), 5000);
 }
 
+// The card's list, kept for the Deliveries page (deliveries.html): { at, list }.
+export const SHOWN = 'pkg:shown';
+let savedList = '';
+
 function paintCard() {
   const body = $('#deliveries-body');
   if (!body) return;
   const coming = shown.filter((d) => d.state !== 'delivered').length;
-  $('#deliveries-count').textContent = coming ? String(coming) : '';
+  // How many are on the way, 0 included while some were delivered: it opens the Deliveries page.
+  const count = $('#deliveries-count');
+  count.textContent = shown.length ? String(coming) : '';
+  count.title = shown.length ? `See all ${shown.length} ${shown.length === 1 ? 'package' : 'packages'}` : '';
+  const json = JSON.stringify(shown);
+  if (json !== savedList) {
+    savedList = json;
+    local.set(SHOWN, { at: Date.now(), list: shown });
+  }
   $('#card-deliveries').classList.toggle('is-empty', !shown.length);
   const none = settingsRef?.packages.fromMail === false ? 'Nothing being tracked. Add a tracking number in Settings → Package tracking.' : 'Nothing on the way. Shipping emails show up here with their delivery dates.';
   body.innerHTML = shown.length ? deliveryRows(shown) : `<p class="quiet">${none}</p>`;
