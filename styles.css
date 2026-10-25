@@ -869,6 +869,27 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   backdrop-filter: var(--blur);
   box-shadow: inset 0 0 0 1px var(--glass-edge), 0 0 0 1px var(--glass-rim), var(--shadow);
 }
+/* The flip card: other cards take turns inside it (flipcard.js), each drawn without its own
+   glass, turning about the vertical axis. Tabs along the top pick one. */
+.flip-head { flex-wrap: nowrap; align-items: center; margin-bottom: 8px; }
+.flip-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.flip-tabs { flex: 1; min-width: 0; margin: -4px -6px 0; }
+.flip-tabs .tab { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px 5px 10px; }
+.flip-tabs .ui-icon { width: 15px; height: 15px; flex: none; }
+.flip-tabs .tab:not(.on) { padding-inline: 9px; }
+.flip-deck { perspective: 1400px; }
+.flip-deck > .flip-face {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+}
+.flip-deck > .flip-off { display: none; }
+.flip-deck > .flip-face > .card-move, .flip-deck > .flip-face > .card-size { display: none; }
 .card-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 10px; min-height: 28px; }
 .card-head h2 {
   margin: 0;
@@ -2486,7 +2507,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 /* Edit mode: each pane gets a soft accent rim, a grip on top and a handle on its bottom edge. */
 /* Room to scroll the bottom of the cards clear of the bar. */
 .arranging .board { padding-bottom: 88px; }
-.arranging .board .card {
+.arranging .board .card:not(.flip-face) {
   outline: 1.5px dashed color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: 4px;
   transition: box-shadow .15s ease, outline-color .15s ease;

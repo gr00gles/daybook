@@ -59,7 +59,7 @@ const pageAttr = (id) => (id === page || query ? '' : ' hidden');
 function display(key, where) {
   const c = TICKER_CARDS[key];
   const mode = tickerMode(draft, key);
-  const names = { card: c.board, both: `${c.board} + ticker`, ticker: 'Ticker only', off: 'Off' };
+  const names = { card: c.board, both: `${c.board} + ticker`, ticker: 'Ticker only', flip: 'Flip card', off: 'Off' };
   return `<div class="disp${mode === 'off' ? ' is-off' : ''}" data-disp="${key}">
     <span class="disp-name">${icon(c.icon)}<span>${esc(c.label)}</span>${
       where === 'all' ? `<button class="disp-go" type="button" data-goto="${pageOf(key)}" title="${esc(c.label)} settings">Options${icon('chevron-right')}</button>` : ''
@@ -79,7 +79,7 @@ function overview() {
   const keys = Object.keys(TICKER_CARDS);
   const group = (board) => keys.filter((k) => TICKER_CARDS[k].board === board).map((k) => display(k, 'all')).join('');
   return `<section id="set-ticker">
-    <p class="hint">Pick where each part of Daybook shows: on the page, in the ticker, both, or not at all. The ticker is a bar under the top band that crawls through the latest from everything you put in it, taking turns. Hover over it to hold it still, scroll it to look along it, and click anything to open it. <strong>Options</strong> opens that part’s own settings.</p>
+    <p class="hint">Pick where each part of Daybook shows: on the page, in the ticker, both, in the flip card, or not at all. The ticker is a bar under the top band that crawls through the latest from everything you put in it, taking turns. Hover over it to hold it still, scroll it to look along it, and click anything to open it. <strong>Options</strong> opens that part’s own settings.</p>
   </section>
   <section id="set-sections">
     <h3>Top bar</h3>
@@ -88,6 +88,11 @@ function overview() {
   <section id="set-cards">
     <h3>Cards</h3>
     ${group('Card')}
+  </section>
+  <section id="set-flip">
+    <h3>Flip card</h3>
+    <p class="hint">Cards set to <strong>Flip card</strong> share one spot on the board and take turns, turning over to the next every so often; the tabs along its top pick one by hand. It holds still while the pointer or the keyboard is on it. Move it like any card with <strong>Arrange cards</strong>.</p>
+    <label class="field inline"><span>Turn to the next</span><select id="s-flip-every" data-path="flip.every" data-type="number">${[[10, 'Every 10 seconds'], [20, 'Every 20 seconds'], [30, 'Every 30 seconds'], [60, 'Every minute'], [0, 'Only when I pick one']].map(([n, l]) => opt(n, l, draft.flip.every)).join('')}</select></label>
   </section>`;
 }
 

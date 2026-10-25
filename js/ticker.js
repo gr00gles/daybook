@@ -13,12 +13,14 @@ import { icon } from './icons.js';
 // Everything that can be on the page, in the ticker, both or neither, in Settings' order: its
 // name, the Sections switch it goes with (on while any of its parts is shown somewhere), where it
 // sits on the page (`board`: a card, or the top bar), what to hide when it's off the page, and the
-// icon its items wear when they share the ticker. `modes` limits the choices: the shortcut
-// circles are hidden from the top bar for now (styles.css), so the sites can be in the ticker or off.
+// icon its items wear when they share the ticker. `modes` limits the choices: only cards can go
+// in the flip card (flipcard.js), and the shortcut circles are hidden from the top bar for now
+// (styles.css), so the sites can be in the ticker or off.
+const TOP = ['card', 'both', 'ticker', 'off'];
 export const TICKER_CARDS = {
-  weather: { label: 'Weather', section: 'weather', board: 'Top bar', card: 'now-weather', icon: 'drop' },
-  alerts: { label: 'Weather alerts', section: 'alerts', board: 'Top bar', card: 'nw-alert', icon: 'alert' },
-  holidays: { label: 'Moon and holidays', section: 'sky', board: 'Top bar', card: 'moon', icon: 'heart' },
+  weather: { label: 'Weather', section: 'weather', board: 'Top bar', card: 'now-weather', icon: 'drop', modes: TOP },
+  alerts: { label: 'Weather alerts', section: 'alerts', board: 'Top bar', card: 'nw-alert', icon: 'alert', modes: TOP },
+  holidays: { label: 'Moon and holidays', section: 'sky', board: 'Top bar', card: 'moon', icon: 'heart', modes: TOP },
   shortcuts: { label: 'Most visited sites', section: 'shortcuts', board: 'Top bar', card: 'shortcuts', icon: 'link', modes: ['ticker', 'off'] },
   today: { label: 'Today', section: 'calendar', board: 'Card', card: 'card-today', icon: 'clock' },
   month: { label: 'Month', section: 'calendar', board: 'Card', card: 'card-month', icon: 'clock' },
@@ -32,7 +34,7 @@ export const TICKER_CARDS = {
   jobs: { label: 'NYS jobs', section: 'jobs', board: 'Card', card: 'card-jobs', icon: 'building' },
   youtube: { label: 'YouTube', section: 'youtube', board: 'Card', card: 'card-youtube', icon: 'video' },
 };
-export const TICKER_MODES = { card: 'Card', both: 'Card and ticker', ticker: 'Ticker only', off: 'Off' };
+export const TICKER_MODES = { card: 'Card', both: 'Card and ticker', ticker: 'Ticker only', flip: 'Flip card', off: 'Off' };
 
 const PER_CARD = 10;
 const MAX = 60;
