@@ -1859,7 +1859,6 @@ a.chip:hover { background: var(--fill-2); }
 
 /* ---- State jobs ---------------------------------------------------------------- */
 
-#jobs-filter { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jb-day { margin: 8px 0 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
 .jb-day:first-child { margin-top: 0; }
 .jb-list { list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 0; }
