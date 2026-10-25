@@ -674,11 +674,10 @@ function list(jobs) {
   return day ? `${html}</ol>` : html;
 }
 
-// The card shows as many as fit; the whole list is a click away.
+// The card shows as many as fit; the whole list is a click away. n counts the postings you
+// haven't reviewed.
 function paintLinks(n) {
-  $('#jobs-links').innerHTML = `${n === null ? '' : `<a class="foot-link" href="jobs.html">${icon('chevron-right')}${n ? `See all ${n}` : 'See all postings'}</a>`}
-    <button class="foot-link" type="button" data-open-settings="jobs">${icon('edit')}Rules</button>
-    <a class="foot-link" href="${LIST}" target="_blank" rel="noopener">${icon('external')}StateJobsNY</a>`;
+  $('#jobs-links').innerHTML = n === null ? '' : `<a class="foot-link" href="jobs.html">${icon('chevron-right')}${n ? `See all ${n}` : 'See all postings'}</a>`;
 }
 
 let card = null; // what the card last drew: { S, data, meta }
@@ -689,7 +688,6 @@ async function render() {
   const J = S.jobs;
   const rules = ruleCount(J);
   $('#jobs-updated').textContent = meta.error && data ? "couldn't refresh" : '';
-  $('#jobs-filter').textContent = rules ? `${rules} ${rules === 1 ? 'rule' : 'rules'}` : '';
   if (!data) {
     setTicker('jobs', []);
     $('#jobs-count').textContent = '';
@@ -704,7 +702,7 @@ async function render() {
   // Rules about details leave out postings whose pages haven't been read.
   const note = unreadText(unread(pick(all, J, { rules: false }), data, J, details));
   $('#jobs-count').textContent = jobs.length || '';
-  paintLinks(matching.length);
+  paintLinks(jobs.length);
   setTicker(
     'jobs',
     jobs.map((j) => ({ tag: dayLabel(j.posted), title: j.title, meta: salaryText(j) || agencyName(j.agency), href: postingUrl(j.id), newTab: true })),
