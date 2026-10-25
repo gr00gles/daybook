@@ -424,9 +424,8 @@ const words = (s, n = 9) => {
   return w.length <= n ? s : `${w.slice(0, n).join(' ').replace(/[\s,;:|–—-]+$/, '')}…`;
 };
 
-// Package rows, newest word first. Used by the Deliveries card and page and by the company pages.
-// With full (the Deliveries page), every item in a box is listed under its row.
-export function deliveryRows(list, max = 6, { full = false } = {}) {
+// Package rows, newest word first. Used by the Deliveries card and by the company pages.
+export function deliveryRows(list, max = 6) {
   return `<ol class="pkg-list">${list
     .slice(0, max)
     .map((d) => {
@@ -441,24 +440,11 @@ export function deliveryRows(list, max = 6, { full = false } = {}) {
       const meta = d.event?.text
         ? [who, d.event.text, d.event.place].filter(Boolean).join(' · ')
         : [sender, who && d.number ? `${who} ${d.number}` : sender ? '' : who].filter(Boolean).join(' · ');
-      // Every item listed under it (full), the title just counts them.
-      const listed = full && (d.items?.length > 1 || (d.items?.length === 1 && d.items[0] !== d.title));
-      const title = listed && d.items.length > 1 ? `${d.items.length} items` : d.title;
       return `<li><a class="pkg s-${d.state}" href="${esc(d.href)}" title="${esc(tip)}">
         ${thumb(d)}
         <span class="pkg-text">
-          <span class="pkg-line">${status ? `<span class="pkg-status">${esc(status)}</span>` : ''}<span class="pkg-title">${esc(title)}</span></span>
+          <span class="pkg-line">${status ? `<span class="pkg-status">${esc(status)}</span>` : ''}<span class="pkg-title">${esc(d.title)}</span></span>
           ${meta ? `<span class="pkg-meta">${esc(meta)}</span>` : ''}
-          ${
-            listed
-              ? `<span class="pkg-items">${d.items
-                  .map((name, i) => {
-                    const src = d.images?.[i];
-                    return `<span class="pkg-item">${src ? `<img src="${esc(safeUrl(src))}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}<span>${esc(words(name))}</span></span>`;
-                  })
-                  .join('')}</span>`
-              : ''
-          }
         </span>
         ${
           when
@@ -468,6 +454,41 @@ export function deliveryRows(list, max = 6, { full = false } = {}) {
       </a></li>`;
     })
     .join('')}</ol>${list.length > max ? `<p class="pkg-more">+${list.length - max} more</p>` : ''}`;
+}
+
+// The Deliveries page (deliveries.html): a tile a box. On top, when (a pill in its state's colour),
+// links to follow it and to its email, and who sent it and how it's coming; then each thing in it
+// with its picture, each a link of its own: an Amazon product's page, or else the package's.
+export function deliveryTiles(list) {
+  return `<ol class="dt-list">${list
+    .map((d) => {
+      const who = CARRIERS[d.carrier]?.name || '';
+      const when =
+        d.state === 'delivered' ? `Delivered ${dateParts(d.at).date}` : d.due != null ? `${dateParts(d.due).day}, ${dateParts(d.due).date}` : d.label;
+      const how = [d.from, d.number ? `${who} ${d.number}` : who && !(d.from || '').toLowerCase().includes(who.toLowerCase()) ? who : ''].filter(Boolean).join(' · ');
+      const news = d.event?.text ? [d.event.text, d.event.place].filter(Boolean).join(' · ') : '';
+      const links = [
+        d.number && CARRIERS[d.carrier] && `<a href="${esc(CARRIERS[d.carrier].track(d.number))}">${icon('box')}Track</a>`,
+        d.mailUrl && `<a href="${esc(d.mailUrl)}">${icon('mail')}Email</a>`,
+      ].filter(Boolean);
+      const names = d.items?.length ? d.items : [d.title];
+      const items = names.map((name, i) => {
+        const src = d.images?.[i] || (names.length === 1 ? d.picture : '');
+        // Amazon's names lead with the brand.
+        const brand = d.images?.length ? brandOf(name) : '';
+        const rest = brand && name.startsWith(brand) ? name.slice(brand.length).trim() : '';
+        const text = rest ? `<strong>${esc(brand)}</strong> ${esc(words(rest, 9 - brand.split(' ').length))}` : esc(words(name));
+        const pic = src ? `<img src="${esc(safeUrl(src))}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="dt-nopic">${icon('box')}</span>`;
+        return `<li><a class="dt-item" href="${esc(safeUrl(d.links?.[i] || d.href))}" title="${esc(name)}">${pic}<span class="dt-name">${text}</span></a></li>`;
+      });
+      return `<li class="dt s-${d.state}">
+        <div class="dt-head"><span class="dt-when">${esc(when)}</span>${links.length ? `<span class="dt-links">${links.join('')}</span>` : ''}</div>
+        ${how ? `<p class="dt-how">${esc(how)}</p>` : ''}
+        ${news ? `<p class="dt-news">${esc(news)}</p>` : ''}
+        <ul class="dt-items">${items.join('')}</ul>
+      </li>`;
+    })
+    .join('')}</ol>`;
 }
 
 let shown = [];
@@ -555,11 +576,12 @@ function withItems(d) {
   const n = d.count || got.items.length;
   const names = got.items.slice(0, n);
   const images = (got.images || []).slice(0, n);
+  const links = (got.links || []).slice(0, n);
   const brands = [...new Set(names.map(brandOf))];
   // Brands are short: up to two by name ("Attwood, Mr. Heater"), the rest counted.
   const title =
     brands.length === 1 ? (names.length > 1 ? `${brands[0]}, ${names.length} items` : brands[0]) : `${brands.slice(0, 2).join(', ')}${brands.length > 2 ? ` and ${brands.length - 2} more` : ''}`;
-  return { ...d, items: names, images, title, picture: images.find(Boolean) || d.picture };
+  return { ...d, items: names, images, links, title, picture: images.find(Boolean) || d.picture };
 }
 
 function compose() {

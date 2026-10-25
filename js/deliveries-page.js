@@ -4,7 +4,7 @@
 import { $, local, updatedText } from './util.js';
 import { loadSettings } from './settings.js';
 import { icon } from './icons.js';
-import { deliveryRows, SHOWN } from './packages.js';
+import { deliveryTiles, SHOWN } from './packages.js';
 
 const S = await loadSettings();
 if (S.theme !== 'system') document.documentElement.dataset.theme = S.theme;
@@ -16,7 +16,7 @@ function paint(saved) {
   const done = list.filter((d) => d.state === 'delivered');
   $('#dp-status').textContent = list.length ? `${coming.length} on the way${done.length ? `, ${done.length} delivered` : ''}` : 'Nothing on the way';
   $('#dp-updated').textContent = saved?.at ? updatedText(saved.at) : '';
-  const part = (name, l) => (l.length ? `<h3 class="eyebrow">${name}</h3>${deliveryRows(l, Infinity, { full: true })}` : '');
+  const part = (name, l) => (l.length ? `<h3 class="eyebrow">${name}</h3>${deliveryTiles(l)}` : '');
   $('#dp-body').innerHTML = list.length
     ? part('On the way', coming) + part('Delivered', done)
     : '<p class="quiet">Shipping emails show up here with their delivery dates. Open a new tab to look for new ones.</p>';
