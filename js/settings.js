@@ -63,12 +63,13 @@ export const DEFAULTS = {
   outlook: { clientId: '', mail: true, calendar: true, color: 5 }, // clientId overrides config.js
   news: { topics: ['top', 'us', 'technology'], custom: [] },
   // Each card or top-bar part: 'card' (on the page), 'both' (and in the ticker), 'ticker' (in the
-  // ticker only) or 'off'. `show` below follows: a section is on while any of its parts is.
+  // ticker only), 'flip' (a card taking turns in the flip card) or 'off'. `show` below follows: a section is on while any of its parts is.
   ticker: {
     weather: 'card', alerts: 'card', holidays: 'card', shortcuts: 'off', today: 'card', month: 'card', notes: 'card', stocks: 'card', teams: 'card', news: 'card',
     jobs: 'card', deliveries: 'card', mail: 'card', area: 'card', youtube: 'card',
   },
   youtube: { hideShorts: true },
+  flip: { every: 20 }, // seconds between turns of the flip card; 0 turns only by hand
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
   // Whether shipping emails count, whether carriers' tracking pages are read for status, and

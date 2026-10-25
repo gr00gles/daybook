@@ -26,6 +26,7 @@ import { initDeliveries } from './packages.js';
 import { initAsk, ask, hasKey } from './ask.js';
 import { applyLayout, initLayout } from './layout.js';
 import { setCredit } from './credits.js';
+import { initFlipCard } from './flipcard.js';
 
 const S = await loadSettings();
 await applyLayout();
@@ -37,6 +38,8 @@ for (const [section, on] of Object.entries(S.show)) {
 // Any card or part of the top bar can be in the ticker under the top band as well, or instead:
 // those set to the ticker only are off the page, though they still load what they show there.
 for (const [key, c] of Object.entries(TICKER_CARDS)) if (offBoard(S, key)) $(`#${c.card}`).hidden = true;
+// Cards set to the flip card move into it and take turns there.
+initFlipCard(S);
 const skyOnPage = S.show.sky && !offBoard(S, 'holidays');
 // The sun's day and the moon are in the week bubble, but the moon has its own switch: without
 // the weather in the top bar, it sits where the weather would be, and the hemisphere (which way

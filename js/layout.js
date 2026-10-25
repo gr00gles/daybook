@@ -20,7 +20,7 @@ const DEFAULT_WIDTHS = { 3: [1.1, 1.2, 1], 4: [1, 1.3, 1, 0.9] };
 // Four columns: the day, the month with the small cards, mail, and things to read or watch.
 const FOUR = {
   day: ['card-today', 'card-notes'],
-  mail: ['card-month', 'card-stocks', 'card-teams'],
+  mail: ['card-flip', 'card-month', 'card-stocks', 'card-teams'],
   out: ['card-deliveries', 'card-mail', 'card-area'],
   more: ['card-youtube', 'card-news', 'card-jobs'],
 };
@@ -41,6 +41,8 @@ const allColumns = () => $$('.board > .col');
 const columns = () => allColumns().filter((col) => !col.hidden);
 const colKey = (col) => [...col.classList].find((c) => c.startsWith('col-'))?.slice(4);
 const cardsIn = (col) => [...col.children].filter((el) => el.matches('.card[id]'));
+// The cards on the board themselves: not the ones taking turns inside the flip card.
+const BOARD_CARDS = '.board .card[id]:not(.flip-face)';
 const shown = (card) => !card.hidden && card.offsetParent !== null;
 // True while the board shows every column side by side: the lines between them can be
 // dragged, and the columns fit the window.
@@ -72,7 +74,7 @@ function place(n) {
       if (!col || (key === 'more' && n !== 4) || !Array.isArray(ids)) continue;
       for (const id of ids) {
         const card = document.getElementById(id);
-        if (card?.matches('.board .card')) col.append(card);
+        if (card?.matches(BOARD_CARDS)) col.append(card);
       }
     }
   };
@@ -89,7 +91,7 @@ function place(n) {
 // The items a card can drop: entries of its lists, outermost only, in page order. Lists inside
 // [data-keep] (a day's schedule opened under the month) always show whole.
 const itemsOf = (card) =>
-  [...card.querySelectorAll(':scope > :not(.card-head, .card-foot) :is(ol, ul) > li')].filter((li) => !li.parentElement.closest('li, [data-keep]'));
+  [...card.querySelectorAll(':scope > :not(.card-head, .card-foot) :is(ol, ul) > li')].filter((li) => !li.parentElement.closest('li, [data-keep], .flip-off'));
 
 // Shows only the first k items.
 function showFirst(items, k) {
@@ -204,14 +206,14 @@ function fitBoard() {
 // Cards re-render their lists on every refresh, and the window and the band above change
 // size; fit again once per frame after any of it.
 let fitting = 0;
-function scheduleFit() {
+export function scheduleFit() {
   if (!fitting) fitting = requestAnimationFrame(() => {
     fitting = 0;
     fitBoard();
   });
 }
 function watchCards() {
-  for (const card of $$('.board .card[id]')) new MutationObserver(scheduleFit).observe(card, { childList: true, subtree: true, characterData: true });
+  for (const card of $$(BOARD_CARDS)) new MutationObserver(scheduleFit).observe(card, { childList: true, subtree: true, characterData: true });
   let width = board().offsetWidth;
   new ResizeObserver(() => {
     if (board().offsetWidth === width) return;
@@ -241,7 +243,7 @@ export async function applyLayout() {
   } catch {}
   defaults = Object.fromEntries(allColumns().map((col) => [colKey(col), cardsIn(col).map((c) => c.id)]));
   place(wantedCount());
-  for (const card of $$('.board .card[id]')) applyHeight(card);
+  for (const card of $$(BOARD_CARDS)) applyHeight(card);
   watchCards();
   // Without a saved count, the board follows the window across AUTO_FOUR.
   addEventListener('resize', () => {
@@ -446,7 +448,7 @@ function paintBar() {
 const cardName = (card) => card.querySelector('h2')?.firstChild?.textContent?.trim() || 'card';
 
 function addControls() {
-  for (const card of $$('.board .card[id]')) {
+  for (const card of $$(BOARD_CARDS)) {
     if (card.querySelector(':scope > .card-move')) continue;
     const name = esc(cardName(card));
     card.insertAdjacentHTML(
