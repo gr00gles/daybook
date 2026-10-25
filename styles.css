@@ -1667,7 +1667,16 @@ a.chip:hover { background: var(--fill-2); }
 /* ---- Markets ----------------------------------------------------------------- */
 
 .head-meta.open::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--good); vertical-align: 1px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
-.tickers { list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 2px; }
+/* Always four rows tall, whatever it holds (js/layout.js keeps the card at its own height): up
+   to four symbols in one column, five to eight in two side by side, filled down then across. */
+#card-stocks { --tk-row: 36px; }
+#stocks-body { min-height: calc(4 * var(--tk-row) + 3 * 2px); }
+.tickers {
+  list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 2px 8px;
+  grid-template-rows: repeat(4, minmax(var(--tk-row), auto)); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+}
+.tickers > li { display: flex; }
+.tickers > li > .tk { flex: 1; min-width: 0; }
 .tk {
   display: grid;
   grid-template-columns: 60px minmax(0, 1fr) auto auto;
@@ -1693,6 +1702,14 @@ a.chip:hover { background: var(--fill-2); }
 @container (max-width: 330px) {
   .tk { grid-template-columns: minmax(0, 1fr) auto auto; }
   .tk-range { display: none; }
+}
+/* Two columns: the symbol, the price and the day's change in percent (the change in dollars is
+   in the row's tooltip). */
+.tickers.two .tk { grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; }
+.tickers.two .tk-range, .tickers.two .tk-abs { display: none; }
+@container (max-width: 380px) {
+  .tickers.two .tk { grid-template-columns: minmax(0, 1fr) auto; }
+  .tickers.two .tk-price { display: none; }
 }
 .tk-none { font-size: 13px; color: var(--muted); }
 
