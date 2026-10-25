@@ -2,7 +2,7 @@ import { $, esc, cached, hash, local, relTime, updatedText, errorText, safeUrl, 
 import { setTicker } from './ticker.js';
 import { graph, graphWrite, msAccount, msHas } from './msauth.js';
 import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
-import { GMAIL_FOLDERS, outlookWebUrl, msClientId } from './settings.js';
+import { GMAIL_FOLDERS, outlookWebUrl, msClientId, unreadFolders, shippingFolders } from './settings.js';
 import { icon } from './icons.js';
 import { deliveriesFrom, renderDeliveries, deliveryOf, deliveryTag } from './packages.js';
 import { refreshShippingMail } from './shipmail.js';
@@ -61,7 +61,8 @@ async function fetchGmail(index, path = '') {
   return { email, unread, capped: path !== '' && unread >= 20, items };
 }
 
-// The feeds for the folders picked in Settings, and labels of your own by name.
+// The feeds for one account's folders picked in Settings ({ folders, labels }; see
+// unreadFolders), and labels of your own by name.
 export function gmailPaths(G) {
   const paths = (G.folders || []).filter((k) => GMAIL_FOLDERS[k]).map((k) => GMAIL_FOLDERS[k].path);
   const labels = String(G.labels || '').split(',').map((l) => l.trim()).filter(Boolean).map(encodeURIComponent);
@@ -184,8 +185,9 @@ export async function refreshMail(S, force) {
   const clientId = msClientId(S);
   outlookConnected = Boolean(clientId && (await msAccount()));
   if (S.show.packages) {
-    const gmail = accounts.filter((a) => !hidden.has(a.email));
-    refreshShippingMail({ gmail, outlook: S.outlook.mail && outlookConnected ? clientId : '' }, force, (list) => {
+    const gmail = accounts.filter((a) => !hidden.has(a.email)).map((a) => ({ ...a, where: shippingFolders(S, a.email) }));
+    const outlook = S.outlook.mail && outlookConnected ? clientId : '';
+    refreshShippingMail({ gmail, outlook, outlookFolders: S.packages.mail.outlook }, force, (list) => {
       shipping = list;
       render();
     });
@@ -196,15 +198,16 @@ export async function refreshMail(S, force) {
     .filter((a) => !hidden.has(a.email))
     .forEach((acct, i) => {
       const key = `gmail:${acct.email}`;
+      const where = unreadFolders(S, acct.email);
       wanted.add(key);
       if (!sources.has(key)) sources.set(key, { kind: 'gmail', acct, letter: 'G', order: i });
       cached({
         key,
-        sig: hash([acct.index, gmailPaths(S.gmail)]),
+        sig: hash([acct.index, gmailPaths(where)]),
         maxAge: 60e3,
         force,
         fetch: async () => {
-          const d = await fetchGmailFolders(acct.index, S.gmail);
+          const d = await fetchGmailFolders(acct.index, where);
           // Accounts were added or removed since the last look, so the numbers shifted.
           if (d.signedOut || d.email !== acct.email) {
             local.remove('gmail:accounts');
@@ -289,10 +292,10 @@ function render() {
       .map((m) => ({ tag: m.from, title: m.subject, meta: relTime(m.at), href: m.url })),
   );
   const packages = settingsRef.show.packages;
-  // The emails read in full go first, so they count over their unread-feed copies; they tag the
-  // rows below too.
+  // Deliveries come only from the shipping emails found in the folders picked for them (not the
+  // Unread card's); read in full, they tag the rows below too.
   const readInFull = new Map(shipping.map((m) => [m.msgId, m]));
-  const deliveries = packages ? deliveriesFrom([...shipping, ...live.flatMap(([, s]) => s.data.items.map((m) => ({ ...m, account: sourceLabel(s) })))]) : [];
+  const deliveries = packages ? deliveriesFrom(shipping) : [];
   if (packages) renderDeliveries(deliveries);
 
   const rows = items.length

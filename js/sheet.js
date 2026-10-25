@@ -6,7 +6,7 @@
 import { $, $$, esc } from './util.js';
 import { saveSettings, NEWS_TOPICS, ENGINES } from './settings.js';
 import { extraOrigins } from './calendar.js';
-import { mountGoogle, mountGmail, mountOutlook, mountLocation } from './setup-ui.js';
+import { mountGoogle, mountGmail, mountOutlook, mountLocation, mountShippingFolders } from './setup-ui.js';
 import { holidayChoices } from './sky.js';
 import { icon, hasIcon } from './icons.js';
 import { groupList, openGroupEditor } from './sites.js';
@@ -243,6 +243,8 @@ ${showBlock('mail')}
     <p class="hint">Daybook reads your shipping emails from the last two weeks in full, read or not, for the tracking number, the delivery day and what’s in the box: Gmail through Gmail’s own page with the sign-in already in Chrome (no setup, nothing changed in your mailbox), Outlook through its sign-in under Accounts. It also follows each package on the carrier’s own site, free and without a key: it opens the tracking page at UPS, USPS, FedEx, DHL or Amazon out of sight and reads the status and delivery day off it, the way you would, every couple of hours while a new tab is open. When a page can’t be read, the newest email about the package stands in. Carriers change their pages now and then; a package whose page can’t be read still links to it.</p>
     <div class="trk-mail">${check('packages.checkSites', 'Check carriers’ tracking pages for the latest status', d.packages.checkSites)}</div>
     <div class="trk-mail">${check('packages.fromMail', 'Find packages in shipping emails too', d.packages.fromMail)}</div>
+    <h4>Where to look for shipping emails</h4>
+    <div id="sheet-ship-folders"></div>
     <p class="hint">To hear about every package coming to your address without entering anything, sign up (free) for <a href="https://www.ups.com/us/en/services/tracking/mychoice" target="_blank" rel="noopener">UPS My Choice</a>, <a href="https://www.fedex.com/en-us/delivery-manager.html" target="_blank" rel="noopener">FedEx Delivery Manager</a> and <a href="https://informeddelivery.usps.com/" target="_blank" rel="noopener">USPS Informed Delivery</a>: they email you as each one moves, and Daybook reads those emails.</p>
     <h4>Packages you’re tracking</h4>
     <div id="sheet-tracking"></div>
@@ -418,6 +420,7 @@ function mountAll() {
   mountTeams($('#sheet-teams'), draft, queueSave);
   mountJobs($('#sheet-jobs'), draft, queueSave);
   mountTracking($('#sheet-tracking'), draft, queueSave);
+  mountShippingFolders($('#sheet-ship-folders'), draft, queueSave);
   paintGroups();
 }
 
@@ -505,7 +508,7 @@ function wire(dlg) {
   wired = true;
   const onEdit = (e) => {
     const el = e.target;
-    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-jobs, #sheet-tracking')) return;
+    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-jobs, #sheet-tracking, #sheet-ship-folders')) return;
     if (el.id === 'set-q') return find(el.value);
     if (el.dataset.flipPick) {
       // Unticked, a card goes back to its own spot on the board.

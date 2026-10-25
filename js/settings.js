@@ -31,18 +31,26 @@ export const ENGINES = {
   gmail: { label: 'Gmail', bang: 'e', url: 'https://mail.google.com/mail/u/0/#search/%s' },
 };
 
-// Gmail's folders Daybook can show, as the paths of their unread feeds: the whole inbox, one of
-// its tabs, Important or Starred. Labels of your own go by name (gmail.labels).
+// Gmail's folders Daybook can show: the whole inbox, one of its tabs, Important or Starred, each
+// with the path of its unread feed (the Unread card) and its words in a Gmail search
+// (Deliveries). Labels of your own go by name.
 export const GMAIL_FOLDERS = {
-  inbox: { label: 'Inbox (every tab)', path: '' },
-  primary: { label: 'Primary', path: '^sq_ig_i_personal' },
-  social: { label: 'Social', path: '^sq_ig_i_social' },
-  promotions: { label: 'Promotions', path: '^sq_ig_i_promo' },
-  updates: { label: 'Updates', path: '^sq_ig_i_notification' },
-  forums: { label: 'Forums', path: '^sq_ig_i_group' },
-  important: { label: 'Important', path: 'important' },
-  starred: { label: 'Starred', path: '^t' },
+  inbox: { label: 'Inbox (every tab)', path: '', search: 'in:inbox' },
+  primary: { label: 'Primary', path: '^sq_ig_i_personal', search: 'category:primary' },
+  social: { label: 'Social', path: '^sq_ig_i_social', search: 'category:social' },
+  promotions: { label: 'Promotions', path: '^sq_ig_i_promo', search: 'category:promotions' },
+  updates: { label: 'Updates', path: '^sq_ig_i_notification', search: 'category:updates' },
+  forums: { label: 'Forums', path: '^sq_ig_i_group', search: 'category:forums' },
+  important: { label: 'Important', path: 'important', search: 'is:important' },
+  starred: { label: 'Starred', path: '^t', search: 'is:starred' },
 };
+
+// The folders and labels (names separated by commas) one Gmail account's unread mail comes
+// from: its own choice, or the one every account had before each could have its own.
+export const unreadFolders = (S, email) => S.gmail.accounts?.[email] || { folders: S.gmail.folders, labels: S.gmail.labels };
+// Where Deliveries looks for shipping emails in one Gmail account: 'all' (All mail) or folders
+// by key, and labels; All mail unless changed.
+export const shippingFolders = (S, email) => S.packages.mail?.gmail?.[email] || { folders: ['all'], labels: '' };
 
 // Hosts the manifest already grants. A calendar or feed elsewhere needs a runtime grant.
 export const BUILT_IN_HOSTS = [
@@ -67,9 +75,10 @@ export const DEFAULTS = {
   searchEngine: 'google',
   location: { mode: 'auto', name: '', lat: null, lon: null },
   google: { calendars: null }, // null: the calendars Google Calendar itself shows
-  // Every signed-in Gmail account except `hidden`; the folders to show unread mail from, and
-  // labels of your own by name, separated by commas.
-  gmail: { folders: ['inbox'], labels: '', hidden: [] },
+  // Every signed-in Gmail account except `hidden`. Each one shows unread mail from its own
+  // folders and labels (accounts, by address: { folders, labels }); one without its own choice
+  // uses `folders` and `labels`, the inbox unless changed. Labels go by name, separated by commas.
+  gmail: { folders: ['inbox'], labels: '', accounts: {}, hidden: [] },
   calendars: [], // extra calendars added by iCal link
   // clientId overrides config.js; folders are Outlook folder ids, or 'inbox'.
   outlook: { clientId: '', mail: true, calendar: true, color: 5, folders: ['inbox'] },
@@ -86,9 +95,10 @@ export const DEFAULTS = {
   flip: { every: 20 }, // seconds between turns of the flip card; 0 turns only by hand
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
   stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
-  // Whether shipping emails count, whether carriers' tracking pages are read for status, and
-  // packages added by hand ({ number, name, added }).
-  packages: { fromMail: true, checkSites: true, tracked: [] },
+  // Whether shipping emails count, where they're looked for (see shippingFolders; for Outlook,
+  // folder ids or 'all' for the whole mailbox), whether carriers' tracking pages are read for
+  // status, and packages added by hand ({ number, name, added }).
+  packages: { fromMail: true, mail: { gmail: {}, outlook: ['all'] }, checkSites: true, tracked: [] },
   area: { key: '', radius: 25, days: 14, kinds: ['music', 'arts', 'other'] }, // Ticketmaster key; radius in miles or km by units
   holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
   teams: { list: [], calendar: true, news: true, wins: true }, // teams you follow; the card stays hidden without one
