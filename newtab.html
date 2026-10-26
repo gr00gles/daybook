@@ -51,9 +51,12 @@
         </div>
       </section>
       <div class="toolbar">
-        <button class="icon-btn" id="arrange-btn" type="button" title="Arrange cards" aria-label="Arrange cards" aria-pressed="false"></button>
-        <button class="icon-btn" id="refresh-btn" type="button" title="Refresh everything" aria-label="Refresh everything"></button>
-        <button class="icon-btn" id="settings-btn" type="button" title="Settings" aria-label="Settings"></button>
+        <button class="icon-btn" id="menu-btn" type="button" title="Settings, refresh and arrange" aria-label="Menu" aria-haspopup="menu" aria-expanded="false" aria-controls="tool-menu"></button>
+        <div class="tool-menu pop" id="tool-menu" role="menu" aria-label="Menu" hidden>
+          <button class="tool-item" id="settings-btn" type="button" role="menuitem"></button>
+          <button class="tool-item" id="refresh-btn" type="button" role="menuitem"></button>
+          <button class="tool-item" id="arrange-btn" type="button" role="menuitem" aria-pressed="false"></button>
+        </div>
       </div>
     </div>
   </div>

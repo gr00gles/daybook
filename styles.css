@@ -855,18 +855,50 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .wx-icon .i-moon { stroke: var(--ink-2); }
 .wx-icon .i-rain { stroke: var(--rain); }
 
-/* Arrange, refresh and settings, small and stacked at the end of the band, so they take little of
-   its width; quiet until the pointer comes near. */
+/* Settings, refresh and arrange, behind one small button at the end of the band, quiet until the
+   pointer comes near. It keeps the height the three stacked buttons had, which holds the room
+   under the band that the ticker floats in. */
 .toolbar {
-  display: grid;
-  gap: 1px;
+  position: relative;
+  min-height: 86px;
   margin: -4px -8px 0 -8px;
-  opacity: .7;
-  transition: opacity .15s ease;
 }
-.toolbar:hover, .toolbar:focus-within { opacity: 1; }
-.toolbar .icon-btn { width: 28px; height: 28px; }
-.toolbar .ui-icon { width: 17px; height: 17px; }
+.toolbar > .icon-btn { width: 28px; height: 28px; opacity: .7; transition: opacity .15s ease, background-color .15s ease, color .15s ease; }
+.toolbar > .icon-btn:hover, .toolbar > .icon-btn:focus-visible, .toolbar > .icon-btn[aria-expanded="true"] { opacity: 1; }
+.toolbar > .icon-btn .ui-icon { width: 17px; height: 17px; }
+.tool-menu {
+  position: absolute;
+  top: calc(28px + 6px);
+  right: 0;
+  z-index: 18;
+  display: grid;
+  min-width: 190px;
+  padding: 6px;
+  border-radius: 18px;
+  background: var(--glass-pop);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-lift);
+  transform-origin: top right;
+}
+.tool-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  font-size: 14px;
+  font-weight: 550;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tool-item:hover, .tool-item:focus-visible { background: var(--fill); outline: none; }
+.tool-item .ui-icon { width: 17px; height: 17px; color: var(--ink-2); }
+.tool-item[aria-pressed="true"] { color: var(--accent); }
+.tool-item[aria-pressed="true"] .ui-icon { color: var(--accent); }
 .icon-btn {
   display: grid;
   place-items: center;

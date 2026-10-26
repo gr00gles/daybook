@@ -552,7 +552,7 @@ async function resetLayout() {
 
 export function initLayout() {
   const btn = $('#arrange-btn');
-  btn.innerHTML = icon('grip');
+  btn.innerHTML = `${icon('grip')}Arrange cards`;
   btn.addEventListener('click', () => setArranging(!arranging));
   const bar = $('#arrange-bar');
   bar.innerHTML = `<span>Drag a card by ${icon('grip')} to move it, its bottom edge to resize it, or the lines between columns to widen them.</span>
