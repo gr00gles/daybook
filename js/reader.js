@@ -269,14 +269,14 @@ function paintStatus(html) {
 // Opens a message. `how` says where the full text comes from: 'gmail', 'outlook', or null when
 // this account can't be read here (another Gmail account signed in to Chrome).
 // `actions.change(action, { toast })` marks it read, junks or deletes it and resolves to an undo.
-export async function openReader({ item, how, clientId, providerUrl, providerName, account, letter, actions, autoRead }) {
+export async function openReader({ item, how, clientId, providerUrl, providerName, account, mark, actions, autoRead }) {
   const dlg = $('#mail-dialog');
   current = { item, msg: null, images: false, providerName, undoRead: null, actions };
   dlg.innerHTML = `<article class="reader" aria-labelledby="rd-subject">
     <header class="rd-head">
       <div class="rd-titles">
         <h2 id="rd-subject">${esc(item.subject)}</h2>
-        <p class="rd-meta"><span class="src" title="${esc(account)}">${esc(letter)}</span><strong id="rd-from">${esc(item.from)}</strong><span class="rd-date" id="rd-date">${esc(longDate(item.at))}</span></p>
+        <p class="rd-meta"><span class="src" title="${esc(account)}">${mark}</span><strong id="rd-from">${esc(item.from)}</strong><span class="rd-date" id="rd-date">${esc(longDate(item.at))}</span></p>
         <p class="rd-to" id="rd-to"></p>
       </div>
       <button class="icon-btn" type="button" data-rd="close" aria-label="Close">${icon('close')}</button>
