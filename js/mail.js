@@ -351,7 +351,7 @@ function render() {
     .filter(([, s]) => !s.setup)
     .map(([, s]) => {
       const name = s.kind === 'outlook' ? 'Outlook' : 'Gmail';
-      return `<a class="foot-link" href="${esc(inboxUrl(s))}" title="Open ${name}" aria-label="Open ${name}: ${esc(sourceLabel(s))}">${mailMark(s.kind)}${esc(sourceLabel(s))}</a>`;
+      return `<a class="foot-link" href="${esc(inboxUrl(s))}" title="Open ${name}" aria-label="Open ${name}: ${esc(sourceLabel(s))}">${mailMark(s.kind)}${esc(shortLabel(sourceLabel(s)))}</a>`;
     })
     .join('');
 
