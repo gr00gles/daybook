@@ -52,11 +52,13 @@ const LEAN = [
   ['card-jobs', 'card-today', { cap: true }],
 ];
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
-const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
+const FIT_BOTTOM = 6; // room kept under the cards (the board's bottom padding), plus the credits line (#credits)
 const TUCK_GAP = 4; // least room kept above and below the ticker
 const TICKER_H = [24, 40]; // the ticker's least and greatest height
-// What the band draws, down to the hours' rain chances, which hold their row even when empty.
-const DRAWN_IN_BAND = '.when, .search, .shortcuts, .nw-alert, .nw-main, .nh-time, .nw-hours .wx-icon, .nh-temp, .nh-pop:not(:empty), #now-weather > .notice, #now-weather > .btn';
+// The band's lines of text, measured to their baseline: a line's box runs on below its letters.
+const TEXT_IN_BAND = '.clock, .greeting, .date-line, .nw-cond, .nw-meta, .nw-place, .nh-temp, .nh-pop:not(:empty)';
+// What else the band draws, measured to its edge.
+const DRAWN_IN_BAND = '.search-box, .shortcuts, .nw-alert, .nw-hours .wx-icon, #now-weather > .notice, #now-weather > .btn';
 
 let layout = { v: 1, rev: REV, count: null, fit: true, cols: {}, cols4: null, widths: null, widths4: null, heights: {} };
 let arranging = false;
@@ -221,12 +223,25 @@ function lean(cards, heights, floors) {
 
 // The band is as tall as its tallest part, the stacked toolbar at the end, which leaves empty
 // room between the clock, the search and the weather and the cards. The ticker floats there,
-// out of the page's flow, so it never moves or shrinks the cards: centred in the room, as tall as
-// fits up to TICKER_H. The toolbar runs down past the strip's faded end.
+// out of the page's flow, so it never moves or shrinks the cards: as far from the band's lowest
+// text as from the cards, as tall as fits up to TICKER_H. The toolbar runs down past the strip's
+// faded end.
+function baseline(el) {
+  const probe = document.createElement('span');
+  probe.style.cssText = 'display: inline-block; width: 0; height: 0; vertical-align: baseline;';
+  el.append(probe);
+  const y = probe.getBoundingClientRect().top;
+  probe.remove();
+  return y;
+}
 function tuckTicker() {
   const bar = $('#ticker');
   if (!bar || bar.hidden) return;
-  const low = Math.max(...$$(DRAWN_IN_BAND).map((e) => e.getBoundingClientRect().bottom));
+  const shown = (e) => e.getClientRects().length > 0;
+  const low = Math.max(
+    ...$$(TEXT_IN_BAND).filter(shown).map(baseline),
+    ...$$(DRAWN_IN_BAND).filter(shown).map((e) => e.getBoundingClientRect().bottom),
+  );
   const cards = board().getBoundingClientRect().top + parseFloat(getComputedStyle(board()).paddingTop);
   const h = Math.max(TICKER_H[0], Math.min(TICKER_H[1], Math.floor(cards - low - 2 * TUCK_GAP)));
   bar.style.setProperty('--tkr-h', `${h}px`);
@@ -265,7 +280,9 @@ function watchCards() {
     width = board().offsetWidth;
     scheduleFit();
   }).observe(board());
-  new ResizeObserver(scheduleFit).observe($('.sky'));
+  const sizes = new ResizeObserver(scheduleFit);
+  // The weather can arrive without changing the band's height, but it moves the ticker.
+  for (const el of $$('.sky, .when, .now-weather')) sizes.observe(el);
   new MutationObserver(scheduleFit).observe($('#ticker'), { attributes: true, attributeFilter: ['hidden'] });
   addEventListener('resize', scheduleFit);
   document.fonts?.ready.then(scheduleFit);

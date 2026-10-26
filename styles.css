@@ -159,12 +159,11 @@ svg { flex: none; }
 
 /* ---- Sky band ---------------------------------------------------------------- */
 
-.sky {
-  position: relative;
-  z-index: 3; /* the week bubble opens over the cards */
-}
-/* The ticker rises into the band's empty room (layout.js), so only what's drawn in the band
-   takes the pointer there. */
+/* No stacking level of its own: the band's bubbles (the week, places, answers, the menu) carry
+   theirs and open over the cards and the ticker, while the ticker, floating just under the band's
+   text (layout.js), sits over the bottom edges of the band's boxes. */
+.sky { position: relative; }
+/* Only what's drawn in the band takes the pointer in its empty room, where the ticker floats. */
 .sky, .sky-inner, .sky-end, .now-weather, #now-weather, .nw-hours, .nw-hours li { pointer-events: none; }
 .sky-inner > :not(.sky-end), .sky-end > :not(.now-weather), .now-weather > :not(#now-weather), #now-weather > :not(.nw-hours),
 .nw-hours li > :not(.nh-pop:empty) { pointer-events: auto; }
@@ -921,7 +920,7 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
 .board {
   max-width: var(--page-max);
   margin: 0 auto;
-  padding-block: 12px 16px; /* room above for the grips in arrange mode */
+  padding-block: 12px 6px; /* room above for the grips in arrange mode; FIT_BOTTOM in layout.js */
   padding-left: var(--gutter);
   padding-right: var(--gutter-end);
   display: grid;
@@ -1718,7 +1717,7 @@ a.chip:hover { background: var(--fill-2); }
 .credits {
   max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 var(--gutter-end) 10px var(--gutter);
+  padding: 0 var(--gutter-end) 4px var(--gutter);
   font-size: 11.5px;
   line-height: 1.5;
   text-align: center;
