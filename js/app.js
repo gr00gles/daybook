@@ -17,6 +17,7 @@ import { initPlaces, updatePlaces, openActivePlace } from './places.js';
 import { initYouTube, refreshYouTube } from './youtube.js';
 import { refreshNews, initNews, refreshTicker } from './news.js';
 import { initTicker, setTicker, onTicker, offBoard, TICKER_CARDS } from './ticker.js';
+import { refreshExtras } from './ticker-extras.js';
 import { openSettings } from './sheet.js';
 import { openWelcome } from './onboarding.js';
 import { msAccount } from './msauth.js';
@@ -410,6 +411,7 @@ function refreshAll(force = false) {
   if (S.show.jobs) refreshJobs(S, force);
   if (newsCard) refreshNews(S, force);
   if (newsTicker) refreshTicker(S, force);
+  refreshExtras(S, force);
   if (S.show.youtube) refreshYouTube(S, force);
 }
 

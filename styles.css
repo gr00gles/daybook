@@ -2438,6 +2438,19 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .disp-go { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding: 2px 4px 2px 8px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: 500 12.5px var(--font-body); cursor: pointer; }
 .disp-go .ui-icon { width: 14px; height: 14px; }
 .disp-go:hover, .disp-go:focus-visible { background: var(--fill); color: var(--accent); }
+/* Settings → Ticker: each card's or extra's days and hours, and the extras. */
+.tw-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 0; border-top: 1px solid var(--line-2); }
+.sheet .hint + .tw-row { border-top: 0; }
+.tw { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.tw-days span { padding: 4px 8px; font-size: 12px; }
+.tw .field.inline > span:first-child { font-weight: 500; color: var(--muted); }
+.tw-hours { display: inline-flex; align-items: center; gap: 8px; }
+.tw input[type="time"] { width: 116px; padding-block: 5px; }
+.tw-never { margin: 0; color: var(--critical); }
+.tkr-sub { margin-top: 4px; }
+.tx-head { align-items: center; }
+.tx-head .check { margin-left: auto; font-size: 13px; }
+.tx-add { margin: 4px 0 0; gap: 8px; }
 .sheet section.flash { animation: flash 1.8s ease-out; }
 @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
 .sheet h3 { margin: 0 0 10px; font: 600 17px var(--font-display); letter-spacing: -0.01em; }

@@ -82,7 +82,7 @@ export const DEFAULTS = {
   calendars: [], // extra calendars added by iCal link
   // clientId overrides config.js; folders are Outlook folder ids, or 'inbox'.
   outlook: { clientId: '', mail: true, calendar: true, calendars: null, color: 5, folders: ['inbox'] }, // calendars: ids shown, null for just the main one
-  news: { topics: ['top', 'us', 'technology'], custom: [] },
+  news: { topics: ['top', 'us', 'technology'], custom: [], ticker: null }, // ticker: feed ids in the ticker, null for all
   // Each card or top-bar part: 'card' (on the page), 'both' (and in the ticker), 'ticker' (in the
   // ticker only), 'flip' (a card taking turns in the flip card) or 'off'. `show` below follows: a section is on while any of its parts is.
   // The board starts with Today, the month, Unread, Markets, NYS jobs, Deliveries and Teams as cards, and the rest in the flip card.
@@ -90,11 +90,16 @@ export const DEFAULTS = {
     weather: 'card', alerts: 'card', holidays: 'card', shortcuts: 'off', today: 'card', month: 'card', notes: 'flip', stocks: 'card', teams: 'card', news: 'flip',
     jobs: 'card', deliveries: 'card', mail: 'card', area: 'flip', youtube: 'flip',
   },
+  // Settings → Ticker: when each card is in the ticker (card key -> { days, from, to }; see
+  // inWindow in ticker.js), extras only in the ticker (ticker-extras.js), each
+  // { id, kind, label, on, when, and league and show, query, url or text by kind }, how many
+  // items each takes per turn and how fast it crawls.
+  tickerOptions: { when: {}, extras: [], perCard: 10, speed: 'normal' },
   board: 2, // which default board (card or flip card for each) these settings have had
   youtube: { hideShorts: true },
   flip: { every: 20 }, // seconds between turns of the flip card; 0 turns only by hand
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
-  stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'] }, // Finnhub key; the card stays hidden without one
+  stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'], ticker: null }, // Finnhub key (the card stays hidden without one); ticker: symbols in the ticker, null for all
   // Whether shipping emails count, where they're looked for (see shippingFolders; for Outlook,
   // folder ids or 'all' for the whole mailbox), whether carriers' tracking pages are read for
   // status and Amazon's order pages for what's in the box (amazon.js), and packages added by

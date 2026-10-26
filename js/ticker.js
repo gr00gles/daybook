@@ -7,6 +7,11 @@
 // An item: { title, tag, meta, tone ('up', 'down' or 'now' for meta), href, newTab, event (a
 // calendar event's key, which opens its details), color (a dot before the title), plain (no
 // icon: a team's game) }. With more than one card in it, the others wear their card's icon.
+//
+// Settings → Ticker adds the rest (S.tickerOptions): when each card is in it (days of the week and
+// hours), extras that are only in the ticker (live scores, a news search, a feed, a message; see
+// ticker-extras.js), each with its own days and hours, how many items each takes per turn and
+// how fast it crawls.
 import { $, esc, safeUrl } from './util.js';
 import { icon } from './icons.js';
 
@@ -36,9 +41,16 @@ export const TICKER_CARDS = {
 };
 export const TICKER_MODES = { card: 'Card', both: 'Card and ticker', ticker: 'Ticker only', flip: 'Flip card', off: 'Off' };
 
-const PER_CARD = 10;
-const MAX = 60;
-const SPEED = 42; // pixels a second
+// The kinds of extra, for their icon and name when they share the ticker.
+export const TICKER_EXTRAS = {
+  scores: { label: 'Live scores', icon: 'star' },
+  search: { label: 'News search', icon: 'globe' },
+  feed: { label: 'Feed', icon: 'globe' },
+  text: { label: 'Message', icon: 'edit' },
+};
+export const TICKER_SPEEDS = { slow: 26, normal: 42, fast: 64 }; // pixels a second
+
+const MAX = 80;
 const FADE = 18; // how far in from each end of the strip items have faded in: the cards' corner radius (--radius in styles.css)
 
 let settings = null;
@@ -47,6 +59,32 @@ let paintTimer;
 let painted = '';
 let pos = 0; // where the strip is scrolled to, kept in fractions of a pixel
 let held = false;
+const limits = new Map(); // source -> the most it takes per turn, when not the usual
+
+// When a card or an extra is in the ticker: { days: [0-6, Sunday first] or absent for every day,
+// from and to ('HH:MM', both empty for all day; from after to runs past midnight) }. A window
+// past midnight belongs to the day it starts on.
+export function inWindow(when, now = new Date()) {
+  const mins = (t) => (/^\d\d:\d\d$/.test(t || '') ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3)) : null);
+  const from = mins(when?.from);
+  const to = mins(when?.to);
+  const m = now.getHours() * 60 + now.getMinutes();
+  let day = now.getDay();
+  if (from != null && to != null && from > to && m < to) day = (day + 6) % 7;
+  if (Array.isArray(when?.days) && !when.days.includes(day)) return false;
+  if (from == null || to == null || from === to) return true;
+  return from < to ? m >= from && m < to : m >= from || m < to;
+}
+const opts = (S) => S.tickerOptions || {};
+const cardWhen = (S, key) => opts(S).when?.[key];
+// The extras that are set up and on right now, by their ticker source key.
+export const extraKey = (x) => `x:${x.id}`;
+export const liveExtras = (S, now) => (opts(S).extras || []).filter((x) => TICKER_EXTRAS[x.kind] && x.on !== false && inWindow(x.when, now));
+const sourceOf = (key) => {
+  if (TICKER_CARDS[key]) return TICKER_CARDS[key];
+  const x = (opts(settings).extras || []).find((e) => extraKey(e) === key);
+  return { label: x?.label || TICKER_EXTRAS[x?.kind]?.label || 'Ticker', icon: TICKER_EXTRAS[x?.kind]?.icon || 'star' };
+};
 
 export const tickerModes = (key) => TICKER_CARDS[key].modes || Object.keys(TICKER_MODES);
 export function tickerMode(S, key) {
@@ -67,18 +105,24 @@ export function settleSections(S) {
     else S.show[sec] = keys.some((k) => tickerMode(S, k) !== 'off');
   }
 }
-const shared = (S) => Object.keys(TICKER_CARDS).filter((k) => onTicker(S, k));
+// The cards in the ticker right now: set to it, and inside their days and hours.
+const shared = (S, now = new Date()) => Object.keys(TICKER_CARDS).filter((k) => onTicker(S, k) && inWindow(cardWhen(S, k), now));
+// Whether anything could ever be in it, for whether to wire it up at all.
+const everShared = (S) => Object.keys(TICKER_CARDS).some((k) => onTicker(S, k)) || (opts(S).extras || []).some((x) => TICKER_EXTRAS[x.kind] && x.on !== false);
 
-export function setTicker(key, items) {
+// `limit` lets a source take more than the usual few per turn: a Sunday's worth of scores.
+export function setTicker(key, items, limit) {
   sources.set(key, items || []);
+  if (limit) limits.set(key, limit);
+  else limits.delete(key);
   clearTimeout(paintTimer);
   paintTimer = setTimeout(paint, 150);
 }
 
 // The cards take turns, a few items from each, until the bar is full.
-function list() {
-  const keys = shared(settings);
-  const lists = keys.map((k) => (sources.get(k) || []).slice(0, PER_CARD).map((n) => ({ ...n, from: k })));
+function list(keys) {
+  const per = Number(opts(settings).perCard) || 10;
+  const lists = keys.map((k) => (sources.get(k) || []).slice(0, Math.max(per, limits.get(k) || 0)).map((n) => ({ ...n, from: k })));
   const out = [];
   for (let i = 0; out.length < MAX && lists.some((l) => i < l.length); i++) for (const l of lists) if (l[i]) out.push(l[i]);
   return out.slice(0, MAX);
@@ -86,7 +130,8 @@ function list() {
 
 function itemHtml(n, copy, mixed) {
   const tab = copy ? ' tabindex="-1"' : '';
-  const inner = `${mixed && !n.plain ? `<span class="tkr-from" title="${esc(TICKER_CARDS[n.from].label)}">${icon(TICKER_CARDS[n.from].icon)}</span>` : ''}${
+  const from = sourceOf(n.from);
+  const inner = `${mixed && !n.plain ? `<span class="tkr-from" title="${esc(from.label)}">${icon(from.icon)}</span>` : ''}${
     n.tag ? `<span class="tkr-tag">${esc(n.tag)}</span>` : ''
   }${n.color ? `<span class="tkr-dot" style="--c: ${n.color}"></span>` : ''
   }<span class="tkr-title">${esc(n.title)}</span>${n.meta ? `<span class="tkr-meta${n.tone ? ` ${n.tone}` : ''}">${esc(n.meta)}</span>` : ''}`;
@@ -96,15 +141,22 @@ function itemHtml(n, copy, mixed) {
 }
 
 function paint() {
-  if (!settings) return;
-  const keys = shared(settings);
-  const items = list();
+  if (!settings || !wired) return;
+  const now = new Date();
+  const cards = shared(settings, now);
+  const extras = liveExtras(settings, now).map(extraKey);
+  const keys = [...cards, ...extras];
+  const items = list(keys);
+  // Extras with nothing to show (no game on yet) leave the ticker hidden; cards keep it up.
+  const box = $('#ticker');
+  const hide = !cards.length && !items.length;
+  if (box.hidden !== hide) box.hidden = hide;
   const strip = $('#ticker-strip');
   // Two copies, so the strip can wrap around without a gap; the second is out of the tab order.
   const run = (copy) => items.map((n) => itemHtml(n, copy, keys.length > 1)).join('');
   const html = items.length
     ? `<div class="tkr-run">${run(false)}</div><div class="tkr-run" aria-hidden="true">${run(true)}</div>`
-    : `<span class="tkr-quiet">${sources.size ? 'Nothing new right now.' : 'Loading…'}</span>`;
+    : `<span class="tkr-quiet">${keys.some((k) => sources.has(k)) ? 'Nothing new right now.' : 'Loading…'}</span>`;
   if (html === painted) return;
   painted = html;
   strip.innerHTML = html;
@@ -114,11 +166,15 @@ function paint() {
   strip.scrollLeft = pos;
 }
 
+let wired = false;
+
 export function initTicker(S) {
   settings = S;
   const box = $('#ticker');
-  box.hidden = !shared(S).length;
-  if (box.hidden) return;
+  box.hidden = true;
+  if (!everShared(S)) return;
+  wired = true;
+  const speed = TICKER_SPEEDS[opts(S).speed] || TICKER_SPEEDS.normal;
   const strip = $('#ticker-strip');
   const hold = (on) => () => (held = on || box.matches(':hover, :focus-within'));
   box.addEventListener('pointerenter', hold(true));
@@ -155,7 +211,7 @@ export function initTicker(S) {
       strip.scrollLeft = 0;
     }
     if (!held && !still.matches && !fits) {
-      pos += SPEED * dt;
+      pos += speed * dt;
       if (pos >= half) pos -= half;
       strip.scrollLeft = pos;
     }
@@ -163,4 +219,6 @@ export function initTicker(S) {
   };
   requestAnimationFrame(step);
   paint();
+  // Cards and extras come and go with their days and hours.
+  setInterval(paint, 30e3);
 }

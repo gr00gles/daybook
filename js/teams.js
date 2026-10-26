@@ -35,10 +35,12 @@ function cdnLogo(league, t) {
 const teamLogo = (t) => t.logo || cdnLogo(t.league, t);
 const hex = (c) => (/^[0-9a-f]{6}$/i.test(c || '') ? `#${c}` : '');
 const followed = (S) => (S.teams?.list || []).filter((t) => LEAGUES[t.league] && t.id);
-// Set per team: `hide` leaves it off the card, the ticker and the search bar; `noNews` out of
-// the team news.
+// Set per team: `hide` leaves it off the card and the search bar; `noNews` out of the team
+// news; `ticker` (Settings → Ticker) says whether it's in the ticker, which a team off the card
+// isn't unless picked there.
 const onCard = (t) => !t.hide;
 const inNews = (t) => !t.noNews;
+export const inTicker = (t) => t.ticker ?? !t.hide;
 const teamUrl = (t) => `https://www.google.com/search?q=${encodeURIComponent(`${t.name} schedule`)}`;
 
 // ---- Schedules ---------------------------------------------------------------------
@@ -231,7 +233,6 @@ function renderCard(S, all, allData, meta) {
     : '<p class="tm-none">Every team is off the card. <button class="linklike" type="button" data-open-settings="teams">Choose teams</button></p>';
   const now = Date.now();
   const results = S.teams.wins !== false ? teams.map((t, i) => [t, recentResult(t, data[i]?.games || [], now)]).filter(([, g]) => g) : [];
-  const wins = results.filter(([, g]) => g.won);
   const item = (t, g, win) => {
     const date = new Date(g.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     const meta =
@@ -251,9 +252,12 @@ function renderCard(S, all, allData, meta) {
   };
   setTicker(
     'teams',
-    teams.flatMap((t, i) => {
-      const g = featured(data[i]?.games || []);
-      const win = wins.find(([w]) => w === t)?.[1];
+    all.flatMap((t, i) => {
+      if (!inTicker(t)) return [];
+      const games = allData[i]?.games || [];
+      const g = featured(games);
+      const last = S.teams.wins !== false ? recentResult(t, games, now) : null;
+      const win = last?.won ? last : null;
       // A win stays in the ticker for its day, ahead of the next game.
       return [win && win !== g && item(t, win, true), g && item(t, g, g === win)].filter(Boolean);
     }),

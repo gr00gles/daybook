@@ -108,7 +108,7 @@ function render(data, meta, sig) {
   setTicker(
     'stocks',
     data.quotes
-      .filter((q) => !q.missing && !q.failed)
+      .filter((q) => !q.missing && !q.failed && (!tickerPick || tickerPick.includes(q.symbol)))
       .map((q) => ({
         tag: q.symbol,
         title: money(q.price),
@@ -125,11 +125,13 @@ export const stockSymbols = (S) =>
   [...new Set((S.stocks.symbols || []).map((s) => String(s).trim().toUpperCase()).filter((s) => /^[A-Z0-9.:^=-]{1,20}$/.test(s)))].slice(0, MAX_SYMBOLS);
 
 let partial = false; // some quotes failed last time: try again sooner
+let tickerPick = null; // the symbols in the ticker (Settings → Ticker), or null for all of them
 
 export function refreshStocks(S, force = false) {
   const card = $('#card-stocks');
   const key = (S.stocks.key || '').trim();
   const symbols = stockSymbols(S);
+  tickerPick = Array.isArray(S.stocks.ticker) ? S.stocks.ticker : null;
   const off = !S.show.stocks || !key || !symbols.length;
   card.hidden = off || offBoard(S, 'stocks');
   if (off) return setTicker('stocks', []);
