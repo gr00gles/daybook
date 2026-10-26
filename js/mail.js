@@ -9,7 +9,6 @@ import { refreshShippingMail } from './shipmail.js';
 import { openReader, initReader } from './reader.js';
 
 const sources = new Map(); // key -> { kind, label, ... , data, at, error }
-let filter = 'all';
 let settingsRef;
 let shipping = []; // recent shipping emails read in full (shipmail.js), read or not
 
@@ -290,21 +289,12 @@ function render() {
   if (!body || !settingsRef) return;
   const list = [...sources.entries()].sort((a, b) => a[1].order - b[1].order);
   const live = list.filter(([, s]) => s.data && !s.data.signedOut);
-  if (filter !== 'all' && !live.some(([k]) => k === filter)) filter = 'all';
 
   const total = live.reduce((n, [, s]) => n + (s.data.unread || 0), 0);
   $('#mail-count').textContent = live.length ? String(total) : '';
 
-  const chips = [
-    `<button type="button" class="chip filter${filter === 'all' ? ' on' : ''}" data-mail-filter="all" aria-pressed="${filter === 'all'}">All<span class="count">${total}</span></button>`,
-    ...live.map(
-      ([key, s]) =>
-        `<button type="button" class="chip filter${filter === key ? ' on' : ''}" data-mail-filter="${esc(key)}" aria-pressed="${filter === key}" title="${esc(sourceLabel(s))}"><span class="src ${s.kind}">${s.letter}</span>${esc(s.kind === 'outlook' ? 'Outlook' : shortLabel(sourceLabel(s)))}<span class="count">${s.data.unread}${s.data.capped ? '+' : ''}</span></button>`,
-    ),
-  ];
   const items = live
-    .filter(([key]) => filter === 'all' || filter === key)
-    .flatMap(([key, s]) => s.data.items.map((m) => ({ ...m, key, letter: s.letter, kind: s.kind, account: sourceLabel(s) })))
+    .flatMap(([key, s]) => s.data.items.map((m) => ({ ...m, key, kind: s.kind, account: sourceLabel(s) })))
     .sort((a, b) => b.at - a.at)
     .slice(0, 40);
   setTicker(
@@ -327,7 +317,7 @@ function render() {
     ? `<ol class="mail-list">${items
         .map(
           (m) => `<li><a class="mail" href="${esc(safeUrl(m.url))}" data-open-key="${esc(m.key)}" data-open-id="${esc(m.id)}">
-            <span class="src ${m.kind}" title="${esc(m.account)}">${m.letter}</span>
+            <span class="src" title="${esc(m.account)}">${mailMark(m.kind)}</span>
             <span class="mail-from">${esc(m.from)}</span>
             <time class="mail-time" datetime="${new Date(m.at).toISOString()}">${relTime(m.at)}</time>
             <span class="mail-subject">${packages ? deliveryTag(deliveryOf(readInFull.get(m.msgId || m.id) || m)) : ''}${esc(m.subject)}</span>
@@ -344,14 +334,16 @@ function render() {
         )
         .join('')}</ol>`
     : live.length
-      ? `<p class="quiet is-empty">Nothing unread${filter === 'all' ? '' : ' here'}. Enjoy it.</p>`
+      ? `<p class="quiet is-empty">Nothing unread. Enjoy it.</p>`
       : '';
 
+  // Each inbox once: its logo, name and unread count, opening it.
   const openLinks = list
     .filter(([, s]) => !s.setup)
     .map(([, s]) => {
       const name = s.kind === 'outlook' ? 'Outlook' : 'Gmail';
-      return `<a class="foot-link" href="${esc(inboxUrl(s))}" title="Open ${name}" aria-label="Open ${name}: ${esc(sourceLabel(s))}">${mailMark(s.kind)}${esc(shortLabel(sourceLabel(s)))}</a>`;
+      const count = s.data && !s.data.signedOut ? `<span class="count">${s.data.unread}${s.data.capped ? '+' : ''}</span>` : '';
+      return `<a class="foot-link" href="${esc(inboxUrl(s))}" title="Open ${name}" aria-label="Open ${name}: ${esc(sourceLabel(s))}">${mailMark(s.kind)}${esc(shortLabel(sourceLabel(s)))}${count}</a>`;
     })
     .join('');
 
@@ -364,7 +356,7 @@ function render() {
     settingsRef.outlook.mail && !outlookConnected && msClientId(settingsRef)
       ? `<button class="foot-link" type="button" data-open-settings="accounts">${icon('plus')}Connect Outlook</button>`
       : '';
-  body.innerHTML = `${live.length > 1 && (total || filter !== 'all') ? `<div class="filters" role="group" aria-label="Show mail from">${chips.join('')}</div>` : ''}${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
+  body.innerHTML = `${rows}${list.map(([, s]) => notice(s)).join('')}${signIn}`;
   $('#mail-links').innerHTML = openLinks + connectOutlook;
 }
 
@@ -494,7 +486,7 @@ async function openMessage(key, id) {
     providerUrl: safeUrl(item.url),
     providerName: outlook ? 'Outlook' : 'Gmail',
     account: sourceLabel(src),
-    letter: src.letter,
+    mark: mailMark(src.kind),
     actions: editable ? { change: (action, opts) => change(action, key, id, { ...opts, item }) } : null,
     // Reading Gmail here already uses the permission that marks it read; Outlook needs one
     // more, so it's only marked read on its own once that was given.
@@ -516,10 +508,6 @@ export function initMail() {
       openMessage(open.dataset.openKey, open.dataset.openId);
       return;
     }
-    const chip = e.target.closest('[data-mail-filter]');
-    if (!chip) return;
-    filter = chip.dataset.mailFilter;
-    render();
   });
 }
 
