@@ -18,8 +18,11 @@ export async function fetchFeed(url) {
     let title = get('title');
     if (source && title.endsWith(` - ${source}`)) title = title.slice(0, -(source.length + 3));
     const link = it.querySelector('link');
+    // The first lines of the story, as text: a word of the day's meaning, say.
+    const about = get('description') || get('summary') || get('content');
     return {
       title,
+      summary: about ? (new DOMParser().parseFromString(about, 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200) : '',
       source,
       // Google News names the source's site, for its icon.
       site: it.querySelector('source')?.getAttribute('url') || '',

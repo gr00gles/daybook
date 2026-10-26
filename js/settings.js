@@ -99,7 +99,10 @@ export const DEFAULTS = {
   youtube: { hideShorts: true },
   flip: { every: 20 }, // seconds between turns of the flip card; 0 turns only by hand
   travel: { buffer: 5, tomtomKey: '' }, // minutes of slack before leaving; TomTom adds live traffic
-  stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'], ticker: null }, // Finnhub key (the card stays hidden without one); ticker: symbols in the ticker, null for all
+  // Markets: the watchlist, the indexes along the top of the card (stocks.js INDEXES), an optional
+  // Finnhub key (a stand-in when Yahoo Finance can't be reached), and what goes in the ticker:
+  // the symbols (null for all) and whether the indexes do.
+  stocks: { key: '', symbols: ['SPY', 'QQQ', 'DIA'], indexes: ['^GSPC', '^IXIC', '^DJI'], ticker: null, tickerIndexes: true },
   // Whether shipping emails count, where they're looked for (see shippingFolders; for Outlook,
   // folder ids or 'all' for the whole mailbox), whether carriers' tracking pages are read for
   // status and Amazon's order pages for what's in the box (amazon.js), and packages added by
@@ -109,9 +112,11 @@ export const DEFAULTS = {
   holidays: { choices: {} }, // holiday key -> shown or not, for the ones changed from how they start
   teams: { list: [], calendar: true, news: true, wins: true }, // teams you follow; the card stays hidden without one
   // StateJobsNY: days back (-1 yesterday only, 0 from/to), the options of the site's own search
-  // (empty for any), and rules of your own, each { field: a column on the site or 'any', op, value }.
+  // (empty for any), and rules of your own, each { field: a column on the site or 'any', op, value };
+  // whether new postings ring the card in green, and how many days before a deadline a posting
+  // you haven't reviewed shows in the search bar (0 for never).
   jobs: {
-    days: 3, from: '', to: '',
+    days: 3, from: '', to: '', glow: true, dueSoon: 7,
     search: {
       keyword: '', title: '', jclass: '', agency: '', helps: '', b55: '', internship: '',
       flex: [], categories: [], regions: [], employment: '', gradeOp: 'gt', grade: '', salary: '',

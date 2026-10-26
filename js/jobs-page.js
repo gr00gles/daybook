@@ -2,13 +2,14 @@
 // column the site lists, plus the salary and employment type from each posting's page. Search
 // it, sort it by any column, look further back, or turn your rules off and show the postings
 // you've reviewed to see everything. It uses the list the new tab keeps and fetches again only
-// when that copy is old.
+// when that copy is old. jobs.html#closing (from the search bar) starts on the postings that
+// close soon, soonest first.
 import { $, esc, updatedText, errorText } from './util.js';
 import { loadSettings } from './settings.js';
 import { icon } from './icons.js';
 import {
   loadJobs, pick, ruleCount, JOB_DAYS, whenText, postingUrl, agencyName, numberIn, shortDate, loadDetails, withDetails, ensureDetails, onDetails, salaryText,
-  REVIEWED, loadReviewed,
+  REVIEWED, loadReviewed, closing,
 } from './jobs.js';
 
 const S = await loadSettings();
@@ -18,7 +19,8 @@ $('.jp-search').insertAdjacentHTML('afterbegin', icon('search'));
 $('#jp-edit').insertAdjacentHTML('afterbegin', icon('edit'));
 
 // Like the card, the page starts without the postings you've marked as reviewed.
-const view = { q: '', days: S.jobs.days, rules: true, unreviewed: true, sort: null, dir: -1 };
+const soon = S.jobs.dueSoon > 0 ? S.jobs.dueSoon : 7;
+const view = { q: '', days: location.hash === '#closing' ? 'closing' : S.jobs.days, rules: true, unreviewed: true, sort: null, dir: -1 };
 let data = null;
 let details = {};
 let reviewed = await loadReviewed();
@@ -27,9 +29,11 @@ const rules = ruleCount(S.jobs);
 $('#jp-rules-wrap').hidden = !rules;
 $('#jp-rules-label').textContent = `Only postings that pass my ${rules === 1 ? 'rule' : `${rules} rules`}`;
 // Dates set in Settings are one more choice here.
-$('#jp-days').innerHTML = JOB_DAYS.filter(([n]) => n || view.days === 0)
+$('#jp-days').innerHTML = `${JOB_DAYS.filter(([n]) => n || S.jobs.days === 0)
   .map(([n, l]) => `<option value="${n}"${n === view.days ? ' selected' : ''}>${esc(n ? l : 'Your dates in Settings')}</option>`)
-  .join('');
+  .join('')}<option value="closing"${view.days === 'closing' ? ' selected' : ''}>Closing within ${soon === 7 ? 'a week' : `${soon} days`}</option>`;
+// The postings in view: from the days picked, or every day kept for the ones closing soon.
+const inView = (jobs, opts) => (view.days === 'closing' ? closing(jobs, S.jobs, soon, opts) : pick(jobs, { ...S.jobs, days: view.days }, opts));
 
 // The site's columns (or the ones Daybook could make out when the table had no headings), with
 // the salary and employment type from the postings' pages after the grade, once some are read.
@@ -74,10 +78,9 @@ function cell(j, c) {
 
 function paint() {
   if (!data) return;
-  const J = { ...S.jobs, days: view.days };
   const jobs = withDetails(data.jobs, details);
-  const base = pick(jobs, J, { rules: view.rules }).filter((j) => !view.unreviewed || !reviewed[j.id]);
-  const waiting = pick(jobs, J, { rules: false }).filter((j) => !j.info && !details[j.id]?.error).length;
+  const base = inView(jobs, { rules: view.rules }).filter((j) => !view.unreviewed || !reviewed[j.id]);
+  const waiting = inView(jobs, { rules: false }).filter((j) => !j.info && !details[j.id]?.error).length;
   const words = view.q.toLowerCase().split(/\s+/).filter(Boolean);
   const cols = columns();
   let shown = words.length
@@ -91,7 +94,7 @@ function paint() {
     const cmp = sorter(by, view.dir);
     shown = [...shown].sort((a, b) => cmp(a, b) || Number(b.id) - Number(a.id));
   }
-  const when = whenText(J);
+  const when = view.days === 'closing' ? `closing within ${soon === 7 ? 'a week' : `${soon} days`}` : whenText({ ...S.jobs, days: view.days });
   const kept = [view.rules && rules && 'pass your rules', view.unreviewed && 'you haven’t reviewed'].filter(Boolean);
   const passing = kept.length ? ` that ${kept.join(' and ')}` : '';
   $('#jp-status').textContent = words.length
@@ -116,14 +119,14 @@ $('#jp-q').addEventListener('input', (e) => {
   paint();
 });
 // The pages of the postings in view, read in the background; the table fills in as they come.
-const readPages = () => data && ensureDetails(pick(data.jobs, { ...S.jobs, days: view.days }, { rules: false }).map((j) => j.id));
+const readPages = () => data && ensureDetails(inView(data.jobs, { rules: false }).map((j) => j.id));
 onDetails(async () => {
   details = await loadDetails();
   paint();
 });
 
 $('#jp-days').addEventListener('change', (e) => {
-  view.days = Number(e.target.value);
+  view.days = e.target.value === 'closing' ? 'closing' : Number(e.target.value);
   paint();
   readPages();
 });

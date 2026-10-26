@@ -172,3 +172,25 @@ export function showToast(message, undo) {
   });
   toastTimer = setTimeout(hide, undo ? 7000 : 5000);
 }
+
+// A small line chart of `values` (oldest first) as inline SVG that stretches to fill its box. With
+// `times`, points sit by time, across `span` ([start, end]) when given, so today's line can stop
+// short of the closing bell; `base` draws a dashed line at that value (the previous close).
+// styles.css (.spark) colors it with the text color around it.
+export function sparkline(values, { times = null, span = null, base = null, cls = 'spark' } = {}) {
+  const pts = values.map((v, i) => [times ? times[i] : i, v]).filter(([x, v]) => Number.isFinite(x) && Number.isFinite(v));
+  if (pts.length < 2) return '';
+  const [x0, x1] = span || [pts[0][0], pts.at(-1)[0]];
+  const ys = pts.map(([, v]) => v).concat(Number.isFinite(base) ? [base] : []);
+  let lo = Math.min(...ys);
+  let hi = Math.max(...ys);
+  if (hi === lo) [lo, hi] = [lo - 1, hi + 1];
+  const W = 100;
+  const H = 30;
+  const X = (x) => (((x - x0) / (x1 - x0 || 1)) * W).toFixed(2);
+  const Y = (v) => (2 + (1 - (v - lo) / (hi - lo)) * (H - 4)).toFixed(2);
+  const line = pts.map(([x, v]) => `${X(x)},${Y(v)}`);
+  return `<svg class="${cls}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path class="spark-area" d="M${X(pts[0][0])},${H}L${line.join('L')}L${X(pts.at(-1)[0])},${H}Z"/>${
+    Number.isFinite(base) ? `<line class="spark-base" x1="0" x2="${W}" y1="${Y(base)}" y2="${Y(base)}"/>` : ''
+  }<polyline class="spark-line" points="${line.join(' ')}"/></svg>`;
+}

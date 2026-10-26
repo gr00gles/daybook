@@ -45,6 +45,7 @@ const UI = {
   copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
   grip: '<circle cx="9" cy="6" r="1.2" fill="currentColor"/><circle cx="15" cy="6" r="1.2" fill="currentColor"/><circle cx="9" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="12" r="1.2" fill="currentColor"/><circle cx="9" cy="18" r="1.2" fill="currentColor"/><circle cx="15" cy="18" r="1.2" fill="currentColor"/>',
   'chevron-down': '<path d="M6 9.5l6 6 6-6"/>',
+  'chevron-up': '<path d="M6 14.5l6-6 6 6"/>',
   'chevron-left': '<path d="M14.5 6l-6 6 6 6"/>',
   'chevron-right': '<path d="M9.5 6l6 6-6 6"/>',
   'mail-open': '<path d="M3.5 10.2L12 4.5l8.5 5.7V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M3.5 10.2l8.5 5.6 8.5-5.6"/>',
@@ -77,6 +78,17 @@ const UI = {
   game: '<path d="M7.5 7.5h9a4.5 4.5 0 0 1 4.4 5.5l-.8 3.6a2 2 0 0 1-3.4.9L14.5 15h-5l-2.2 2.5a2 2 0 0 1-3.4-.9L3.1 13a4.5 4.5 0 0 1 4.4-5.5z"/><path d="M8 10v3M6.5 11.5h3M15.5 11v.01M17.5 12.5v.01"/>',
   folder: '<path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2.2h8a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 17z"/>',
   wrench: '<path d="M14.6 6.2a4 4 0 0 0 5 5l-1.8-.2-8.6 8.6a2 2 0 0 1-2.8-2.8l8.6-8.6z"/><path d="M14.6 6.2a4.2 4.2 0 0 1 5.4-1.7l-2.8 2.8.4 2.1 2.1.4 2.8-2.8a4.2 4.2 0 0 1-1.7 5.4"/>',
+  // Ticker extras (Settings → Ticker).
+  music: '<path d="M9 18V5.5l11-2v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  rocket: '<path d="M12 15.5c-1.5-1-2.8-2.3-3.5-3.5C10 6.5 14 3.5 20.5 3.5 20.5 10 17.5 14 12 15.5z"/><path d="M8.5 12l-3.5-.5L7.5 8h4M12 15.5l.5 3.5 3.5-2.5v-4"/><circle cx="15" cy="9" r="1.4"/><path d="M6 16.5c-1.5.5-2.5 2-2.5 4 2 0 3.5-1 4-2.5"/>',
+  book: '<path d="M4.5 5.5A1.5 1.5 0 0 1 6 4h13.5v13H6a1.5 1.5 0 0 0-1.5 1.5z"/><path d="M4.5 18.5A1.5 1.5 0 0 0 6 20h13.5v-3"/><path d="M8.5 8h7"/>',
+  chip: '<rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/><path d="M9.5 3.5v3M14.5 3.5v3M9.5 17.5v3M14.5 17.5v3M3.5 9.5h3M3.5 14.5h3M17.5 9.5h3M17.5 14.5h3"/>',
+  tv: '<rect x="3" y="6.5" width="18" height="12" rx="2"/><path d="M8.5 3l3.5 3.5L15.5 3M8 21.5h8"/>',
+  coin: '<circle cx="12" cy="12" r="8.5"/><path d="M14.6 9.2c-.5-.9-1.5-1.4-2.6-1.4-1.5 0-2.6.8-2.6 2s1 1.7 2.6 2.1c1.6.4 2.6.9 2.6 2.2s-1.1 2.1-2.6 2.1c-1.2 0-2.2-.5-2.7-1.5M12 6.3v1.5M12 16.2v1.5"/>',
+  trophy: '<path d="M8 4.5h8v5a4 4 0 0 1-8 0z"/><path d="M8 6.5H5v1.5a3 3 0 0 0 3 3M16 6.5h3v1.5a3 3 0 0 1-3 3M12 13.5v3.5M8.5 20.5h7M9.5 17h5v3.5h-5z"/>',
+  wave: '<path d="M2.5 12h3l2-5 3 10 3-14 3 13 2-4h3"/>',
+  hourglass: '<path d="M6.5 3.5h11M6.5 20.5h11M7.5 3.5c0 4 4.5 5.5 4.5 8.5s-4.5 4.5-4.5 8.5M16.5 3.5c0 4-4.5 5.5-4.5 8.5s4.5 4.5 4.5 8.5"/>',
+  chart: '<path d="M3.5 19.5h17"/><path d="M5 15.5l4.5-5 3.5 3 6-7"/><path d="M15 6.5h4v4"/>',
 };
 
 // The icons offered for a group of saved sites, in the order the editor shows them.

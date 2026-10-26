@@ -297,7 +297,7 @@ svg { flex: none; }
 .flip .hol-badge { white-space: nowrap; }
 /* Every face in the bubble is the same 34px pill, so its curve runs concentric with the search
    box's (46px tall, 6px around it). */
-.flip .hol-badge, .flip .hol-badge.today, .next-up, .win-face { box-sizing: border-box; height: 34px; min-height: 0; padding-block: 0; border-radius: 999px; }
+.flip .hol-badge, .flip .hol-badge.today, .next-up, .win-face, .job-face { box-sizing: border-box; height: 34px; min-height: 0; padding-block: 0; border-radius: 999px; }
 
 /* Holidays: each wears its own color (--hol) and emblem, on a sliver of tinted glass. */
 .hol-badge {
@@ -372,6 +372,34 @@ svg { flex: none; }
 }
 @keyframes win-sheen { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .win-face.shown::after { display: none; } }
+
+/* An NYS job you haven't reviewed that closes soon (jobs.js): the title and how long is left, in
+   amber, red for today and tomorrow (--c), with an eye to mark it as reviewed. */
+.job-face {
+  --c: var(--warning);
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0 4px 0 12px;
+  white-space: nowrap;
+  text-decoration: none;
+  background: color-mix(in srgb, var(--c) 16%, var(--glass-strong));
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent), 0 0 0 1px var(--glass-rim), var(--shadow);
+  color: color-mix(in srgb, var(--c) 60%, var(--ink));
+  font-size: 13px;
+}
+.job-face.urgent { --c: var(--critical); }
+a.job-face { gap: 7px; padding-right: 14px; }
+.jf-go { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: inherit; text-decoration: none; }
+.job-face .ui-icon { width: 16px; height: 16px; flex: none; }
+.jf-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.jf-due { font-weight: 650; }
+:is(.jf-go, a.job-face):hover .jf-title { text-decoration: underline; text-underline-offset: 3px; }
+.jf-seen { display: grid; place-items: center; flex: none; width: 26px; height: 26px; margin-left: 8px; padding: 0; border: 0; border-radius: 50%; background: var(--control); color: var(--ink-2); cursor: pointer; }
+.jf-seen:hover, .jf-seen:focus-visible { background: var(--accent); color: var(--accent-ink); }
+.jf-seen .ui-icon { width: 15px; height: 15px; }
 
 /* What's next, on one line in its calendar's color (--c): the event, when (and when to leave),
    and Join. A long title is cut short to fit the search box. */
@@ -1752,13 +1780,49 @@ a.chip:hover { background: var(--fill-2); }
 /* ---- Markets ----------------------------------------------------------------- */
 
 .head-meta.open::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--good); vertical-align: 1px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
-/* Four rows, whatever it holds: up to four symbols in one column, five to eight in two side by
-   side, filled down then across. On its own the card is the four rows at their tightest, the
-   least the board gives it (js/layout.js); at the height the board sets, the rows spread out to
-   fill it, up to --tk-row each. */
-#card-stocks { --tk-min: 21px; --tk-row: 46px; }
-#card-stocks > .card-head { margin-bottom: 6px; }
-#stocks-body { min-height: calc(4 * var(--tk-min)); }
+/* The range tabs sit at the end of the head, small. */
+#card-stocks > .card-head { align-items: center; margin-bottom: 6px; }
+.mk-ranges { flex: none; gap: 1px; margin: -2px -6px -2px auto; padding: 2px; }
+.mk-ranges .tab { padding: 3px 8px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+#card-stocks .stamp:not(:empty) + .mk-ranges { margin-left: 0; }
+
+/* A small line chart (util.js sparkline), in the color of the text around it. */
+.spark { display: block; width: 100%; height: 100%; overflow: visible; }
+.spark-line { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.spark-area { fill: currentColor; opacity: .1; }
+.spark-base { stroke: currentColor; stroke-width: 1; stroke-dasharray: 2 3; opacity: .45; vector-effect: non-scaling-stroke; }
+
+/* The indexes along the top: the name small, the value and the change under it; as many to a
+   row as fit. */
+.mk-idxs { display: grid; grid-template-columns: repeat(auto-fit, minmax(122px, 1fr)); gap: 6px; margin: 0 -2px 8px; }
+.mk-idx {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0 8px;
+  padding: 6px 10px 7px;
+  border-radius: 12px;
+  background: var(--fill);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  transition: background-color .12s ease;
+}
+.mk-idx:hover { background: var(--fill-2); }
+.mk-idx-name { grid-column: 1 / -1; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-idx-val { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.mk-idx-chg { font-size: 12px; font-weight: 650; color: var(--muted); white-space: nowrap; }
+.mk-idx.up .mk-idx-chg { color: var(--good); }
+.mk-idx.down .mk-idx-chg { color: var(--critical); }
+
+/* Four rows, whatever it holds: up to four symbols in one column, each with its name, five to
+   eight in two side by side, filled down then across. On its own the card is the four rows at
+   their tightest, the least the board gives it (js/layout.js); at the height the board sets, the
+   rows spread out to fill it, up to --tk-row each. */
+#card-stocks { --tk-min: 40px; --tk-row: 56px; }
+#card-stocks:has(.tickers.two) { --tk-min: 26px; --tk-row: 46px; }
+#stocks-body { min-height: calc(4 * var(--tk-min)); container-type: inline-size; }
 .tickers {
   list-style: none; margin: 0 -10px; padding: 0; display: grid; gap: 0 8px; line-height: 18px;
   grid-template-rows: repeat(4, var(--tk-min)); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
@@ -1766,42 +1830,55 @@ a.chip:hover { background: var(--fill-2); }
 .tickers > li { display: flex; }
 .tickers > li > .tk { flex: 1; min-width: 0; padding-block: 0; }
 #card-stocks.fixed { display: grid; grid-template-rows: auto minmax(0, 1fr); }
-#card-stocks.fixed .tickers { height: 100%; grid-template-rows: repeat(4, minmax(var(--tk-min), var(--tk-row))); }
+#card-stocks.fixed > .card-body { display: flex; flex-direction: column; min-height: 0; }
+#card-stocks.fixed .tickers { flex: 1; min-height: 0; grid-template-rows: repeat(4, minmax(var(--tk-min), var(--tk-row))); }
 .tk {
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(58px, 1.15fr) minmax(40px, 1fr) auto minmax(64px, auto);
   align-items: center;
-  gap: 14px;
-  padding: 7px 10px;
+  gap: 12px;
+  padding: 4px 10px;
   border-radius: 12px;
   text-decoration: none;
   font-variant-numeric: tabular-nums;
   transition: background-color .12s ease;
 }
 .tk:hover { background: var(--fill); }
-.tk-sym { font-size: 13.5px; font-weight: 700; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; }
-.tk-range { position: relative; height: 4px; border-radius: 2px; background: var(--fill-2); }
-.tk-dot { position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--ink-2); box-shadow: 0 0 0 2px var(--surface); }
-.tk-price { font: 500 15px var(--font-body); text-align: right; }
+.tk-id { display: grid; min-width: 0; line-height: 1.25; }
+.tk-sym { font-size: 13.5px; font-weight: 700; letter-spacing: .02em; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-name { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-chart { height: min(26px, 100%); align-self: center; color: var(--muted); }
+.tk.up .tk-chart { color: var(--good); }
+.tk.down .tk-chart { color: var(--critical); }
+.tk-price { display: grid; gap: 3px; font: 500 15px var(--font-body); text-align: right; }
+/* Where the price sits in its 52-week range. */
+.tk-year { position: relative; height: 2px; border-radius: 1px; background: var(--fill-2); }
+.tk-year > span { position: absolute; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--ink-2); }
 .tk-chg { font-size: 13px; font-weight: 650; text-align: right; white-space: nowrap; color: var(--muted); }
 .tk-chg small { font-size: 12px; font-weight: 500; opacity: .85; }
 .tk.up .tk-chg { color: var(--good); }
 .tk.down .tk-chg { color: var(--critical); }
-.tk.missing { grid-template-columns: 60px minmax(0, 1fr); }
-#stocks-body { container-type: inline-size; }
+.tk.missing { grid-template-columns: minmax(58px, 1.15fr) minmax(0, 3fr); }
+.tk-none { font-size: 13px; color: var(--muted); }
+/* A narrow card keeps the symbol, the price and the change. */
 @container (max-width: 330px) {
   .tk { grid-template-columns: minmax(0, 1fr) auto auto; }
-  .tk-range { display: none; }
+  .tk-chart, .tk-year { display: none; }
 }
-/* Two columns: the symbol, the price and the day's change in percent (the change in dollars is
-   in the row's tooltip). */
-.tickers.two .tk { grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; }
-.tickers.two .tk-range, .tickers.two .tk-abs { display: none; }
-@container (max-width: 380px) {
+/* Two columns: the symbol, a small chart, the price and the day's change in percent (the change
+   in dollars and the name are in the row's tooltip). */
+.tickers.two .tk { grid-template-columns: minmax(0, 1fr) minmax(28px, 44px) auto auto; gap: 8px; }
+.tickers.two .tk-name, .tickers.two .tk-abs, .tickers.two .tk-year { display: none; }
+.tickers.two .tk-chart { height: min(18px, 100%); }
+.tickers.two .tk-price { font-size: 14px; }
+@container (max-width: 460px) {
+  .tickers.two .tk { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .tickers.two .tk-chart { display: none; }
+}
+@container (max-width: 360px) {
   .tickers.two .tk { grid-template-columns: minmax(0, 1fr) auto; }
   .tickers.two .tk-price { display: none; }
 }
-.tk-none { font-size: 13px; color: var(--muted); }
 
 /* ---- Teams ------------------------------------------------------------------- */
 
@@ -1991,6 +2068,39 @@ a.chip:hover { background: var(--fill-2); }
 .jb-list > li:hover .jb-seen, .jb-seen:focus-visible { opacity: 1; }
 @media (hover: none) { .jb-seen { opacity: 1; } }
 
+/* New postings that match (jobs.js): a green light runs around the card's edge and the card
+   glows, until you look at it. In the flip card, the flip card wears it and so does the jobs tab. "New" marks postings
+   first seen in the last day, and how many are new sits beside the title. */
+@property --aura { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+#card-jobs.jb-alert, #card-flip:has(> .flip-deck > #card-jobs.jb-alert) {
+  --aura-c: var(--good);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aura-c) 50%, transparent), 0 0 0 1px color-mix(in srgb, var(--aura-c) 35%, transparent), 0 0 20px -4px color-mix(in srgb, var(--aura-c) 50%, transparent), var(--shadow);
+  animation: aura-glow 2.6s ease-in-out infinite;
+}
+#card-jobs.jb-alert::after, #card-flip:has(> .flip-deck > #card-jobs.jb-alert)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--aura), transparent 0deg 220deg, color-mix(in srgb, var(--aura-c) 60%, transparent) 280deg, color-mix(in srgb, var(--aura-c) 55%, #fff) 330deg, var(--aura-c) 345deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: aura-spin 3.2s linear infinite;
+  pointer-events: none;
+}
+.flip-deck > #card-jobs.jb-alert { box-shadow: none; animation: none; }
+.flip-deck > #card-jobs.jb-alert::after { display: none; }
+#card-flip:has(> .flip-deck > #card-jobs.jb-alert) .flip-tabs [data-flip="jobs"] { color: var(--good); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--good) 55%, transparent); }
+@keyframes aura-spin { to { --aura: 360deg; } }
+@keyframes aura-glow {
+  50% { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aura-c) 70%, transparent), 0 0 0 2px color-mix(in srgb, var(--aura-c) 45%, transparent), 0 0 34px 2px color-mix(in srgb, var(--aura-c) 45%, transparent), var(--shadow); }
+}
+.jb-fresh { align-self: center; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--good) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--good) 35%, transparent); color: var(--good); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.jb-new { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: var(--good); color: var(--bg); font-size: 10px; font-weight: 750; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px; }
+
 /* Package tracking in Settings: the packages added by hand, and the form to add one. */
 .trk-mail { margin: 10px 0 4px; }
 /* Carrier tracking pages Daybook reads (tracking.js): in the window, so they aren't slowed down
@@ -2118,6 +2228,10 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .tkr-meta.down { color: var(--critical); font-weight: 600; }
 .tkr-meta.now { color: var(--now); font-weight: 650; }
 .tkr-quiet { padding: 0 18px; font-size: 13.5px; color: var(--muted); }
+.tkr-img { flex: none; width: 20px; height: 20px; border-radius: 5px; object-fit: cover; }
+.tkr-spark { flex: none; width: 46px; height: 16px; color: var(--muted); }
+.tkr-spark.up { color: var(--good); }
+.tkr-spark.down { color: var(--critical); }
 
 .tabs { display: flex; gap: 4px; margin: -4px 0 10px; padding-block: 2px 4px; overflow-x: auto; scrollbar-width: none; }
 .tab {
@@ -2352,7 +2466,7 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
   position: fixed;
   inset: 0 0 0 auto;
   margin: 0;
-  width: min(920px, calc(100vw / var(--zoom)));
+  width: min(980px, calc(100vw / var(--zoom)));
   height: 100%;
   max-height: 100%;
   max-width: calc(100vw / var(--zoom));
@@ -2394,12 +2508,13 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .sheet-find:focus-within { outline: 2px solid var(--accent); outline-offset: 0; }
 .sheet-find .ui-icon { width: 16px; height: 16px; flex: none; }
 .sheet-find input { flex: 1; min-width: 0; padding: 8px 0; border: 0; background: none; font-size: 14px; color: var(--ink); outline: 0; }
-.sheet-body { flex: 1; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 0 32px; align-items: start; }
+.sheet-body { flex: 1; display: grid; grid-template-columns: 214px minmax(0, 1fr); gap: 0 30px; align-items: start; }
 .sheet-nav {
   position: sticky;
   top: 69px;
   display: grid;
-  gap: 2px;
+  align-content: start;
+  gap: 1px;
   max-height: calc(calc(100vh / var(--zoom)) - 69px - 72px);
   overflow-y: auto;
   padding: 16px 0;
@@ -2421,11 +2536,70 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .sheet-nav button:hover { background: var(--fill); color: var(--ink); }
 .sheet-nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
 .sheet-nav .ui-icon { width: 18px; height: 18px; flex: none; }
+/* The list's groups, and a word on a page where it helps: a count, Off, or a dot. */
+.nav-group { margin: 14px 12px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
+.nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-n { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--fill-2); font-size: 11.5px; font-weight: 650; line-height: 18px; text-align: center; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.nav-off { font-size: 11px; font-weight: 600; color: var(--faint); }
+.nav-warn { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 22%, transparent); }
+.sheet-nav button.has-match .nav-label { color: var(--ink); font-weight: 650; }
+.sheet-nav button.has-match::before { content: ''; width: 6px; height: 6px; margin-left: -10px; margin-right: -2px; border-radius: 50%; background: var(--accent); }
 .sheet-pages { min-width: 0; padding-bottom: 8px; }
-.set-page[hidden], .set-page section[hidden] { display: none; }
-.sheet .page-title { margin: 22px 0 0; font: 600 20px var(--font-display); letter-spacing: -0.015em; }
-.sheet-pages .set-page + .set-page .page-title { margin-top: 30px; }
+.set-page[hidden], .set-page section[hidden], .set-note[hidden] { display: none; }
+.page-head { padding: 22px 0 4px; }
+.sheet .page-title { display: flex; align-items: center; gap: 10px; margin: 0; font: 600 20px var(--font-display); letter-spacing: -0.015em; }
+.sheet .page-title .ui-icon { width: 22px; height: 22px; color: var(--accent); }
+.page-about { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
+/* While searching, the pages that match follow one another, each under a line. */
+.sheet-pages .set-page:not([hidden]) ~ .set-page:not([hidden]) .page-head { margin-top: 18px; padding-top: 18px; border-top: 2px solid var(--line-2); }
+.set-note { margin: 12px 0 0; }
 .set-none { padding: 24px 0; }
+.set-count { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; }
+::highlight(set-find) { background-color: color-mix(in srgb, var(--sun) 45%, transparent); color: var(--ink); }
+/* More about a setting, folded away. */
+details.more { margin: 2px 0 0; }
+details.more > summary, .sheet details.more > summary { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--accent); cursor: pointer; list-style: none; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: ''; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; rotate: -45deg; transition: rotate .15s ease; }
+details.more[open] > summary::before { rotate: 45deg; }
+details.more[open] > summary, .sheet details.more[open] > summary { margin-bottom: 8px; }
+.bangs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-2); }
+/* Cards and ticker: a tile for each card, with where it shows and a way to its page. */
+.ov-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
+.ov-tile { display: flex; align-items: center; gap: 10px; padding: 8px 6px 8px 10px; border-radius: 14px; background: var(--fill); transition: background-color .12s ease; }
+.ov-tile:hover { background: var(--fill-2); }
+.ov-text { display: grid; flex: 1; min-width: 0; line-height: 1.3; }
+.ov-text strong { font-size: 14px; font-weight: 650; }
+.ov-status { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-tile.warn .ov-status { color: var(--warning); font-weight: 600; }
+.ov-tile.is-off .ov-text, .ov-tile.is-off .tx-icon { opacity: .55; }
+.ov-tile select { flex: none; width: 118px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--raised); font-size: 12.5px; }
+.ov-tile select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.ov-needs { margin: 0 0 12px; }
+.ov-needs ul { margin: 0; padding-left: 18px; }
+.ov-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.ov-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border: 0; border-radius: 12px; background: var(--fill); color: var(--ink-2); font: 500 13.5px var(--font-body); cursor: pointer; }
+.ov-chip:hover { background: var(--fill-2); color: var(--ink); }
+.ov-chip strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.ov-chip .ui-icon { width: 16px; height: 16px; color: var(--muted); }
+#set-overview { padding-top: 14px; }
+/* The watchlist in Settings → Markets. */
+.sym-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.sym-chip { display: inline-flex; align-items: center; gap: 2px; padding: 3px 3px 3px 12px; border-radius: 999px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); font-size: 13.5px; font-weight: 700; letter-spacing: .02em; }
+.sym-chip > span { margin-right: 4px; }
+.sym-chip button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.sym-chip button:hover { background: var(--fill-2); color: var(--ink); }
+.sym-chip .ui-icon { width: 14px; height: 14px; }
+.sym-add { align-items: end; max-width: 420px; margin-bottom: 4px; }
+.sym-add .btn { margin-bottom: 3px; }
+.sym-msg { min-height: 1em; margin: 4px 0 8px; }
+.sym-popular { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sym-popular .hint { margin: 0 4px 0 0; }
+.sym-popular .chip { cursor: pointer; }
+.sym-popular .chip .ui-icon { width: 12px; height: 12px; }
+/* A file picker that looks like a button. */
+.file-btn { position: relative; overflow: hidden; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .sheet section { padding: 20px 0; border-bottom: 1px solid var(--line-2); scroll-margin-top: 70px; }
 .sheet .set-page section:last-child { border-bottom: 0; }
 .disp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 0; border-top: 1px solid var(--line-2); }
@@ -2435,9 +2609,6 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .disp.is-off .disp-name { color: var(--muted); }
 .disp-seg { flex-wrap: wrap; width: auto; max-width: 100%; }
 .disp-seg span { padding: 5px 11px; font-size: 12.5px; white-space: nowrap; }
-.disp-go { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding: 2px 4px 2px 8px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: 500 12.5px var(--font-body); cursor: pointer; }
-.disp-go .ui-icon { width: 14px; height: 14px; }
-.disp-go:hover, .disp-go:focus-visible { background: var(--fill); color: var(--accent); }
 /* Settings → Ticker: each card's or extra's days and hours, and the extras. */
 .tw-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 0; border-top: 1px solid var(--line-2); }
 .sheet .hint + .tw-row { border-top: 0; }
@@ -2448,9 +2619,45 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .tw input[type="time"] { width: 116px; padding-block: 5px; }
 .tw-never { margin: 0; color: var(--critical); }
 .tkr-sub { margin-top: 4px; }
-.tx-head { align-items: center; }
-.tx-head .check { margin-left: auto; font-size: 13px; }
-.tx-add { margin: 4px 0 0; gap: 8px; }
+/* What's in the ticker: a row each, its settings folding out under Edit. */
+.tx-list { display: grid; gap: 6px; }
+.tx-row { border-radius: 14px; background: var(--fill); }
+.tx-row.open { background: color-mix(in srgb, var(--accent) 5%, var(--fill)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); }
+.tx-row.flash { animation: flash 1.8s ease-out; }
+.tx-head { display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 6px 8px 6px 12px; }
+.tx-icon { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 10px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--hair); color: var(--accent); }
+.tx-icon .ui-icon { width: 18px; height: 18px; }
+.tx-name { display: grid; flex: 1; min-width: 0; margin-left: 6px; line-height: 1.3; }
+.tx-name strong { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-name small { font-size: 12px; color: var(--muted); }
+.tx-edit { margin-left: 4px; }
+.tx-head .icon-btn:disabled { opacity: .3; cursor: default; }
+.tx-body { display: grid; gap: 10px; padding: 4px 14px 14px; }
+.tx-body .topics { margin-bottom: 0; }
+.tx-sub { margin: 4px 0 0; font-size: 12px; font-weight: 650; color: var(--ink-2); }
+p.tx-sub { margin: 0; }
+/* An on and off switch. */
+.switch { position: relative; display: inline-block; flex: none; width: 34px; height: 20px; cursor: pointer; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--fill-2); box-shadow: inset 0 0 0 1px var(--hair); transition: background-color .15s ease; pointer-events: none; }
+.switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--raised); box-shadow: 0 1px 2px rgb(6 10 14 / .25); transition: translate .15s ease; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { translate: 14px 0; }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The catalog: a tab for each kind, then a tile for each extra. */
+.tx-groups { margin: 0 0 12px; flex-wrap: wrap; overflow: visible; }
+.tx-groups .tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px 6px 10px; }
+.tx-groups .tab .ui-icon { width: 15px; height: 15px; }
+.tx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.tx-tile { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; border-radius: 14px; background: var(--fill); }
+.tx-tile-text { display: grid; flex: 1; min-width: 0; line-height: 1.3; }
+.tx-tile-text strong { font-size: 13.5px; font-weight: 650; }
+.tx-tile-text small { font-size: 12px; color: var(--muted); }
+.tx-tile.added .tx-icon { color: var(--muted); }
+.tx-tile .btn:disabled { opacity: .55; }
+.tx-league { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 12px; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 6%, var(--fill)); }
+.tx-league .field.inline { margin-right: 6px; }
+.tx-league select { min-width: 180px; }
 .sheet section.flash { animation: flash 1.8s ease-out; }
 @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
 .sheet h3 { margin: 0 0 10px; font: 600 17px var(--font-display); letter-spacing: -0.01em; }
@@ -2509,6 +2716,7 @@ code { font: 400 12px var(--font-mono); }
   background: var(--surface);
 }
 .sheet-foot .hint { margin: 0; }
+.sheet-foot .save-error { color: var(--critical); font-weight: 600; }
 .sheet-foot .sheet-version { margin-left: auto; color: var(--faint); }
 
 /* ---- Sign-in controls (setup screen and Settings) ----------------------------- */
@@ -2920,6 +3128,9 @@ dialog[open]::backdrop { opacity: 1; }
   .sheet-body { grid-template-columns: minmax(0, 1fr); }
   .sheet-nav { display: flex; overflow-x: auto; max-height: none; padding: 10px 0; z-index: 1; top: 108px; background: var(--surface); border-bottom: 1px solid var(--line-2); }
   .sheet-nav button { width: auto; white-space: nowrap; flex: none; }
+  .nav-group, .sheet-nav button.has-match::before { display: none; }
+  .ov-tiles, .tx-tiles { grid-template-columns: minmax(0, 1fr); }
+  .tx-head { flex-wrap: wrap; }
   .wiz-body { padding-top: 24px; }
   .wiz-actions { gap: 14px; }
   .arrange-bar { flex-wrap: wrap; justify-content: flex-end; }
