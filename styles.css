@@ -163,6 +163,11 @@ svg { flex: none; }
   position: relative;
   z-index: 3; /* the week bubble opens over the cards */
 }
+/* The ticker rises into the band's empty room (layout.js), so only what's drawn in the band
+   takes the pointer there. */
+.sky, .sky-inner, .sky-end, .now-weather, #now-weather, .nw-hours, .nw-hours li { pointer-events: none; }
+.sky-inner > :not(.sky-end), .sky-end > :not(.now-weather), .now-weather > :not(#now-weather), #now-weather > :not(.nw-hours),
+.nw-hours li > :not(.nh-pop:empty) { pointer-events: auto; }
 /* Quiet text sits straight on the backdrop up here, so it gets a little more weight. */
 .sky-inner { --muted: var(--sky-muted); }
 /* One band, side by side, so the cards start high on the page: the time and date, the search

@@ -53,6 +53,9 @@ const LEAN = [
 ];
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
+const TUCK_GAP = 6; // room kept between the band's lowest text and the ticker
+// What the band draws, down to the hours' rain chances, which hold their row even when empty.
+const DRAWN_IN_BAND = '.when, .search, .shortcuts, .nw-alert, .nw-main, .nh-time, .nw-hours .wx-icon, .nh-temp, .nh-pop:not(:empty), #now-weather > .notice, #now-weather > .btn';
 
 let layout = { v: 1, rev: REV, count: null, fit: true, cols: {}, cols4: null, widths: null, widths4: null, heights: {} };
 let arranging = false;
@@ -215,6 +218,17 @@ function lean(cards, heights, floors) {
   return heights;
 }
 
+// The band is as tall as its tallest part, the stacked toolbar at the end, which leaves empty
+// room under the clock, the search and the weather. The ticker rises into it, so showing it
+// costs the cards as little height as it can; the toolbar runs down past the strip's faded end.
+function tuckTicker() {
+  const bar = $('#ticker');
+  if (!bar || bar.hidden) return;
+  bar.style.marginTop = '';
+  const low = Math.max(...$$(DRAWN_IN_BAND).map((e) => e.getBoundingClientRect().bottom));
+  bar.style.marginTop = `${Math.min(0, Math.ceil(low + TUCK_GAP - bar.getBoundingClientRect().top))}px`;
+}
+
 function fitBoard() {
   const across = layout.fit !== false && allAcross();
   const bottom = innerHeight - FIT_BOTTOM - ($('#credits')?.offsetHeight || 0);
@@ -234,6 +248,7 @@ let fitting = 0;
 export function scheduleFit() {
   if (!fitting) fitting = requestAnimationFrame(() => {
     fitting = 0;
+    tuckTicker();
     fitBoard();
   });
 }
@@ -247,6 +262,7 @@ function watchCards() {
     scheduleFit();
   }).observe(board());
   new ResizeObserver(scheduleFit).observe($('.sky'));
+  new MutationObserver(scheduleFit).observe($('#ticker'), { attributes: true, attributeFilter: ['hidden'] });
   addEventListener('resize', scheduleFit);
   document.fonts?.ready.then(scheduleFit);
 }
