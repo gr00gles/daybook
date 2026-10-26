@@ -1,5 +1,5 @@
 import { loadSettings, saveSettings, ENGINES, outlookWebUrl } from './settings.js';
-import { $, $$, esc, colorVar, safeUrl, fmtTime, local } from './util.js';
+import { $, $$, esc, colorVar, safeUrl, fmtTime, local, showPop } from './util.js';
 import { refreshWeather, renderSun, lastWeather, todayIndex, initWeather } from './weather.js';
 import { refreshMail, initMail, renderMail } from './mail.js';
 import { refreshCalendars, renderAgenda, nextUp, allEvents, setGames } from './calendar.js';
@@ -51,8 +51,9 @@ if (skyOnPage && offBoard(S, 'weather')) {
 const newsCard = S.show.news && !offBoard(S, 'news');
 const newsTicker = onTicker(S, 'news');
 const homeLat = S.location.lat ?? (await local.get('geo'))?.lat;
-$('#refresh-btn').innerHTML = icon('refresh');
-$('#settings-btn').innerHTML = icon('gear');
+$('#menu-btn').innerHTML = icon('gear');
+$('#refresh-btn').innerHTML = `${icon('refresh')}Refresh everything`;
+$('#settings-btn').innerHTML = `${icon('gear')}Settings`;
 
 // ---- Clock, greeting, sky ----------------------------------------------------------
 
@@ -417,11 +418,31 @@ document.addEventListener('click', (e) => {
   if (opener) openSettings(S, opener.dataset.openSettings);
 });
 $('#settings-btn').addEventListener('click', () => openSettings(S));
-$('#refresh-btn').addEventListener('click', (e) => {
-  const btn = e.currentTarget;
+$('#refresh-btn').addEventListener('click', () => {
+  const btn = $('#menu-btn');
   btn.classList.add('spin');
   setTimeout(() => btn.classList.remove('spin'), 900);
   refreshAll(true);
+});
+
+// Settings, refresh and arrange share one button at the end of the band; picking one closes the
+// menu, and so does a click anywhere else or Escape.
+function toolMenu(open) {
+  if (open === !$('#tool-menu').hidden) return;
+  showPop($('#tool-menu'), open);
+  $('#menu-btn').setAttribute('aria-expanded', String(open));
+}
+$('#menu-btn').addEventListener('click', () => {
+  const open = $('#tool-menu').hidden;
+  toolMenu(open);
+  if (open) $('#tool-menu .tool-item')?.focus();
+});
+$('#tool-menu').addEventListener('click', (e) => e.target.closest('.tool-item') && toolMenu(false));
+document.addEventListener('click', (e) => !e.target.closest('.toolbar') && toolMenu(false));
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || $('#tool-menu').hidden) return;
+  toolMenu(false);
+  $('#menu-btn').focus();
 });
 
 // Where the data comes from, once, in soft text under the board.
