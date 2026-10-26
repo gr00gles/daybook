@@ -242,8 +242,8 @@ function renderCard(S, all, allData, meta) {
           : [date, g.tbd ? 'Time TBA' : fmtTime(g.start, S.clock24), g.tv].filter(Boolean).join(' · ');
     return {
       tag: t.short,
-      pair: { us: teamLogo(t), them: g.opp.logo, sep: g.home || g.neutral ? 'vs' : '@' },
-      title: `${g.opp.rank ? `#${g.opp.rank} ` : ''}${g.opp.short}`,
+      title: oppText(g),
+      plain: true,
       meta,
       tone: g.state === 'in' ? 'now' : win ? 'up' : '',
       href: g.link || teamUrl(t),

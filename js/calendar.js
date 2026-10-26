@@ -633,7 +633,7 @@ export function renderAgenda(S) {
   setTicker('today', configured ? tickerEvents(allEvents().filter((e) => e.end > now && e.start < endOfToday), (e) => (e.allDay ? 'All day' : e.start <= now ? 'Now' : fmtTime(e.start, h24))) : []);
 }
 
-// Events as ticker items, in order: `when` says when each is, a game shows its two logos.
+// Events as ticker items, in order: `when` says when each is; a team's game goes without icons.
 export const tickerEvents = (list, when) =>
   [...list]
     .sort((a, b) => a.start - b.start || b.allDay - a.allDay)
@@ -641,7 +641,7 @@ export const tickerEvents = (list, when) =>
       tag: when(e),
       title: e.title,
       color: e.game?.them ? '' : colorVar(e.color),
-      pair: e.game?.them ? { us: e.game.us, them: e.game.them, sep: e.game.away ? '@' : 'vs' } : null,
+      plain: Boolean(e.game?.them),
       event: eventKey(e),
     }));
 
