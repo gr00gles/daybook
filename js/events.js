@@ -3,7 +3,7 @@
 // the first time, each asks for permission to add events. Undo deletes it again, or puts the
 // changes back.
 import { $, esc, local, colorVar, showToast, errorText, startOfDay, addDays } from './util.js';
-import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent, unforgetEvent, editPendingEvent, shownDay } from './calendar.js';
+import { writableCalendars, calendarsChanged, addPendingEvent, removePendingEvent, forgetEvent, unforgetEvent, editPendingEvent, shownDay, outlookEventPath } from './calendar.js';
 import { calendarWrite } from './gauth.js';
 import { graph, graphWrite } from './msauth.js';
 import { msClientId } from './settings.js';
@@ -71,7 +71,7 @@ function form(v, last) {
           if (!group.length) return '';
           const opts = group
             .map((c) => {
-              const label = c.kind === 'outlook' ? `Outlook${c.detail ? ` · ${c.detail}` : ''}` : `${c.name}${c.shown ? '' : ' (not shown in Daybook)'}`;
+              const label = c.kind === 'outlook' ? `${c.name}${c.detail ? ` · ${c.detail}` : ''}` : `${c.name}${c.shown ? '' : ' (not shown in Daybook)'}`;
               return `<option value="${esc(calKey(c))}"${calKey(c) === last ? ' selected' : ''}>${esc(label)}</option>`;
             })
             .join('');
@@ -255,7 +255,10 @@ async function outlookWhen(clientId, allDay, start, end) {
   return { isAllDay: allDay, start: when(start), end: when(end) };
 }
 
-async function addOutlook(d) {
+// Adds to the Outlook calendar `cal`: the main one (id 'outlook') or one shared with you.
+const outlookEventsPath = (calId) => (calId && calId !== 'outlook' ? `/me/calendars/${encodeURIComponent(calId)}/events` : '/me/events');
+
+async function addOutlook(cal, d) {
   const clientId = msClientId(settingsRef);
   const body = {
     subject: d.title,
@@ -263,12 +266,12 @@ async function addOutlook(d) {
     location: d.location ? { displayName: d.location } : undefined,
     body: d.notes ? { contentType: 'text', content: d.notes } : undefined,
   };
-  const ev = await graphWrite(clientId, '/me/events', { body, need: 'Calendars.ReadWrite' });
+  const ev = await graphWrite(clientId, outlookEventsPath(cal.id), { body, need: 'Calendars.ReadWrite' });
   return {
     id: ev.id,
     link: ev.webLink,
     join: ev.onlineMeeting?.joinUrl || '',
-    remove: () => graphWrite(clientId, `/me/events/${encodeURIComponent(ev.id)}`, { method: 'DELETE', need: 'Calendars.ReadWrite' }),
+    remove: () => graphWrite(clientId, outlookEventPath({ calId: cal.id }, ev.id), { method: 'DELETE', need: 'Calendars.ReadWrite' }),
   };
 }
 
@@ -312,7 +315,7 @@ async function patchEvent(ev, to, from, notes) {
   if (to.location !== from.location) body.location = { displayName: to.location };
   if (notes) body.body = { contentType: notes.type || 'text', content: notes.content };
   if (when) Object.assign(body, await outlookWhen(clientId, to.allDay, to.start, to.end));
-  return graphWrite(clientId, `/me/events/${encodeURIComponent(id)}`, { method: 'PATCH', body, need: 'Calendars.ReadWrite' });
+  return graphWrite(clientId, outlookEventPath(ev, id), { method: 'PATCH', body, need: 'Calendars.ReadWrite' });
 }
 
 function saveFailed(dlg, err, what) {
@@ -359,7 +362,7 @@ async function saveEdit(dlg) {
       onChange();
     };
     show(to);
-    showToast(`Changed in ${cal.kind === 'outlook' ? 'Outlook' : cal.name}`, async () => {
+    showToast(`Changed in ${cal.name || 'Outlook'}`, async () => {
       try {
         await patchEvent(ev, from, to, notesChanged ? { content: more.raw, type: more.type } : null);
         show(from);
@@ -396,7 +399,7 @@ async function save(dlg) {
   btn.textContent = 'Adding…';
   showError('');
   try {
-    const made = cal.kind === 'google' ? await addGoogle(cal, d) : await addOutlook(d);
+    const made = cal.kind === 'google' ? await addGoogle(cal, d) : await addOutlook(cal, d);
     await local.set(LAST_KEY, calKey(cal));
     dlg.close();
     const end = d.allDay ? addDays(at(d.endDate), 1) : d.end;
@@ -407,7 +410,7 @@ async function save(dlg) {
       });
     calendarsChanged();
     onChange();
-    showToast(`Added to ${cal.kind === 'outlook' ? 'Outlook' : cal.name}`, async () => {
+    showToast(`Added to ${cal.name}`, async () => {
       try {
         await made.remove();
         removePendingEvent(`new:${made.id}`);
@@ -438,7 +441,7 @@ export async function deleteEvent(ev, more) {
   if (busy) return;
   busy = true;
   const id = ev.apiId || ev.id;
-  const cal = ev.src === 'outlook' ? 'Outlook' : ev.calName;
+  const cal = ev.calName || (ev.src === 'outlook' ? 'Outlook' : 'your calendar');
   try {
     if (ev.src === 'google') {
       const path = `/calendars/${encodeURIComponent(ev.calId)}/events/${encodeURIComponent(id)}`;
@@ -449,7 +452,7 @@ export async function deleteEvent(ev, more) {
         if (err.status !== 410) throw err;
       }
     } else {
-      await graphWrite(msClientId(settingsRef), `/me/events/${encodeURIComponent(id)}`, { method: 'DELETE', need: 'Calendars.ReadWrite' });
+      await graphWrite(msClientId(settingsRef), outlookEventPath(ev, id), { method: 'DELETE', need: 'Calendars.ReadWrite' });
     }
   } finally {
     busy = false;
@@ -477,9 +480,9 @@ export async function deleteEvent(ev, more) {
         location: (more?.location ?? ev.location) ? { displayName: more?.location ?? ev.location } : undefined,
         body: more?.raw ? { contentType: more.type || 'text', content: more.raw } : undefined,
       };
-      const made = await graphWrite(clientId, '/me/events', { body, need: 'Calendars.ReadWrite' });
-      const { color, calName, src, editable } = ev;
-      addPendingEvent({ id: `new:${made.id}`, apiId: made.id, title: ev.title, start: ev.start, end: ev.end, allDay: ev.allDay, location: body.location?.displayName || '', link: made.webLink, join: '', color, calName, src, editable });
+      const made = await graphWrite(clientId, outlookEventsPath(ev.calId), { body, need: 'Calendars.ReadWrite' });
+      const { color, calName, src, editable, calId } = ev;
+      addPendingEvent({ id: `new:${made.id}`, apiId: made.id, title: ev.title, start: ev.start, end: ev.end, allDay: ev.allDay, location: body.location?.displayName || '', link: made.webLink, join: '', color, calName, src, editable, calId });
     };
   showToast(
     `Deleted from ${cal}`,

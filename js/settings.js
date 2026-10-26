@@ -81,7 +81,7 @@ export const DEFAULTS = {
   gmail: { folders: ['inbox'], labels: '', accounts: {}, hidden: [] },
   calendars: [], // extra calendars added by iCal link
   // clientId overrides config.js; folders are Outlook folder ids, or 'inbox'.
-  outlook: { clientId: '', mail: true, calendar: true, color: 5, folders: ['inbox'] },
+  outlook: { clientId: '', mail: true, calendar: true, calendars: null, color: 5, folders: ['inbox'] }, // calendars: ids shown, null for just the main one
   news: { topics: ['top', 'us', 'technology'], custom: [] },
   // Each card or top-bar part: 'card' (on the page), 'both' (and in the ticker), 'ticker' (in the
   // ticker only), 'flip' (a card taking turns in the flip card) or 'off'. `show` below follows: a section is on while any of its parts is.

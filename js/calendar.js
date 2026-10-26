@@ -149,7 +149,50 @@ async function fetchGoogleEvents(cal, from, to) {
   return events;
 }
 
-async function fetchOutlookCalendar(clientId, from, to) {
+// Outlook's calendar colors, for calendars without a hex color of their own.
+const OUTLOOK_COLORS = {
+  lightBlue: '#4f9fe6', lightGreen: '#5fb55f', lightOrange: '#f0883e', lightGray: '#8a8f98', lightYellow: '#e0b330',
+  lightTeal: '#2fb5a8', lightPink: '#e36aa8', lightBrown: '#a87a55', lightRed: '#e05555',
+};
+
+// The calendars on the Outlook account: its own and the ones shared with it and added in Outlook.
+// The main one wears the color picked in Settings.
+export async function listOutlookCalendars(clientId, force = false) {
+  const stored = await local.get('cache:ocal-list');
+  if (stored?.v === 1 && !force && Date.now() - stored.at < 60 * 60e3) return stored.data;
+  const items = [];
+  let next = '/me/calendars?$top=100&$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner';
+  for (let page = 0; next && page < 4; page++) {
+    const data = await graph(clientId, next);
+    items.push(...(data.value || []));
+    next = data['@odata.nextLink'];
+  }
+  const data = items
+    .map((c) => ({
+      id: c.id,
+      name: c.name || 'Calendar',
+      owner: c.isDefaultCalendar ? '' : c.owner?.name || c.owner?.address || '',
+      color: c.hexColor || OUTLOOK_COLORS[c.color] || '',
+      primary: Boolean(c.isDefaultCalendar),
+      writable: Boolean(c.canEdit),
+    }))
+    .sort((a, b) => b.primary - a.primary || a.name.localeCompare(b.name));
+  await local.set('cache:ocal-list', { v: 1, at: Date.now(), data });
+  return data;
+}
+
+// The Outlook calendars ticked in Settings; just the main one until any are.
+export const shownOutlookCalendars = (S, list) =>
+  list
+    .filter((c) => (Array.isArray(S.outlook.calendars) ? S.outlook.calendars.includes(c.id) : c.primary))
+    .map((c) => ({ ...c, name: c.primary ? 'Outlook' : c.name, color: c.primary || !c.color ? S.outlook.color : c.color }));
+
+// Where an Outlook event lives in Graph: the main calendar's through /me/events, a shared
+// calendar's through that calendar.
+export const outlookEventPath = (e, id = e.apiId || e.id) =>
+  e.calId && e.calId !== 'outlook' ? `/me/calendars/${encodeURIComponent(e.calId)}/events/${encodeURIComponent(id)}` : `/me/events/${encodeURIComponent(id)}`;
+
+async function fetchOutlookCalendar(clientId, from, to, cal) {
   const q = new URLSearchParams({
     startDateTime: new Date(from).toISOString(),
     endDateTime: new Date(to).toISOString(),
@@ -158,7 +201,7 @@ async function fetchOutlookCalendar(clientId, from, to) {
     $select: 'subject,start,end,isAllDay,isCancelled,location,webLink,onlineMeeting,type,isOrganizer',
   });
   const items = [];
-  let next = `/me/calendarView?${q}`;
+  let next = `${cal.primary ? '/me' : `/me/calendars/${encodeURIComponent(cal.id)}`}/calendarView?${q}`;
   for (let page = 0; next && page < 4; page++) {
     const data = await graph(clientId, next, { Prefer: 'outlook.timezone="UTC"' });
     items.push(...(data.value || []));
@@ -182,7 +225,8 @@ async function fetchOutlookCalendar(clientId, from, to) {
         join: e.onlineMeeting?.joinUrl || '',
         link: e.webLink,
         src: 'outlook',
-        editable: e.isOrganizer !== false,
+        ...(cal.primary ? {} : { calId: cal.id }),
+        editable: (cal.primary || cal.writable) && e.isOrganizer !== false,
         recurring: e.type === 'occurrence' || e.type === 'exception',
       };
     });
@@ -236,18 +280,32 @@ export async function refreshCalendars(S, force, onChange) {
   }
   outlookOn = Boolean(msClientId(S) && S.outlook.calendar && (await local.get('ms:auth')));
   if (outlookOn) {
-    const cal = { id: 'outlook', name: 'Outlook', color: S.outlook.color };
-    wanted.add(cal.id);
+    const clientId = msClientId(S);
+    wanted.add('outlook');
     cached({
       key: 'cal:outlook',
-      sig: hash([msClientId(S), from, 'v2']),
+      sig: hash([clientId, S.outlook.calendars, S.outlook.color, from, 'v3']),
       maxAge: 5 * 60e3,
       force,
-      fetch: () => fetchOutlookCalendar(msClientId(S), from, to),
-      render: update(cal),
+      fetch: async () => {
+        const shown = shownOutlookCalendars(S, await listOutlookCalendars(clientId, force));
+        const settled = await Promise.allSettled(shown.map((cal) => fetchOutlookCalendar(clientId, from, to, cal)));
+        if (shown.length && settled.every((r) => r.status === 'rejected')) throw settled[0].reason;
+        return settled.map((r, i) => ({ cal: shown[i], events: r.status === 'fulfilled' ? r.value : [], failed: r.status === 'rejected' }));
+      },
+      render: (results, meta) => {
+        for (const id of sources.keys()) if (id.startsWith('o:')) sources.delete(id);
+        // A failed refresh shows once, on the first calendar, over the copy kept from before.
+        const list = results?.length ? results : meta.error ? [{ cal: { id: 'outlook', name: 'Outlook', color: S.outlook.color }, events: [] }] : [];
+        list.forEach(({ cal, events, failed }, i) =>
+          sources.set(`o:${cal.id}`, { cal, events, ...meta, error: failed ? new Error('couldn’t load this calendar right now') : (!i && meta.error) || null }),
+        );
+        onChange();
+      },
     });
   }
-  for (const id of sources.keys()) if (!wanted.has(id) && !(id.startsWith('g:') && wanted.has('google'))) sources.delete(id);
+  const family = (id) => (id.startsWith('g:') && wanted.has('google')) || (id.startsWith('o:') && wanted.has('outlook'));
+  for (const id of sources.keys()) if (!wanted.has(id) && !family(id)) sources.delete(id);
   onChange();
 }
 
@@ -340,8 +398,12 @@ async function fetchAllRange(S, from, to) {
   }
   for (const cal of S.calendars) if (cal.enabled && cal.url) jobs.push(fetchIcs(cal.url, from, to).then(decorate(cal)));
   if (outlookOn) {
-    const cal = { name: 'Outlook', color: S.outlook.color };
-    jobs.push(fetchOutlookCalendar(msClientId(S), from, to).then(decorate(cal)));
+    const clientId = msClientId(S);
+    jobs.push(
+      listOutlookCalendars(clientId).then((list) =>
+        Promise.allSettled(shownOutlookCalendars(S, list).map((cal) => fetchOutlookCalendar(clientId, from, to, cal).then(decorate(cal)))),
+      ),
+    );
   }
   await Promise.allSettled(jobs);
   return out;
@@ -374,7 +436,7 @@ export function ensureMonth(year, month, onLoaded) {
 }
 
 // Calendars a new event can go on: Google calendars you can edit (the ones shown here first)
-// and Outlook's main calendar, which is the one Daybook shows.
+// and the Outlook calendars shown here that you can edit, the main one first.
 export async function writableCalendars(S) {
   const list = [];
   let error = null;
@@ -389,7 +451,19 @@ export async function writableCalendars(S) {
     }
   }
   const auth = msClientId(S) && S.outlook.calendar ? await local.get('ms:auth') : null;
-  if (auth) list.push({ kind: 'outlook', id: 'outlook', name: 'Outlook', detail: auth.account || '', color: S.outlook.color, shown: true });
+  if (auth) {
+    // The main calendar takes events even when it isn't shown here.
+    let shown = null;
+    try {
+      shown = shownOutlookCalendars(S, await listOutlookCalendars(msClientId(S))).filter((c) => c.primary || c.writable);
+    } catch {
+      // Couldn't list them: just the main one.
+    }
+    const cals = shown || [];
+    if (!cals.some((c) => c.primary)) cals.unshift({ primary: true, name: 'Outlook', color: S.outlook.color, hidden: Boolean(shown) });
+    for (const c of cals)
+      list.push({ kind: 'outlook', id: c.primary ? 'outlook' : c.id, name: c.name, detail: c.primary ? auth.account || '' : c.owner, color: c.color, shown: !c.hidden });
+  }
   return { list, error };
 }
 
