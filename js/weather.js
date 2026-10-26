@@ -1,6 +1,6 @@
 // Weather from Open-Meteo (free, no key). Location comes from Chrome's geolocation or a
 // city you pick in Settings.
-import { $, esc, cached, hash, local, getJSON, fmtTime, fmtHour, errorText, showPop } from './util.js';
+import { $, esc, cached, hash, local, getJSON, fmtTime, fmtHour, errorText, showPop, zoom, rectOf } from './util.js';
 import { weatherIcon, icon } from './icons.js';
 import { setTicker } from './ticker.js';
 
@@ -414,8 +414,8 @@ function drawHourly() {
   };
   svg.addEventListener('pointerleave', hide);
   svg.addEventListener('pointermove', (ev) => {
-    const rect = svg.getBoundingClientRect();
-    const j = Math.max(0, Math.min(n - 1, Math.round((ev.clientX - rect.left - padX) / step)));
+    const rect = rectOf(svg);
+    const j = Math.max(0, Math.min(n - 1, Math.round((ev.clientX / zoom() - rect.left - padX) / step)));
     const k = idx[j];
     cross.setAttribute('x1', x(j));
     cross.setAttribute('x2', x(j));

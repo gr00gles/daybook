@@ -118,6 +118,17 @@ export const colorVar = (c) => (typeof c === 'number' ? `var(--cat-${c})` : /^#[
 // Only ordinary web links go into href attributes; feeds and calendars are outside data.
 export const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '').trim()) ? String(u).trim() : '#');
 
+// The page is drawn at --zoom (styles.css). Rectangles, pointer positions, scrolling and the
+// window's size come in screen pixels; what the page sets in styles and reads back (offsetHeight
+// and the like) is in CSS pixels. Divide screen pixels by zoom() to compare or set them.
+export const zoom = () => document.documentElement.currentCSSZoom || 1;
+// An element's rectangle in CSS pixels, from the window's top left.
+export function rectOf(el) {
+  const r = el.getBoundingClientRect();
+  const z = zoom();
+  return { top: r.top / z, bottom: r.bottom / z, left: r.left / z, right: r.right / z, width: r.width / z, height: r.height / z };
+}
+
 // Shows or hides an element with the "pop" class (styles.css, Motion), letting it animate
 // out before it gets the hidden attribute.
 const leaving = new WeakMap();
