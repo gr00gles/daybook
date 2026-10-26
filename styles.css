@@ -2092,13 +2092,13 @@ a.chip:hover { background: var(--fill-2); }
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  mask-image: linear-gradient(90deg, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 var(--radius), #000 calc(100% - var(--radius)), transparent);
   outline: none;
 }
 .tkr-strip::-webkit-scrollbar { display: none; }
 .tkr-strip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: calc(var(--tkr-h) / 2); }
 .tkr-run { display: flex; flex: none; }
-.tkr-strip.fits .tkr-run { padding-left: 20px; }
+.tkr-strip.fits .tkr-run { padding-left: var(--radius); }
 .tkr-strip.fits .tkr-run + .tkr-run { display: none; }
 .tkr-item {
   display: inline-flex;
