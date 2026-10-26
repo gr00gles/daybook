@@ -2065,8 +2065,9 @@ a.chip:hover { background: var(--fill-2); }
 
 /* ---- Headlines --------------------------------------------------------------- */
 
-/* The ticker: one strip under the top band, straight on the backdrop, its ends at the outer edges
-   of the cards, where the items fade out. It floats in the room between the band and the cards
+/* The ticker: one strip under the top band, straight on the backdrop. Its ends sit in from the
+   outer edges of the cards by their corner radius, where a card's straight top edge begins, and
+   the items fade out over the radius before them. It floats in the room between the band and the cards
    (layout.js sets its top and height). */
 .ticker {
   --tkr-h: 40px;
@@ -2086,6 +2087,7 @@ a.chip:hover { background: var(--fill-2); }
 .tkr-strip {
   flex: 1;
   min-width: 0;
+  margin-inline: var(--radius);
   display: flex;
   height: var(--tkr-h);
   align-items: center;
