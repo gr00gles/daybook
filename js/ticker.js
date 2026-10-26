@@ -39,7 +39,7 @@ export const TICKER_MODES = { card: 'Card', both: 'Card and ticker', ticker: 'Ti
 const PER_CARD = 10;
 const MAX = 60;
 const SPEED = 42; // pixels a second
-const FADE = 48; // how far in from each end of the strip items have faded in (styles.css)
+const FADE = 20; // how far in from each end of the strip items have faded in (styles.css)
 
 let settings = null;
 const sources = new Map(); // card -> its items
