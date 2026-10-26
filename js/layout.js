@@ -53,7 +53,8 @@ const LEAN = [
 ];
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 16; // room kept under the cards, plus the credits line (#credits)
-const TUCK_GAP = 6; // room kept between the band's lowest text and the ticker
+const TUCK_GAP = 4; // least room kept above and below the ticker
+const TICKER_H = [24, 40]; // the ticker's least and greatest height
 // What the band draws, down to the hours' rain chances, which hold their row even when empty.
 const DRAWN_IN_BAND = '.when, .search, .shortcuts, .nw-alert, .nw-main, .nh-time, .nw-hours .wx-icon, .nh-temp, .nh-pop:not(:empty), #now-weather > .notice, #now-weather > .btn';
 
@@ -219,14 +220,17 @@ function lean(cards, heights, floors) {
 }
 
 // The band is as tall as its tallest part, the stacked toolbar at the end, which leaves empty
-// room under the clock, the search and the weather. The ticker rises into it, so showing it
-// costs the cards as little height as it can; the toolbar runs down past the strip's faded end.
+// room between the clock, the search and the weather and the cards. The ticker floats there,
+// out of the page's flow, so it never moves or shrinks the cards: centred in the room, as tall as
+// fits up to TICKER_H. The toolbar runs down past the strip's faded end.
 function tuckTicker() {
   const bar = $('#ticker');
   if (!bar || bar.hidden) return;
-  bar.style.marginTop = '';
   const low = Math.max(...$$(DRAWN_IN_BAND).map((e) => e.getBoundingClientRect().bottom));
-  bar.style.marginTop = `${Math.min(0, Math.ceil(low + TUCK_GAP - bar.getBoundingClientRect().top))}px`;
+  const cards = board().getBoundingClientRect().top + parseFloat(getComputedStyle(board()).paddingTop);
+  const h = Math.max(TICKER_H[0], Math.min(TICKER_H[1], Math.floor(cards - low - 2 * TUCK_GAP)));
+  bar.style.setProperty('--tkr-h', `${h}px`);
+  bar.style.top = `${Math.round(scrollY + (low + cards - h) / 2)}px`;
 }
 
 function fitBoard() {
