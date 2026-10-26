@@ -2037,9 +2037,15 @@ a.chip:hover { background: var(--fill-2); }
 /* The ticker: one bar under the top band, as wide as the board, straight on the backdrop. Its
    label is the bar's rounded blue end, and the blue fades out to the right behind the strip;
    items fade out before they reach the deep blue. */
+/* It floats in the room between the band and the cards (layout.js sets its top and height). */
 .ticker {
+  --tkr-h: 40px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
   max-width: var(--page-max);
-  margin: 4px auto 0;
+  margin: 0 auto;
   padding-left: var(--gutter);
   padding-right: var(--gutter-end);
   display: flex;
@@ -2052,9 +2058,9 @@ a.chip:hover { background: var(--fill-2); }
   flex: none;
   display: grid;
   place-items: center;
-  height: 40px;
+  height: var(--tkr-h);
   padding: 0 4px 0 18px;
-  border-radius: 20px 0 0 20px;
+  border-radius: calc(var(--tkr-h) / 2) 0 0 calc(var(--tkr-h) / 2);
   background: var(--accent);
   color: var(--accent-ink);
   font-size: 11px;
@@ -2078,7 +2084,7 @@ a.chip:hover { background: var(--fill-2); }
   flex: 1;
   min-width: 0;
   display: flex;
-  height: 40px;
+  height: var(--tkr-h);
   align-items: center;
   overflow-x: auto;
   overflow-y: hidden;
