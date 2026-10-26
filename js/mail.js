@@ -3,7 +3,7 @@ import { setTicker } from './ticker.js';
 import { graph, graphWrite, msAccount, msHas } from './msauth.js';
 import { googleAccount, googleConfigured, gmailApi } from './gauth.js';
 import { GMAIL_FOLDERS, outlookWebUrl, msClientId, unreadFolders, shippingFolders } from './settings.js';
-import { icon } from './icons.js';
+import { icon, mailMark } from './icons.js';
 import { deliveriesFrom, renderDeliveries, deliveryOf, deliveryTag } from './packages.js';
 import { refreshShippingMail } from './shipmail.js';
 import { openReader, initReader } from './reader.js';
@@ -350,8 +350,8 @@ function render() {
   const openLinks = list
     .filter(([, s]) => !s.setup)
     .map(([, s]) => {
-      const who = s.kind === 'outlook' ? s.data?.email : sourceLabel(s);
-      return `<a class="foot-link" href="${esc(inboxUrl(s))}" title="Open ${s.kind === 'outlook' ? 'Outlook' : 'Gmail'}${who ? ` (${esc(who)})` : ''}"><span class="src ${s.kind}" aria-hidden="true">${s.letter}</span>${s.kind === 'outlook' ? 'Outlook' : 'Gmail'}${who ? `<span class="foot-sub">${esc(shortLabel(who))}</span>` : ''}${icon('external')}</a>`;
+      const name = s.kind === 'outlook' ? 'Outlook' : 'Gmail';
+      return `<a class="foot-link" href="${esc(inboxUrl(s))}" title="Open ${name}" aria-label="Open ${name}: ${esc(sourceLabel(s))}">${mailMark(s.kind)}${esc(sourceLabel(s))}</a>`;
     })
     .join('');
 
