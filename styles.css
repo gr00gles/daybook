@@ -2065,10 +2065,9 @@ a.chip:hover { background: var(--fill-2); }
 
 /* ---- Headlines --------------------------------------------------------------- */
 
-/* The ticker: one bar under the top band, as wide as the board, straight on the backdrop. Its
-   label is the bar's rounded blue end, and the blue fades out to the right behind the strip;
-   items fade out before they reach the deep blue. */
-/* It floats in the room between the band and the cards (layout.js sets its top and height). */
+/* The ticker: one strip under the top band, straight on the backdrop, its ends at the outer edges
+   of the cards, where the items fade out. It floats in the room between the band and the cards
+   (layout.js sets its top and height). */
 .ticker {
   --tkr-h: 40px;
   position: absolute;
@@ -2084,33 +2083,6 @@ a.chip:hover { background: var(--fill-2); }
   isolation: isolate;
 }
 .ticker[hidden] { display: none; }
-.tkr-label {
-  position: relative;
-  flex: none;
-  display: grid;
-  place-items: center;
-  height: var(--tkr-h);
-  padding: 0 4px 0 18px;
-  border-radius: calc(var(--tkr-h) / 2) 0 0 calc(var(--tkr-h) / 2);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  white-space: nowrap;
-}
-.tkr-label::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 100%;
-  z-index: -1;
-  width: 180px;
-  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, transparent) 30%, color-mix(in srgb, var(--accent) 18%, transparent) 65%, transparent);
-  pointer-events: none;
-}
 .tkr-strip {
   flex: 1;
   min-width: 0;
@@ -2120,13 +2092,13 @@ a.chip:hover { background: var(--fill-2); }
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  mask-image: linear-gradient(90deg, transparent 48px, #000 124px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent);
   outline: none;
 }
 .tkr-strip::-webkit-scrollbar { display: none; }
-.tkr-strip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 0 20px 20px 0; }
+.tkr-strip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: calc(var(--tkr-h) / 2); }
 .tkr-run { display: flex; flex: none; }
-.tkr-strip.fits .tkr-run { padding-left: 124px; }
+.tkr-strip.fits .tkr-run { padding-left: 48px; }
 .tkr-strip.fits .tkr-run + .tkr-run { display: none; }
 .tkr-item {
   display: inline-flex;
@@ -2149,8 +2121,6 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .tkr-from { display: grid; color: var(--muted); }
 .tkr-from .ui-icon { width: 14px; height: 14px; }
 .tkr-tag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
-.tkr-pair { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
-.tkr-pair img { width: 18px; height: 18px; object-fit: contain; }
 .tkr-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 .tkr-title { font-weight: 600; }
 .tkr-meta { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }

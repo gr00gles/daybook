@@ -5,8 +5,8 @@
 // or the arrow keys scroll it by hand. With reduced motion it only moves by hand.
 //
 // An item: { title, tag, meta, tone ('up', 'down' or 'now' for meta), href, newTab, event (a
-// calendar event's key, which opens its details), color (a dot before the title), pair: { us,
-// them, sep } (two logos, like a game's) }.
+// calendar event's key, which opens its details), color (a dot before the title), plain (no
+// icon: a team's game) }. With more than one card in it, the others wear their card's icon.
 import { $, esc, safeUrl } from './util.js';
 import { icon } from './icons.js';
 
@@ -39,7 +39,7 @@ export const TICKER_MODES = { card: 'Card', both: 'Card and ticker', ticker: 'Ti
 const PER_CARD = 10;
 const MAX = 60;
 const SPEED = 42; // pixels a second
-const FADE = 124; // how far in from the strip's start items have faded in (styles.css)
+const FADE = 48; // how far in from each end of the strip items have faded in (styles.css)
 
 let settings = null;
 const sources = new Map(); // card -> its items
@@ -86,11 +86,9 @@ function list() {
 
 function itemHtml(n, copy, mixed) {
   const tab = copy ? ' tabindex="-1"' : '';
-  const logo = (src) => `<img src="${esc(safeUrl(src))}" alt="" width="18" height="18" loading="lazy">`;
-  const inner = `${mixed ? `<span class="tkr-from" title="${esc(TICKER_CARDS[n.from].label)}">${icon(TICKER_CARDS[n.from].icon)}</span>` : ''}${
+  const inner = `${mixed && !n.plain ? `<span class="tkr-from" title="${esc(TICKER_CARDS[n.from].label)}">${icon(TICKER_CARDS[n.from].icon)}</span>` : ''}${
     n.tag ? `<span class="tkr-tag">${esc(n.tag)}</span>` : ''
-  }${n.pair?.us && n.pair.them ? `<span class="tkr-pair">${logo(n.pair.us)}<span>${esc(n.pair.sep || 'vs')}</span>${logo(n.pair.them)}</span>` : ''}${
-    n.color ? `<span class="tkr-dot" style="--c: ${n.color}"></span>` : ''
+  }${n.color ? `<span class="tkr-dot" style="--c: ${n.color}"></span>` : ''
   }<span class="tkr-title">${esc(n.title)}</span>${n.meta ? `<span class="tkr-meta${n.tone ? ` ${n.tone}` : ''}">${esc(n.meta)}</span>` : ''}`;
   if (n.event) return `<button type="button" class="tkr-item" data-event="${esc(n.event)}"${tab}>${inner}</button>`;
   if (n.href) return `<a class="tkr-item" href="${esc(safeUrl(n.href))}"${n.newTab ? ' target="_blank" rel="noopener"' : ''}${tab}>${inner}</a>`;
@@ -102,7 +100,6 @@ function paint() {
   const keys = shared(settings);
   const items = list();
   const strip = $('#ticker-strip');
-  $('#ticker-label').textContent = keys.length === 1 ? TICKER_CARDS[keys[0]].label : 'At a glance';
   // Two copies, so the strip can wrap around without a gap; the second is out of the tab order.
   const run = (copy) => items.map((n) => itemHtml(n, copy, keys.length > 1)).join('');
   const html = items.length
@@ -151,7 +148,7 @@ export function initTicker(S) {
     last = t;
     // Items that all fit hold still, once, clear of the fade at the start.
     const half = strip.firstElementChild?.offsetWidth || 0;
-    const fits = half + FADE <= strip.clientWidth;
+    const fits = half + 2 * FADE <= strip.clientWidth;
     if (strip.classList.contains('fits') !== fits) {
       strip.classList.toggle('fits', fits);
       pos = 0;
