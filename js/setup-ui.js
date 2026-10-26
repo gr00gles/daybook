@@ -3,7 +3,7 @@
 // `draft` (the settings being edited), calling `changed()` after every edit.
 import { esc, colorVar, getJSON } from './util.js';
 import { googleConfigured, googleAccount, connectGoogle, disconnectGoogle } from './gauth.js';
-import { listGoogleCalendars } from './calendar.js';
+import { listGoogleCalendars, listOutlookCalendars } from './calendar.js';
 import { discoverGmailAccounts, gmailAllowed, GMAIL_SIGN_IN } from './mail.js';
 import { lastShippingReport } from './shipmail.js';
 import { connect as msConnect, disconnect as msDisconnect, msAccount, adminConsentUrl, graph } from './msauth.js';
@@ -238,8 +238,9 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
         <div class="acct-row">${connected(s.account)}<button class="btn small" type="button" data-o="disconnect">Disconnect</button></div>
         <div class="row-actions">
           <label class="check"><input type="checkbox" data-o="mail"${draft.outlook.mail ? ' checked' : ''}><span>Show Outlook mail</span></label>
-          <label class="check"><input type="checkbox" data-o="calendar"${draft.outlook.calendar ? ' checked' : ''}><span>Show Outlook calendar</span></label>
+          <label class="check"><input type="checkbox" data-o="calendar"${draft.outlook.calendar ? ' checked' : ''}><span>Show Outlook calendars</span></label>
         </div>
+        ${draft.outlook.calendar ? calendarPick() : ''}
         ${draft.outlook.mail ? folderPick() : ''}`;
       return;
     }
@@ -279,6 +280,7 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
         changed('outlook');
         onConnected?.(auth);
         loadFolders();
+        loadCalendars(true);
       } catch (err) {
         if (err.code === 'needs-admin') s.adminUrl = err.adminUrl;
         else s.error = err.message || String(err);
@@ -304,7 +306,10 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
     if (k === 'mail' || k === 'calendar') {
       draft.outlook[k] = e.target.checked;
       changed('outlook');
-      if (k === 'mail') paint();
+      paint();
+    } else if (e.target.dataset.oCal) {
+      draft.outlook.calendars = [...el.querySelectorAll('[data-o-cal]')].filter((i) => i.checked).map((i) => i.dataset.oCal);
+      changed('outlook');
     } else if (e.target.dataset.oFolder) {
       draft.outlook.folders = [...el.querySelectorAll('[data-o-folder]')].filter((i) => i.checked).map((i) => i.dataset.oFolder);
       changed('outlook');
@@ -319,6 +324,23 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
       .map((f) => `<label class="check"><input type="checkbox" data-o-folder="${esc(f.id)}"${picked.includes(f.id) ? ' checked' : ''}><span>${esc(f.name)}</span>${f.unread ? `<span class="count">${f.unread} unread</span>` : ''}</label>`)
       .join('')}</fieldset>`;
   };
+  // Its own calendars and the ones shared with it (added in Outlook first); the main one until
+  // any are ticked.
+  const calendarPick = () => {
+    if (!s.calendars) return '<p class="hint">Looking for your Outlook calendars…</p>';
+    if (!s.calendars.length) return '<p class="hint">Couldn’t list your Outlook calendars; showing the main one.</p>';
+    const picked = Array.isArray(draft.outlook.calendars) ? draft.outlook.calendars : s.calendars.filter((c) => c.primary).map((c) => c.id);
+    return `<fieldset class="cal-pick"><legend>Outlook calendars to show</legend>${s.calendars
+      .map(
+        (c) =>
+          `<label class="check"><input type="checkbox" data-o-cal="${esc(c.id)}"${picked.includes(c.id) ? ' checked' : ''}><span class="cal-dot" style="--c: ${colorVar(c.primary || !c.color ? draft.outlook.color : c.color)}"></span><span>${esc(c.name)}</span>${c.owner ? `<span class="count">${esc(c.owner)}</span>` : ''}</label>`,
+      )
+      .join('')}</fieldset><p class="hint small">Calendars shared with you show up here once you’ve added them in Outlook.</p>`;
+  };
+  const loadCalendars = async (force) => {
+    s.calendars = await listOutlookCalendars(msClientId(draft), force).catch(() => []);
+    paint();
+  };
   const loadFolders = async () => {
     s.folders = await outlookFolders(msClientId(draft));
     paint();
@@ -328,7 +350,10 @@ export function mountOutlook(el, draft, changed, { onConnected } = {}) {
     s.account = await msAccount();
     s.loading = false;
     paint();
-    if (s.account) loadFolders();
+    if (s.account) {
+      loadFolders();
+      loadCalendars(true);
+    }
   })();
   paint();
 }

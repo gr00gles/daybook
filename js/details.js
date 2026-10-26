@@ -2,7 +2,7 @@
 // the time, place, video call, notes and guests, and an Edit button on calendars you can change.
 // The notes and guests are loaded when it opens, since the calendar lists leave them out.
 import { $, esc, colorVar, fmtTime, safeUrl, errorText, startOfDay, addDays } from './util.js';
-import { shownEvent, eventHref, tripLine } from './calendar.js';
+import { shownEvent, eventHref, tripLine, outlookEventPath } from './calendar.js';
 import { gapi } from './gauth.js';
 import { graph } from './msauth.js';
 import { msClientId } from './settings.js';
@@ -88,7 +88,7 @@ async function loadMore(e) {
     };
   }
   if (e.src === 'outlook') {
-    const r = await graph(msClientId(settingsRef), `/me/events/${encodeURIComponent(id)}?$select=body,location,organizer,attendees,isOrganizer`);
+    const r = await graph(msClientId(settingsRef), `${outlookEventPath(e, id)}?$select=body,location,organizer,attendees,isOrganizer`);
     const raw = r.body?.content || '';
     const type = r.body?.contentType === 'html' ? 'html' : 'text';
     return {
