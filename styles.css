@@ -1469,8 +1469,7 @@ a.chip:hover { background: var(--fill-2); }
 .foot-link { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 12.5px; font-weight: 600; text-decoration: none; }
 .foot-link:hover { color: var(--accent); }
 .foot-link .ui-icon { width: 13px; height: 13px; }
-.foot-link .src { width: 18px; height: 18px; font-size: 9.5px; }
-.foot-link .foot-sub { font-weight: 500; color: var(--muted); }
+.foot-link .mail-mark { width: 16px; height: 16px; flex: none; }
 
 /* ---- Deliveries -------------------------------------------------------------- */
 

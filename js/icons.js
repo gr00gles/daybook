@@ -93,3 +93,12 @@ const AI_MARKS = {
   gemini: `<defs><linearGradient id="gem-g" x1="3" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4285f4"/><stop offset=".55" stop-color="#9b72cb"/><stop offset="1" stop-color="#d96570"/></linearGradient></defs><path d="M12 2c.6 5.4 4.6 9.4 10 10-5.4.6-9.4 4.6-10 10-.6-5.4-4.6-9.4-10-10 5.4-.6 9.4-4.6 10-10z" fill="url(#gem-g)" stroke="none"/>`,
 };
 export const aiMark = (name) => `<svg class="ai-mark" ${ATTR}>${AI_MARKS[name]}</svg>`;
+
+// Gmail's and Outlook's marks, for the links to each inbox.
+const MAIL_MARKS = {
+  gmail:
+    '<g stroke="none"><path d="M2 6.5v11A1.5 1.5 0 0 0 3.5 19h3V9.8z" fill="#4285f4"/><path d="M17.5 19h3a1.5 1.5 0 0 0 1.5-1.5v-11l-4.5 3.3z" fill="#34a853"/><path d="M17.5 5.5v4.3L22 6.5V5.2c0-1.6-1.8-2.5-3.1-1.6z" fill="#fbbc04"/><path d="M6.5 9.8V5.5L12 9.6l5.5-4.1v4.3L12 13.9z" fill="#ea4335"/><path d="M2 5.2v1.3l4.5 3.3V5.5L5.1 4.4C3.8 3.4 2 4.3 2 5.2z" fill="#c5221f"/></g>',
+  outlook:
+    '<rect x="8" y="5" width="14" height="14" rx="2" fill="#28a8ea" stroke="none"/><path d="M13 9l4.5 3L22 9" stroke="#fff" stroke-width="1.4"/><rect x="2" y="6.5" width="11" height="11" rx="1.5" fill="#0f6cbd" stroke="none"/><ellipse cx="7.5" cy="12" rx="2.3" ry="2.9" stroke="#fff" stroke-width="1.6"/>',
+};
+export const mailMark = (name) => `<svg class="mail-mark" ${ATTR}>${MAIL_MARKS[name]}</svg>`;
