@@ -550,19 +550,20 @@ function ruler(timed, today, now, h24) {
   </div>`;
 }
 
-// The forecast at the event's place and time, and when to leave to get there.
-export function tripLine(e, state, h24) {
+// The forecast at the event's place and time, and when to leave to get there; `parts` picks
+// one or both ('wx', 'leave').
+export function tripLine(e, state, h24, parts = ['wx', 'leave']) {
   const t = state === 'past' ? null : tripInfo(e);
   if (!t) return '';
   const bits = [];
-  if (t.wx) {
+  if (t.wx && parts.includes('wx')) {
     const { label, glyph } = describe(t.wx.code, t.wx.isDay);
     const temp = Math.round(t.wx.temp);
     bits.push(
       `<span class="ev-wx" title="${esc(`${label}, ${temp}° at ${fmtTime(e.start, h24)}${t.wx.pop >= 20 ? `, ${t.wx.pop}% chance of rain` : ''}`)}">${weatherIcon(glyph)}${temp}°${t.wx.pop >= 20 ? `<span class="ev-pop">${icon('drop', 'drop')}${t.wx.pop}%</span>` : ''}</span>`,
     );
   }
-  if (t.leave && !state) {
+  if (t.leave && !state && parts.includes('leave')) {
     const { text, level } = leaveText(t.leave, (ms) => fmtTime(ms, h24));
     const how = !t.leave.traffic ? 'without traffic' : t.leave.live ? 'with current traffic' : 'with typical traffic for then';
     bits.push(`<span class="ev-leave${level ? ` ${level}` : ''}" title="${esc(`About ${t.leave.mins} min drive ${how}`)}">${icon('car')}${esc(text)}<span class="ev-drive"> · ${t.leave.mins} min</span></span>`);
@@ -570,16 +571,24 @@ export function tripLine(e, state, h24) {
   return bits.length ? `<span class="ev-extra">${bits.join('')}</span>` : '';
 }
 
+// Calendars keep a cancelled meeting as "Canceled: …" until you remove it.
+const CANCELLED = /^\s*cancell?ed(?: event)?\s*:\s*/i;
+
+// One event: its time, title (cut to a line or two, whole on hover) and place, the forecast
+// to its right and when to leave under it.
 export function timedRow(e, now, h24, { compact = false } = {}) {
   const state = e.end <= now ? 'past' : e.start <= now ? 'current' : '';
+  const cancelled = CANCELLED.test(e.title);
+  const title = cancelled ? e.title.replace(CANCELLED, '') : e.title;
   const range = compact ? fmtTime(e.start, h24) : `${fmtTime(e.start, h24)}<span class="to">${fmtTime(e.end, h24)}</span>`;
-  return `<li class="ev ${state}">
+  return `<li class="ev ${state}${cancelled ? ' cancelled' : ''}">
     <span class="ev-time">${range}</span>
     <div class="ev-main">
-      <button class="ev-title" type="button" data-event="${eventKey(e)}" aria-haspopup="dialog">${dot(e.color, e.logo)}<span>${esc(e.title)}</span></button>
+      <button class="ev-title" type="button" data-event="${eventKey(e)}" aria-haspopup="dialog" title="${esc(e.title)}">${dot(e.color, e.logo)}<span class="ev-name">${esc(title)}</span>${cancelled ? '<span class="ev-cancelled">Canceled</span>' : ''}</button>
       ${!compact && e.location && !/^https?:/.test(e.location) ? `<span class="ev-where">${esc(e.location)}</span>` : ''}
-      ${tripLine(e, state, h24)}
+      ${cancelled ? '' : tripLine(e, state, h24, ['leave'])}
     </div>
+    ${cancelled ? '' : tripLine(e, state, h24, ['wx']).replace('class="ev-extra"', 'class="ev-extra ev-side"')}
     ${state === 'current' ? '<span class="pill now-pill">Now</span>' : ''}
     ${!compact || state === 'current' ? joinButton(e) : ''}
   </li>`;
