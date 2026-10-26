@@ -299,12 +299,12 @@ function render() {
     `<button type="button" class="chip filter${filter === 'all' ? ' on' : ''}" data-mail-filter="all" aria-pressed="${filter === 'all'}">All<span class="count">${total}</span></button>`,
     ...live.map(
       ([key, s]) =>
-        `<button type="button" class="chip filter${filter === key ? ' on' : ''}" data-mail-filter="${esc(key)}" aria-pressed="${filter === key}" title="${esc(sourceLabel(s))}"><span class="src">${s.letter}</span>${esc(s.kind === 'outlook' ? 'Outlook' : shortLabel(sourceLabel(s)))}<span class="count">${s.data.unread}${s.data.capped ? '+' : ''}</span></button>`,
+        `<button type="button" class="chip filter${filter === key ? ' on' : ''}" data-mail-filter="${esc(key)}" aria-pressed="${filter === key}" title="${esc(sourceLabel(s))}"><span class="src ${s.kind}">${s.letter}</span>${esc(s.kind === 'outlook' ? 'Outlook' : shortLabel(sourceLabel(s)))}<span class="count">${s.data.unread}${s.data.capped ? '+' : ''}</span></button>`,
     ),
   ];
   const items = live
     .filter(([key]) => filter === 'all' || filter === key)
-    .flatMap(([key, s]) => s.data.items.map((m) => ({ ...m, key, letter: s.letter, account: sourceLabel(s) })))
+    .flatMap(([key, s]) => s.data.items.map((m) => ({ ...m, key, letter: s.letter, kind: s.kind, account: sourceLabel(s) })))
     .sort((a, b) => b.at - a.at)
     .slice(0, 40);
   setTicker(
@@ -327,7 +327,7 @@ function render() {
     ? `<ol class="mail-list">${items
         .map(
           (m) => `<li><a class="mail" href="${esc(safeUrl(m.url))}" data-open-key="${esc(m.key)}" data-open-id="${esc(m.id)}">
-            <span class="src" title="${esc(m.account)}">${m.letter}</span>
+            <span class="src ${m.kind}" title="${esc(m.account)}">${m.letter}</span>
             <span class="mail-from">${esc(m.from)}</span>
             <time class="mail-time" datetime="${new Date(m.at).toISOString()}">${relTime(m.at)}</time>
             <span class="mail-subject">${packages ? deliveryTag(deliveryOf(readInFull.get(m.msgId || m.id) || m)) : ''}${esc(m.subject)}</span>
@@ -349,7 +349,10 @@ function render() {
 
   const openLinks = list
     .filter(([, s]) => !s.setup)
-    .map(([, s]) => `<a class="foot-link" href="${esc(inboxUrl(s))}">${icon('external')}${esc(s.kind === 'outlook' ? 'Outlook' : shortLabel(sourceLabel(s)))}</a>`)
+    .map(([, s]) => {
+      const who = s.kind === 'outlook' ? s.data?.email : sourceLabel(s);
+      return `<a class="foot-link" href="${esc(inboxUrl(s))}" title="Open ${s.kind === 'outlook' ? 'Outlook' : 'Gmail'}${who ? ` (${esc(who)})` : ''}"><span class="src ${s.kind}" aria-hidden="true">${s.letter}</span>${s.kind === 'outlook' ? 'Outlook' : 'Gmail'}${who ? `<span class="foot-sub">${esc(shortLabel(who))}</span>` : ''}${icon('external')}</a>`;
+    })
     .join('');
 
   const signIn = gmailBlocked

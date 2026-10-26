@@ -47,6 +47,7 @@
   --sun: #e39a17;
   --temp: #ec6a35;
   --rain: #2a78d6;
+  --gmail: #c5221f; --outlook: #0f6cbd;
   --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;
   --cat-5: #e87ba4; --cat-6: #008300; --cat-7: #6250d6; --cat-8: #e34948;
   --good: #1d7a39; --warning: #8f6300; --serious: #ad3a0c; --critical: #b8232a;
@@ -87,6 +88,8 @@
     --shadow-lift: 0 2px 8px rgb(0 0 0 / .3), 0 34px 70px -30px rgb(0 0 0 / .8);
     --accent: #8db1fb; --accent-soft: rgb(141 177 251 / .16); --accent-ink: #0a0f18;
     --now: #ff7a63; --sun: #f5b84a; --temp: #f07a45; --rain: #4b95ec;
+  --gmail: #ff8a80; --outlook: #6cb8f6;
+    --gmail: #ff8a80; --outlook: #6cb8f6;
     --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
     --cat-5: #d55181; --cat-6: #2f9a2f; --cat-7: #9085e9; --cat-8: #e66767;
     --good: #55c983; --warning: #e7b13c; --serious: #f4874c; --critical: #ff7272;
@@ -1407,6 +1410,10 @@ a.chip:hover { background: var(--fill-2); }
   color: var(--ink-2);
   font: 700 10px var(--font-body);
 }
+/* Gmail and Outlook badges carry their own colour, so you can tell the two apart at a glance. */
+.src.gmail { background: color-mix(in srgb, var(--gmail) 16%, transparent); color: var(--gmail); }
+.src.outlook { background: color-mix(in srgb, var(--outlook) 16%, transparent); color: var(--outlook); }
+.chip.filter.on .src.gmail, .chip.filter.on .src.outlook { background: color-mix(in srgb, currentColor 16%, transparent); }
 .mail-list {
   list-style: none;
   margin: 0 -10px;
@@ -1462,6 +1469,8 @@ a.chip:hover { background: var(--fill-2); }
 .foot-link { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 12.5px; font-weight: 600; text-decoration: none; }
 .foot-link:hover { color: var(--accent); }
 .foot-link .ui-icon { width: 13px; height: 13px; }
+.foot-link .src { width: 18px; height: 18px; font-size: 9.5px; }
+.foot-link .foot-sub { font-weight: 500; color: var(--muted); }
 
 /* ---- Deliveries -------------------------------------------------------------- */
 
