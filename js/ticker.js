@@ -5,14 +5,16 @@
 // or the arrow keys scroll it by hand. With reduced motion it only moves by hand.
 //
 // An item: { title, tag, meta, tone ('up', 'down' or 'now' for meta), href, newTab, event (a
-// calendar event's key, which opens its details), color (a dot before the title), plain (no
-// icon: a team's game) }. With more than one card in it, the others wear their card's icon.
+// calendar event's key, which opens its details), color (a dot before the title), img (a small
+// picture before the title: album art, a coin's logo), spark (numbers, oldest first, drawn as a
+// small chart after it), plain (no icon: a team's game) }. With more than one card in it, the
+// others wear their card's icon.
 //
 // Settings → Ticker adds the rest (S.tickerOptions): when each card is in it (days of the week and
-// hours), extras that are only in the ticker (live scores, a news search, a feed, a message; see
-// ticker-extras.js), each with its own days and hours, how many items each takes per turn and
-// how fast it crawls.
-import { $, esc, safeUrl } from './util.js';
+// hours), extras that are only in the ticker (live scores, crypto, charts, launches, a feed, a
+// countdown and the rest; see ticker-extras.js), each with its own days and hours, how many items
+// each takes per turn and how fast it crawls.
+import { $, esc, safeUrl, sparkline } from './util.js';
 import { icon } from './icons.js';
 
 // Everything that can be on the page, in the ticker, both or neither, in Settings' order: its
@@ -41,12 +43,25 @@ export const TICKER_CARDS = {
 };
 export const TICKER_MODES = { card: 'Card', both: 'Card and ticker', ticker: 'Ticker only', flip: 'Flip card', off: 'Off' };
 
-// The kinds of extra, for their icon and name when they share the ticker.
+// The kinds of extra (ticker-extras.js), for their icon and name when they share the ticker.
 export const TICKER_EXTRAS = {
   scores: { label: 'Live scores', icon: 'star' },
+  sportsnews: { label: 'Sports news', icon: 'star' },
+  standings: { label: 'Standings', icon: 'trophy' },
+  golf: { label: 'Golf leaderboard', icon: 'trophy' },
+  crypto: { label: 'Crypto', icon: 'coin' },
+  fx: { label: 'Currencies', icon: 'money' },
+  charts: { label: 'Top charts', icon: 'music' },
+  hn: { label: 'Hacker News', icon: 'chip' },
+  wiki: { label: 'Wikipedia', icon: 'book' },
+  launches: { label: 'Rocket launches', icon: 'rocket' },
+  quakes: { label: 'Earthquakes', icon: 'wave' },
+  tv: { label: 'TV', icon: 'tv' },
   search: { label: 'News search', icon: 'globe' },
   feed: { label: 'Feed', icon: 'globe' },
   text: { label: 'Message', icon: 'edit' },
+  countdown: { label: 'Countdown', icon: 'hourglass' },
+  clocks: { label: 'World clocks', icon: 'clock' },
 };
 export const TICKER_SPEEDS = { slow: 26, normal: 42, fast: 64 }; // pixels a second
 
@@ -131,10 +146,13 @@ function list(keys) {
 function itemHtml(n, copy, mixed) {
   const tab = copy ? ' tabindex="-1"' : '';
   const from = sourceOf(n.from);
-  const inner = `${mixed && !n.plain ? `<span class="tkr-from" title="${esc(from.label)}">${icon(from.icon)}</span>` : ''}${
+  const inner = `${mixed && !n.plain && !n.img ? `<span class="tkr-from" title="${esc(from.label)}">${icon(from.icon)}</span>` : ''}${
     n.tag ? `<span class="tkr-tag">${esc(n.tag)}</span>` : ''
   }${n.color ? `<span class="tkr-dot" style="--c: ${n.color}"></span>` : ''
-  }<span class="tkr-title">${esc(n.title)}</span>${n.meta ? `<span class="tkr-meta${n.tone ? ` ${n.tone}` : ''}">${esc(n.meta)}</span>` : ''}`;
+  }${n.img ? `<img class="tkr-img" src="${esc(safeUrl(n.img))}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">` : ''
+  }<span class="tkr-title">${esc(n.title)}</span>${n.meta ? `<span class="tkr-meta${n.tone ? ` ${n.tone}` : ''}">${esc(n.meta)}</span>` : ''}${
+    n.spark ? `<span class="tkr-spark${n.tone ? ` ${n.tone}` : ''}">${sparkline(n.spark)}</span>` : ''
+  }`;
   if (n.event) return `<button type="button" class="tkr-item" data-event="${esc(n.event)}"${tab}>${inner}</button>`;
   if (n.href) return `<a class="tkr-item" href="${esc(safeUrl(n.href))}"${n.newTab ? ' target="_blank" rel="noopener"' : ''}${tab}>${inner}</a>`;
   return `<span class="tkr-item">${inner}</span>`;
@@ -191,6 +209,8 @@ export function initTicker(S) {
     },
     { passive: false },
   );
+  // A picture that won't load (album art, a coin's logo) leaves its item without one.
+  strip.addEventListener('error', (e) => e.target.matches?.('.tkr-img') && e.target.remove(), true);
   // Scrolled by hand: carry on from there, wrapping round past the first copy.
   strip.addEventListener('scroll', () => {
     const half = strip.firstElementChild?.offsetWidth || 0;

@@ -452,7 +452,7 @@ const credits = {
   weather: S.show.weather && 'Weather by <a href="https://open-meteo.com/">Open-Meteo.com</a>',
   alerts: S.show.alerts && 'alerts by the <a href="https://www.weather.gov/">National Weather Service</a>',
   news: S.show.news && 'headlines by <a href="https://news.google.com/">Google News</a>',
-  stocks: S.show.stocks && S.stocks.key && 'quotes by <a href="https://finnhub.io/">Finnhub</a>',
+  stocks: S.show.stocks && S.stocks.symbols.length && `quotes by <a href="https://finance.yahoo.com/">Yahoo Finance</a>${S.stocks.key ? ' and <a href="https://finnhub.io/">Finnhub</a>' : ''}`,
   teams: S.show.teams && S.teams.list.length && 'schedules by <a href="https://www.espn.com/">ESPN</a>',
   area: S.show.area && S.area.key && 'events by <a href="https://www.ticketmaster.com/">Ticketmaster</a>',
   jobs: S.show.jobs && 'vacancies from <a href="https://statejobs.ny.gov/">StateJobsNY</a>',

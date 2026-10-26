@@ -18,7 +18,12 @@ export const LEAGUES = {
   cbb: { label: 'Men’s college basketball', path: 'basketball/mens-college-basketball', hours: 2, college: 'basketball' },
   mlb: { label: 'MLB', path: 'baseball/mlb', hours: 3 },
   nhl: { label: 'NHL', path: 'hockey/nhl', hours: 2.5 },
+  wcbb: { label: 'Women’s college basketball', path: 'basketball/womens-college-basketball', hours: 2, college: 'women’s basketball' },
   mls: { label: 'MLS', path: 'soccer/usa.1', hours: 2 },
+  nwsl: { label: 'NWSL', path: 'soccer/usa.nwsl', hours: 2 },
+  epl: { label: 'Premier League', path: 'soccer/eng.1', hours: 2 },
+  laliga: { label: 'La Liga', path: 'soccer/esp.1', hours: 2 },
+  ucl: { label: 'Champions League', path: 'soccer/uefa.champions', hours: 2 },
 };
 
 export const MAX_TEAMS = 8;
@@ -26,7 +31,7 @@ export const MAX_TEAMS = 8;
 const logoOf = (t) => t?.logos?.[0]?.href || t?.logo || '';
 // ESPN's own logo files, for a team listed without one: by abbreviation in the pro leagues, by
 // id for colleges and soccer.
-const LOGO_DIRS = { nfl: 'nfl', nba: 'nba', wnba: 'wnba', mlb: 'mlb', nhl: 'nhl', cfb: 'ncaa', cbb: 'ncaa', mls: 'soccer' };
+const LOGO_DIRS = { nfl: 'nfl', nba: 'nba', wnba: 'wnba', mlb: 'mlb', nhl: 'nhl', cfb: 'ncaa', cbb: 'ncaa', wcbb: 'ncaa', mls: 'soccer', nwsl: 'soccer', epl: 'soccer', laliga: 'soccer', ucl: 'soccer' };
 function cdnLogo(league, t) {
   const dir = LOGO_DIRS[league];
   const key = dir === 'ncaa' || dir === 'soccer' ? t?.id : (t?.abbreviation || t?.abbr || '').toLowerCase();

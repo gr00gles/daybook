@@ -5,8 +5,10 @@
 // each posting's own page, which is read once per posting. Every column and detail is kept, so
 // the rules in Settings can use any field the site lists. Rules filter the list as it's drawn,
 // so changing them doesn't refetch. The card shows the newest few; jobs.html lists them all.
-// Postings marked as reviewed (the eye on each one) leave the card and the ticker.
-import { $, esc, cached, local, errorText, addDays, showToast } from './util.js';
+// Postings marked as reviewed (the eye on each one) leave the card and the ticker. A posting
+// that matches and turned up since you last looked rings the card in green, and ones you haven't
+// reviewed that close within a week take turns in the bubble at the end of the search bar.
+import { $, esc, cached, local, errorText, addDays, startOfDay, showToast } from './util.js';
 import { icon } from './icons.js';
 import { setTicker } from './ticker.js';
 
@@ -449,16 +451,31 @@ function passes(job, rule) {
   return { min: n >= limit, max: n <= limit, over: n > limit, under: n < limit }[rule.op] ?? true;
 }
 
-// The postings from the days Settings asks for, and with `rules`, only those matching every
-// option of the search and passing every rule.
-export function pick(jobs, J, { rules = true } = {}) {
-  const [from, to] = windowOf(J);
+// The postings from the days Settings asks for (every day kept, without `posted`), and with
+// `rules`, only those matching every option of the search and passing every rule.
+export function pick(jobs, J, { rules = true, posted = true } = {}) {
+  const [from, to] = posted ? windowOf(J) : ['', '9999'];
   const tests = rules ? [...searchTests(J.search), ...activeRules(J).map((r) => ({ test: (j) => passes(j, r) }))] : [];
   return jobs.filter((j) => j.posted >= from && j.posted <= to && tests.every((t) => t.test(j)));
 }
 
 // How many options and rules are narrowing the list.
 export const ruleCount = (J) => searchTests(J.search).length + activeRules(J).length;
+
+// Postings whose deadline is today or in the next `days` days, soonest first, from every day
+// kept: the search bar's reminders (and jobs.html#closing) look past the days the card shows.
+export function closing(jobs, J, days, opts) {
+  const today = isoDay(Date.now());
+  const last = isoDay(addDays(Date.now(), days));
+  return pick(jobs, J, { ...opts, posted: false })
+    .filter((j) => j.due && j.due >= today && j.due <= last)
+    .sort((a, b) => a.due.localeCompare(b.due) || b.posted.localeCompare(a.posted));
+}
+// How long until a deadline, in words: "closes today", "closes tomorrow", "5 days left".
+export function dueText(iso) {
+  const days = Math.round((dateOf(iso) - startOfDay()) / 86400e3);
+  return days <= 0 ? 'closes today' : days === 1 ? 'closes tomorrow' : `${days} days left`;
+}
 
 // The fields rules can use: the list's columns except the dates (Posted has its own setting),
 // or the usual ones before the list has loaded; then, A to Z, the details on the postings'
@@ -650,18 +667,77 @@ async function setReviewed(id, on) {
   await local.set(REVIEWED, reviewed);
 }
 
-function item(j) {
+// ---- New postings ---------------------------------------------------------------------
+// When each posting was first in the list Daybook read, kept on this computer by id; the first
+// time, every posting already there counts as old. A posting on the card that turned up after
+// you last looked at it rings the card in green (styles.css) until you do: the pointer resting
+// on the card, a click or the keyboard in it. Postings first seen in the last day wear New.
+
+const FIRST_SEEN = 'jobs:firstSeen';
+const LOOKED = 'jobs:looked';
+const NEW_FOR = 24 * 3600e3;
+let looked = 0;
+
+async function noteFirstSeen(jobs) {
+  const known = await local.get(FIRST_SEEN);
+  const now = Date.now();
+  const next = Object.fromEntries(jobs.map((j) => [j.id, known ? (known[j.id] ?? now) : 0]));
+  const same = known && Object.keys(known).length === jobs.length && jobs.every((j) => j.id in known);
+  if (!same) await local.set(FIRST_SEEN, next);
+  return next;
+}
+
+async function lookedAt() {
+  if (!$('#card-jobs').classList.contains('jb-alert')) return;
+  looked = Date.now();
+  await local.set(LOOKED, looked);
+  if (card) render();
+}
+
+// ---- Closing soon, in the search bar ----------------------------------------------------
+// Postings you haven't reviewed that pass your options and rules and close within the days set
+// in Settings (a week to start) take turns in the bubble at the end of the search box (app.js),
+// soonest first: up to three, or two and how many more. The eye marks one as reviewed.
+
+const DUE_FACES = 3;
+let paintedDue = '';
+
+function paintDue(due) {
+  const box = $('#flip');
+  if (!box) return;
+  const days = (j) => Math.round((dateOf(j.due) - startOfDay()) / 86400e3);
+  const shown = due.length > DUE_FACES ? due.slice(0, DUE_FACES - 1) : due;
+  const more = due.length - shown.length;
+  const html = [
+    ...shown.map(
+      (j) => `<span class="job-face${days(j) <= 2 ? ' urgent' : ''}" title="${esc(`NYS job, apply by ${shortDate(j.due)}: ${j.title}${j.agency ? ` (${agencyName(j.agency)})` : ''}`)}">
+        <a class="jf-go" href="${esc(postingUrl(j.id))}" target="_blank" rel="noopener">${icon('building')}<span class="jf-title">${esc(j.title)}</span><span class="jf-due">${esc(dueText(j.due))}</span></a>
+        <button class="jf-seen" type="button" data-jf-seen="${esc(j.id)}" title="Mark as reviewed" aria-label="Mark as reviewed: ${esc(j.title)}">${icon('eye')}</button>
+      </span>`,
+    ),
+    more ? `<a class="job-face" href="jobs.html#closing" title="See the postings that close soon">${icon('building')}<span class="jf-title">${more} more NYS ${more === 1 ? 'job closes' : 'jobs close'} soon</span></a>` : '',
+  ].join('');
+  // Unchanged: leave the faces be, so a refresh doesn't flip the bubble back.
+  if (html === paintedDue) return;
+  paintedDue = html;
+  for (const f of box.querySelectorAll('.job-face')) f.remove();
+  box.insertAdjacentHTML('beforeend', html);
+}
+
+// ---- The card --------------------------------------------------------------------------
+
+function item(j, fresh) {
   const where = [agencyName(j.agency), j.county].filter(Boolean).join(' · ');
   const grade = j.grade && (/^\d+$/.test(j.grade) ? `Grade ${j.grade}` : j.grade);
   const tags = [salaryText(j), j.due && `Apply by ${shortDate(j.due)}`].filter(Boolean);
-  return `<li><button class="jb-seen" type="button" data-jb-seen="${esc(j.id)}" title="Mark as reviewed" aria-label="Mark as reviewed: ${esc(j.title)}">${icon('eye')}</button><a class="jb" href="${esc(postingUrl(j.id))}" target="_blank" rel="noopener">
-    <span class="jb-title">${esc(j.title)}</span>
+  return `<li${fresh ? ' class="is-new"' : ''}><button class="jb-seen" type="button" data-jb-seen="${esc(j.id)}" title="Mark as reviewed" aria-label="Mark as reviewed: ${esc(j.title)}">${icon('eye')}</button><a class="jb" href="${esc(postingUrl(j.id))}" target="_blank" rel="noopener">
+    <span class="jb-title">${fresh ? '<span class="jb-new">New</span>' : ''}${esc(j.title)}</span>
     ${where ? `<span class="jb-meta">${esc(where)}</span>` : ''}
     ${grade || tags.length ? `<span class="jb-tags">${grade ? `<span class="jb-grade">${esc(grade)}</span>` : ''}${tags.map((t) => `<span>${esc(t)}</span>`).join('')}</span>` : ''}
   </a></li>`;
 }
 
-function list(jobs) {
+function list(jobs, fresh) {
   let html = '';
   let day = '';
   for (const j of jobs) {
@@ -670,7 +746,7 @@ function list(jobs) {
       day = j.posted;
       html += `<p class="jb-day">${esc(dayLabel(day))}</p><ol class="jb-list">`;
     }
-    html += item(j);
+    html += item(j, fresh(j));
   }
   return day ? `${html}</ol>` : html;
 }
@@ -681,6 +757,14 @@ function paintCount(n) {
   const a = $('#jobs-count');
   a.textContent = n === null ? '' : String(n);
   a.title = n === null ? '' : `See ${n === 1 ? 'the 1 posting' : `all ${n} postings`} you haven’t reviewed`;
+}
+
+// The green ring, and how many are new beside the title.
+function paintAlert(n) {
+  $('#card-jobs').classList.toggle('jb-alert', n > 0);
+  const el = $('#jobs-fresh');
+  el.hidden = !n;
+  el.textContent = n ? `${n} new` : '';
 }
 
 let card = null; // what the card last drew: { S, data, meta }
@@ -694,49 +778,69 @@ async function render() {
   if (!data) {
     setTicker('jobs', []);
     paintCount(null);
+    paintAlert(0);
     body.innerHTML = `<p class="notice warn">NYS jobs aren’t loading: ${esc(errorText(meta.error).replace(/\.$/, ''))}.</p>`;
     return;
   }
   const details = await loadDetails();
+  const seen = await noteFirstSeen(data.jobs);
   const all = withDetails(data.jobs, details);
   const matching = pick(all, J);
   const jobs = matching.filter((j) => !reviewed[j.id]);
+  const recent = (j) => seen[j.id] > 0 && Date.now() - seen[j.id] < NEW_FOR;
   // Rules about details leave out postings whose pages haven't been read.
   const note = unreadText(unread(pick(all, J, { rules: false }), data, J, details));
   paintCount(jobs.length);
+  paintAlert(J.glow !== false ? jobs.filter((j) => seen[j.id] > looked).length : 0);
+  paintDue(J.dueSoon > 0 ? closing(all, J, J.dueSoon).filter((j) => !reviewed[j.id]) : []);
   setTicker(
     'jobs',
-    jobs.map((j) => ({ tag: dayLabel(j.posted), title: j.title, meta: salaryText(j) || agencyName(j.agency), href: postingUrl(j.id), newTab: true })),
+    jobs.map((j) => ({ tag: recent(j) ? 'New' : dayLabel(j.posted), title: j.title, meta: salaryText(j) || agencyName(j.agency), tone: recent(j) ? 'up' : '', href: postingUrl(j.id), newTab: true })),
   );
   body.innerHTML = `${
     jobs.length
-      ? list(jobs.slice(0, SHOWN))
+      ? list(jobs.slice(0, SHOWN), recent)
       : matching.length
         ? `<p class="quiet${note ? '' : ' is-empty'}">You’ve reviewed every posting ${esc(whenText(J))}.</p>`
         : `<p class="quiet${note ? '' : ' is-empty'}">No new postings${rules ? ' match your rules' : ''} ${esc(whenText(J))}.</p>`
   }${note ? `<p class="quiet jb-note">${esc(note)}</p>` : ''}`;
 }
 
+async function markReviewed(id) {
+  await setReviewed(id, true);
+  await render();
+  showToast('Marked as reviewed', async () => {
+    await setReviewed(id, false);
+    render();
+  });
+}
+
 let watching = null;
 async function watch() {
   onDetails(() => card && render());
   reviewed = await loadReviewed();
+  looked = (await local.get(LOOKED)) || 0;
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes[REVIEWED]) return;
-    reviewed = changes[REVIEWED].newValue || {};
+    if (area !== 'local' || !(changes[REVIEWED] || changes[LOOKED])) return;
+    if (changes[REVIEWED]) reviewed = changes[REVIEWED].newValue || {};
+    if (changes[LOOKED]) looked = changes[LOOKED].newValue || 0;
     if (card) render();
   });
-  $('#jobs-body').addEventListener('click', async (e) => {
+  $('#jobs-body').addEventListener('click', (e) => {
     const b = e.target.closest('[data-jb-seen]');
-    if (!b) return;
-    const id = b.dataset.jbSeen;
-    await setReviewed(id, true);
-    await render();
-    showToast('Marked as reviewed', async () => {
-      await setReviewed(id, false);
-      render();
-    });
+    if (b) markReviewed(b.dataset.jbSeen);
   });
+  $('#flip')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-jf-seen]');
+    if (b) markReviewed(b.dataset.jfSeen);
+  });
+  // Looking at the card: the pointer resting on it a moment, a click, or the keyboard in it.
+  const el = $('#card-jobs');
+  let dwell;
+  el.addEventListener('pointerenter', () => (dwell = setTimeout(lookedAt, 1500)));
+  el.addEventListener('pointerleave', () => clearTimeout(dwell));
+  el.addEventListener('click', lookedAt);
+  el.addEventListener('focusin', lookedAt);
 }
 
 export async function refreshJobs(S, force = false) {
@@ -745,6 +849,8 @@ export async function refreshJobs(S, force = false) {
   loadJobs(force, (data, meta) => {
     card = { S, data, meta };
     render();
-    if (data) ensureDetails(pick(data.jobs, S.jobs, { rules: false }).map((j) => j.id));
+    // The pages of the postings the card could show, and of the ones closing soon.
+    const J = S.jobs;
+    if (data) ensureDetails([...new Set([...pick(data.jobs, J, { rules: false }), ...(J.dueSoon > 0 ? closing(data.jobs, J, J.dueSoon, { rules: false }) : [])].map((j) => j.id))]);
   });
 }
