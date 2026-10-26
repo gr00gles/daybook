@@ -64,6 +64,10 @@
   --gutter-end: max(24px, env(safe-area-inset-right, 0px));
   --page-max: 2400px;
   --radius: 18px;
+  /* The whole page is drawn at this size, as Chrome's 90% zoom drew it. Viewport units are divided
+     by it to still mean the window, and the width breakpoints below are 90% of the widths they
+     were written for. Scripts convert with zoom() (util.js). */
+  --zoom: .9;
   color-scheme: light;
 }
 :root[data-phase="dawn"] { --bd-top: #f3d4c6; --bd-bottom: #e6e9f4; --bd-a: #ffc6a3; --bd-b: #efc3da; --bd-c: #c9dcf5; }
@@ -121,12 +125,12 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { background: var(--bd-bottom); }
+html { zoom: var(--zoom); background: var(--bd-bottom); }
 body {
   position: relative;
   isolation: isolate;
   margin: 0;
-  min-height: 100vh;
+  min-height: calc(100vh / var(--zoom));
   background: var(--bd-bottom);
   color: var(--ink);
   font: 15px/1.45 var(--font-body);
@@ -216,7 +220,7 @@ svg { flex: none; }
   align-self: center;
   margin: 0 0 0 -.04em;
   font-family: var(--font-display);
-  font-size: clamp(56px, 4.4vw, 74px);
+  font-size: clamp(56px, calc(4.4vw / var(--zoom)), 74px);
   font-weight: 280;
   line-height: .92;
   letter-spacing: -0.03em;
@@ -520,7 +524,7 @@ kbd {
 .places-credit a { color: inherit; }
 .pm-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border-top: 1px solid var(--hair); }
 .pm-actions:empty { display: none; }
-@media (max-width: 640px) {
+@media (max-width: 576px) {
   .places { grid-template-columns: minmax(0, 1fr); }
   .places { grid-template-rows: auto; }
   .places-map { min-height: 240px; border-left: 0; border-top: 1px solid var(--hair); }
@@ -535,7 +539,7 @@ kbd {
   z-index: 15;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  max-height: min(62vh, 560px);
+  max-height: min(calc(62vh / var(--zoom)), 560px);
   border-radius: 22px;
   background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-lift);
@@ -544,7 +548,7 @@ kbd {
 }
 .ask[hidden] { display: none; }
 /* Without an API key the AI's own site shows in the bubble (ask.js), as tall as the window allows. */
-.ask.site { height: min(74vh, 680px); max-height: none; }
+.ask.site { height: min(calc(74vh / var(--zoom)), 680px); max-height: none; }
 .ask-site { position: relative; min-height: 0; background: var(--raised); }
 .ask-site iframe { display: block; width: 100%; height: 100%; border: 0; }
 .ask-slow { position: absolute; inset: auto 12px 12px; padding: 14px 16px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-lift); font-size: 13.5px; color: var(--ink-2); }
@@ -659,7 +663,7 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
-  max-width: min(560px, calc(100vw - 24px));
+  max-width: min(560px, calc(calc(100vw / var(--zoom)) - 24px));
   padding: 12px;
   border-radius: 26px;
   background: var(--glass-pop);
@@ -799,8 +803,8 @@ button.shortcut { border: 0; background: transparent; cursor: pointer; font: inh
   top: calc(100% + 10px);
   right: 0;
   z-index: 18;
-  width: min(440px, calc(100vw - 32px));
-  max-height: calc(100vh - 120px);
+  width: min(440px, calc(calc(100vw / var(--zoom)) - 32px));
+  max-height: calc(calc(100vh / var(--zoom)) - 120px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -2211,8 +2215,8 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 #card-today.picked #today-h { color: var(--accent); }
 .day-hols { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .event-dialog {
-  width: min(500px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
+  width: min(500px, calc(calc(100vw / var(--zoom)) - 32px));
+  max-height: calc(calc(100vh / var(--zoom)) - 48px);
   padding: 0;
   border: 0;
   border-radius: 26px;
@@ -2318,9 +2322,9 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 /* ---- Reading an email --------------------------------------------------------- */
 
 .mail-dialog {
-  width: min(860px, calc(100vw - 32px));
-  height: min(92vh, 980px);
-  max-height: calc(100vh - 32px);
+  width: min(860px, calc(calc(100vw / var(--zoom)) - 32px));
+  height: min(calc(92vh / var(--zoom)), 980px);
+  max-height: calc(calc(100vh / var(--zoom)) - 32px);
   padding: 0;
   border: 0;
   border-radius: 26px;
@@ -2354,8 +2358,8 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
 .rd-file { padding: 2px 9px; border-radius: 999px; background: var(--fill-2); border: 0; }
 .rd-file small { color: var(--muted); }
 .rd-files-note { color: var(--muted); }
-@media (max-width: 640px) {
-  .mail-dialog { width: 100vw; height: 100%; max-height: 100%; max-width: 100vw; border-radius: 0; border: 0; }
+@media (max-width: 576px) {
+  .mail-dialog { width: calc(100vw / var(--zoom)); height: 100%; max-height: 100%; max-width: calc(100vw / var(--zoom)); border-radius: 0; border: 0; }
 }
 
 /* ---- Settings sheet ---------------------------------------------------------- */
@@ -2364,10 +2368,10 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
   position: fixed;
   inset: 0 0 0 auto;
   margin: 0;
-  width: min(920px, 100vw);
+  width: min(920px, calc(100vw / var(--zoom)));
   height: 100%;
   max-height: 100%;
-  max-width: 100vw;
+  max-width: calc(100vw / var(--zoom));
   padding: 0;
   border: 0;
   background: var(--surface);
@@ -2412,7 +2416,7 @@ button.tkr-item, a.tkr-item { cursor: pointer; }
   top: 69px;
   display: grid;
   gap: 2px;
-  max-height: calc(100vh - 69px - 72px);
+  max-height: calc(calc(100vh / var(--zoom)) - 69px - 72px);
   overflow-y: auto;
   padding: 16px 0;
 }
@@ -2578,7 +2582,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
   display: flex;
   align-items: center;
   gap: 14px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(calc(100vw / var(--zoom)) - 32px);
   padding: 8px 8px 8px 18px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 86%, transparent);
@@ -2597,7 +2601,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
   display: flex;
   align-items: center;
   gap: 14px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(calc(100vw / var(--zoom)) - 32px);
   padding: 8px 8px 8px 18px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 86%, transparent);
@@ -2660,7 +2664,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
 .wiz-steps li.current .wiz-n { background: var(--ink); color: var(--surface); box-shadow: none; }
 .wiz-steps li.done .wiz-n { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
 .wiz-body { padding-block: 36px 24px; min-width: 0; }
-.wiz-title { margin: 0 0 12px; font: 300 clamp(36px, 6vw, 58px)/1.04 var(--font-display); letter-spacing: -0.04em; text-wrap: balance; }
+.wiz-title { margin: 0 0 12px; font: 300 clamp(36px, calc(6vw / var(--zoom)), 58px)/1.04 var(--font-display); letter-spacing: -0.04em; text-wrap: balance; }
 .wiz-lede { margin: 0 0 22px; max-width: 34em; font-size: 18px; line-height: 1.5; color: var(--ink-2); }
 .wiz-list { margin: 0 0 20px; padding-left: 20px; font-size: 16px; }
 .wiz-list li { margin: 6px 0; }
@@ -2796,7 +2800,7 @@ button.foot-link { border: 0; background: none; padding: 0; cursor: pointer; fon
   align-items: center;
   gap: 10px;
   width: max-content;
-  max-width: calc(100vw - 32px);
+  max-width: calc(calc(100vw / var(--zoom)) - 32px);
   padding: 8px 8px 8px 18px;
   border-radius: 22px;
   background: color-mix(in srgb, var(--ink) 86%, transparent);
@@ -2879,24 +2883,24 @@ dialog[open]::backdrop { opacity: 1; }
 /* ---- Narrower windows -------------------------------------------------------- */
 
 /* Without room beside the conditions, the next hours are in the week bubble only. */
-@media (max-width: 1440px) {
+@media (max-width: 1296px) {
   .nw-hours { display: none; }
   .sky-inner { column-gap: 28px; }
   .engine { padding-inline: 7px; }
 }
-@media (max-width: 1260px) {
+@media (max-width: 1134px) {
   .board, .board[data-cols="4"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .col-out { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .board[data-cols="4"] .col-out { grid-column: auto; grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 1180px) {
+@media (max-width: 1062px) {
   .sky-inner {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "when end" "finder finder";
   }
   .finder { max-width: 760px; width: 100%; justify-self: center; }
 }
-@media (max-width: 780px) {
+@media (max-width: 702px) {
   :root { --gutter: max(16px, env(safe-area-inset-left, 0px)); --gutter-end: max(16px, env(safe-area-inset-right, 0px)); }
   .sky-inner { grid-template-columns: minmax(0, 1fr); grid-template-areas: "when" "end" "finder"; gap: 16px; }
   .sky-end { justify-self: stretch; }
@@ -2935,7 +2939,7 @@ dialog[open]::backdrop { opacity: 1; }
 /* ---- Companies page ------------------------------------------------------------- */
 
 /* The same backdrop as the new tab (body::before), so no background of its own. */
-.co-body { min-height: 100vh; }
+.co-body { min-height: calc(100vh / var(--zoom)); }
 .co-top {
   max-width: 1320px;
   margin: 0 auto;
@@ -3027,7 +3031,7 @@ dialog[open]::backdrop { opacity: 1; }
 .co-empty .btn { display: inline-flex; align-items: center; gap: 5px; }
 .co-empty-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 22px; background: color-mix(in srgb, var(--accent) 12%, var(--glass-strong)); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow); color: var(--accent); }
 .co-empty-icon .ui-icon { width: 30px; height: 30px; }
-@media (max-width: 900px) {
+@media (max-width: 810px) {
   .co-layout, .co-grid { grid-template-columns: minmax(0, 1fr); }
   .co-side { position: static; }
 }

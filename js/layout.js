@@ -15,7 +15,7 @@
 // Unread and Teams, and NYS jobs and Today, in one column share their room by how much mail or
 // how many postings there are (see LEAN).
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
-import { $, $$, esc, showPop } from './util.js';
+import { $, $$, esc, showPop, zoom, rectOf } from './util.js';
 import { icon } from './icons.js';
 import { loadSettings, saveSettings, defaultBoard } from './settings.js';
 
@@ -76,11 +76,11 @@ const shown = (card) => !card.hidden && card.offsetParent !== null;
 // True while the board shows every column side by side: the lines between them can be
 // dragged, and the columns fit the window.
 const allAcross = () => {
-  const cols = columns().map((c) => c.getBoundingClientRect());
+  const cols = columns().map(rectOf);
   return cols.length === count && cols.every((r, i) => i === 0 || (Math.abs(r.top - cols[0].top) < 2 && cols[i - 1].right < r.left));
 };
 const widthsKey = () => (count === 4 ? 'widths4' : 'widths');
-const wantedCount = () => layout.count || (innerWidth >= AUTO_FOUR ? 4 : 3);
+const wantedCount = () => layout.count || (innerWidth / zoom() >= AUTO_FOUR ? 4 : 3);
 
 async function save() {
   layout[count === 4 ? 'cols4' : 'cols'] = Object.fromEntries(columns().map((col) => [colKey(col), cardsIn(col).map((c) => c.id)]));
@@ -230,7 +230,7 @@ function baseline(el) {
   const probe = document.createElement('span');
   probe.style.cssText = 'display: inline-block; width: 0; height: 0; vertical-align: baseline;';
   el.append(probe);
-  const y = probe.getBoundingClientRect().top;
+  const y = rectOf(probe).top;
   probe.remove();
   return y;
 }
@@ -240,21 +240,21 @@ function tuckTicker() {
   const shown = (e) => e.getClientRects().length > 0;
   const low = Math.max(
     ...$$(TEXT_IN_BAND).filter(shown).map(baseline),
-    ...$$(DRAWN_IN_BAND).filter(shown).map((e) => e.getBoundingClientRect().bottom),
+    ...$$(DRAWN_IN_BAND).filter(shown).map((e) => rectOf(e).bottom),
   );
-  const cards = board().getBoundingClientRect().top + parseFloat(getComputedStyle(board()).paddingTop);
+  const cards = rectOf(board()).top + parseFloat(getComputedStyle(board()).paddingTop);
   const h = Math.max(TICKER_H[0], Math.min(TICKER_H[1], Math.floor(cards - low - 2 * TUCK_GAP)));
   bar.style.setProperty('--tkr-h', `${h}px`);
-  bar.style.top = `${Math.round(scrollY + (low + cards - h) / 2)}px`;
+  bar.style.top = `${Math.round(scrollY / zoom() + (low + cards - h) / 2)}px`;
 }
 
 function fitBoard() {
   const across = layout.fit !== false && allAcross();
-  const bottom = innerHeight - FIT_BOTTOM - ($('#credits')?.offsetHeight || 0);
+  const bottom = innerHeight / zoom() - FIT_BOTTOM - ($('#credits')?.offsetHeight || 0);
   for (const col of columns()) {
     const cards = cardsIn(col).filter(shown);
     cardsIn(col).forEach(release);
-    const top = col.getBoundingClientRect().top + scrollY;
+    const top = rectOf(col).top + scrollY / zoom();
     const floors = new Map(cards.map((c) => [c, floorOf(c)]));
     const heights = lean(cards, across ? split(col, cards, bottom - top, floors) : cards.map((c) => layout.heights[c.id] || Math.max(share(c) * UNIT, floors.get(c))), floors);
     cards.forEach((card, i) => fix(card, heights[i]));
@@ -341,13 +341,13 @@ function follow(e, onMove, onEnd) {
 function dropSpot(x, y, dragged) {
   const cols = columns().filter((c) => c.offsetParent !== null);
   const under = cols.filter((c) => {
-    const r = c.getBoundingClientRect();
+    const r = rectOf(c);
     return x >= r.left && x <= r.right;
   });
-  let col = under.filter((c) => c.getBoundingClientRect().top <= y).at(-1) || under[0];
+  let col = under.filter((c) => rectOf(c).top <= y).at(-1) || under[0];
   if (!col) {
     col = cols.reduce((best, c) => {
-      const r = c.getBoundingClientRect();
+      const r = rectOf(c);
       const d = Math.min(Math.abs(x - r.left), Math.abs(x - r.right));
       return !best || d < best.d ? { c, d } : best;
     }, null)?.c;
@@ -355,7 +355,7 @@ function dropSpot(x, y, dragged) {
   if (!col) return null;
   const before = cardsIn(col).find((c) => {
     if (c === dragged || !shown(c)) return false;
-    const r = c.getBoundingClientRect();
+    const r = rectOf(c);
     return y < r.top + r.height / 2;
   });
   return { col, before: before || null };
@@ -373,7 +373,7 @@ function startMove(e, card) {
   follow(
     e,
     (ev) => {
-      const spot = dropSpot(ev.clientX, ev.clientY, card);
+      const spot = dropSpot(ev.clientX / zoom(), ev.clientY / zoom(), card);
       if (spot && moveTo(card, spot)) moved = true;
     },
     () => {
@@ -414,11 +414,11 @@ function keyMove(e, card) {
 // ---- Heights -------------------------------------------------------------------------
 
 function startResize(e, card) {
-  const top = card.getBoundingClientRect().top;
+  const top = rectOf(card).top;
   follow(
     e,
     (ev) => {
-      layout.heights[card.id] = Math.max(MIN_HEIGHT, Math.round(ev.clientY - top));
+      layout.heights[card.id] = Math.max(MIN_HEIGHT, Math.round(ev.clientY / zoom() - top));
       fitBoard();
     },
     () => {
@@ -444,8 +444,8 @@ function placeGutters() {
     for (const g of gutters) g.hidden = true;
     return;
   }
-  const br = b.getBoundingClientRect();
-  const cols = columns().map((c) => c.getBoundingClientRect());
+  const br = rectOf(b);
+  const cols = columns().map(rectOf);
   gutters.forEach((g, i) => {
     g.hidden = i >= cols.length - 1;
     if (!g.hidden) g.style.left = `${(cols[i].right + cols[i + 1].left) / 2 - br.left}px`;
@@ -454,16 +454,16 @@ function placeGutters() {
 
 function startWiden(e, i) {
   const g = e.currentTarget;
-  const rects = columns().map((c) => c.getBoundingClientRect());
+  const rects = columns().map(rectOf);
   const total = (layout[widthsKey()] || DEFAULT_WIDTHS[count]).reduce((a, b) => a + b, 0);
   const span = rects.reduce((a, r) => a + r.width, 0);
-  const start = e.clientX;
+  const start = e.clientX / zoom();
   const base = rects.map((r) => (r.width / span) * total);
   g.classList.add('dragging');
   follow(
     e,
     (ev) => {
-      const d = ((ev.clientX - start) / span) * total;
+      const d = ((ev.clientX / zoom() - start) / span) * total;
       const w = [...base];
       const pair = base[i] + base[i + 1];
       w[i] = Math.min(pair - MIN_WIDTH, Math.max(MIN_WIDTH, base[i] + d));

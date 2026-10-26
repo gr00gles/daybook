@@ -1,7 +1,7 @@
 // Groups of saved sites in the shortcuts row, like folders on a bookmarks bar: hover over a
 // group's icon (or click it) and its sites pop out as bubbles. Groups are kept in Chrome sync
 // under `siteGroups` and edited on the page. A Companies group lists your company pages.
-import { $, $$, esc, showToast } from './util.js';
+import { $, $$, esc, showToast, zoom, rectOf } from './util.js';
 import { icon, GROUP_ICONS, hasIcon } from './icons.js';
 import { listCompanies, domainOf, webUrl, logoUrl } from './companies-store.js';
 
@@ -91,13 +91,14 @@ let openTimer;
 let closeTimer;
 
 function place(tile) {
-  const r = tile.getBoundingClientRect();
-  pop.style.left = `${r.left + r.width / 2 + scrollX}px`;
-  pop.style.top = `${r.bottom + scrollY + 4}px`;
+  const r = rectOf(tile);
+  const z = zoom();
+  pop.style.left = `${r.left + r.width / 2 + scrollX / z}px`;
+  pop.style.top = `${r.bottom + scrollY / z + 4}px`;
   // Keep the row on screen.
   const w = pop.offsetWidth;
-  const left = Math.min(Math.max(r.left + r.width / 2 - w / 2, 12), innerWidth - w - 12);
-  pop.style.left = `${left + scrollX}px`;
+  const left = Math.min(Math.max(r.left + r.width / 2 - w / 2, 12), innerWidth / z - w - 12);
+  pop.style.left = `${left + scrollX / z}px`;
 }
 
 function open(tile, { focus = false } = {}) {
