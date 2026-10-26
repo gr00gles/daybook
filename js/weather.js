@@ -198,7 +198,6 @@ function renderNow(d) {
         <span class="nw-meta">H ${round(d.daily.temperature_2m_max[i])}° · L ${round(d.daily.temperature_2m_min[i])}° · Feels ${round(c.apparent_temperature)}°</span>
         <span class="nw-place">${icon('pin')}${esc(d.place)}${rain >= 10 ? `<span class="nw-rain">${icon('drop', 'drop')}${rain}%</span>` : ''}</span>
       </span>
-      <span class="nw-more" aria-hidden="true">${icon('chevron-down')}</span>
     </button>
     <ol class="nw-hours" aria-label="Next hours">${hours.join('')}</ol>`;
   renderSun();
