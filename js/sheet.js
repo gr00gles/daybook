@@ -16,6 +16,7 @@ import { AREA_KINDS } from './area.js';
 import { mountJobs } from './jobs.js';
 import { TICKER_CARDS, tickerMode, tickerModes } from './ticker.js';
 import { mountTracking } from './tracking.js';
+import { mountTicker } from './ticker-settings.js';
 
 let draft;
 let aiDraft;
@@ -23,6 +24,7 @@ let dirty = false;
 let saveTimer;
 let page = 'display'; // the page shown, kept between openings
 let query = '';
+let tickerPage; // the Ticker page, repainted when shown since other pages change what it lists
 
 const COLORS = [1, 2, 3, 4, 5, 6, 7, 8];
 const COLOR_NAMES = ['Blue', 'Orange', 'Aqua', 'Yellow', 'Magenta', 'Green', 'Violet', 'Red'];
@@ -37,6 +39,7 @@ function colorSelect(attrs, current) {
 
 const PAGES = {
   display: { label: 'Cards and ticker', icon: 'eye' },
+  ticker: { label: 'Ticker', icon: 'ticker' },
   flip: { label: 'Flip card', icon: 'refresh' },
   general: { label: 'General', icon: 'gear' },
   accounts: { label: 'Accounts', icon: 'person' },
@@ -80,7 +83,7 @@ function overview() {
   const keys = Object.keys(TICKER_CARDS);
   const group = (board) => keys.filter((k) => TICKER_CARDS[k].board === board).map((k) => display(k, 'all')).join('');
   return `<section id="set-ticker">
-    <p class="hint">Pick where each part of Daybook shows: on the page, in the ticker, both, in the flip card (see <button class="linklike" type="button" data-goto="flip">Flip card</button>), or not at all. The ticker is a bar under the top band that crawls through the latest from everything you put in it, taking turns. Hover over it to hold it still, scroll it to look along it, and click anything to open it. <strong>Options</strong> opens that part’s own settings.</p>
+    <p class="hint">Pick where each part of Daybook shows: on the page, in the ticker, both, in the flip card (see <button class="linklike" type="button" data-goto="flip">Flip card</button>), or not at all. The ticker is a bar under the top band that crawls through the latest from everything you put in it, taking turns. Hover over it to hold it still, scroll it to look along it, and click anything to open it. <strong>Options</strong> opens that part’s own settings. <button class="linklike" type="button" data-goto="ticker">Ticker</button> has the rest: days and hours for each, which teams, headlines and stocks go in, and extras such as live scores.</p>
   </section>
   <section id="set-sections">
     <h3>Top bar</h3>
@@ -121,6 +124,10 @@ function build() {
   <div class="set-page" data-page="display"${pageAttr('display')}>
     <h2 class="page-title">${PAGES.display.label}</h2>
 ${overview()}
+  </div>
+  <div class="set-page" data-page="ticker"${pageAttr('ticker')}>
+    <h2 class="page-title">${PAGES.ticker.label}</h2>
+    <div id="sheet-ticker"></div>
   </div>
   <div class="set-page" data-page="flip"${pageAttr('flip')}>
     <h2 class="page-title">${PAGES.flip.label}</h2>
@@ -420,6 +427,7 @@ function mountAll() {
   mountOutlook($('#sheet-outlook'), draft, queueSave);
   mountLocation($('#sheet-location'), draft, queueSave);
   mountTeams($('#sheet-teams'), draft, queueSave);
+  tickerPage = mountTicker($('#sheet-ticker'), draft, queueSave);
   mountJobs($('#sheet-jobs'), draft, queueSave);
   mountTracking($('#sheet-tracking'), draft, queueSave);
   mountShippingFolders($('#sheet-ship-folders'), draft, queueSave);
@@ -457,6 +465,7 @@ function rerender() {
 function showPage(id) {
   page = PAGES[id] ? id : 'display';
   query = '';
+  if (page === 'ticker') tickerPage?.paint();
   const q = $('#set-q');
   if (q) q.value = '';
   for (const el of $$('#settings .set-page')) el.hidden = el.dataset.page !== page;
@@ -479,6 +488,7 @@ function find(text) {
   if (!query) return showPage(page);
   const q = query.toLowerCase();
   let any = false;
+  tickerPage?.paint();
   for (const p of $$('#settings .set-page')) {
     const whole = PAGES[p.dataset.page].label.toLowerCase().includes(q);
     let shown = 0;
@@ -510,7 +520,7 @@ function wire(dlg) {
   wired = true;
   const onEdit = (e) => {
     const el = e.target;
-    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-jobs, #sheet-tracking, #sheet-ship-folders')) return;
+    if (el.closest('#sheet-google, #sheet-gmail, #sheet-outlook, #sheet-location, #sheet-teams, #sheet-ticker, #sheet-jobs, #sheet-tracking, #sheet-ship-folders')) return;
     if (el.id === 'set-q') return find(el.value);
     if (el.dataset.flipPick) {
       // Unticked, a card goes back to its own spot on the board.
@@ -595,7 +605,11 @@ function wire(dlg) {
   dlg.addEventListener('submit', async (e) => {
     e.preventDefault();
     // Calendar and feed links on other hosts need Chrome's OK; this click counts as the gesture.
-    const origins = [...new Set(extraOrigins([...draft.calendars.map((c) => c.url), ...draft.news.custom.map((f) => f.url)].filter(Boolean)))];
+    const origins = [...new Set(extraOrigins([
+      ...draft.calendars.map((c) => c.url),
+      ...draft.news.custom.map((f) => f.url),
+      ...(draft.tickerOptions?.extras || []).filter((x) => x.kind === 'feed').map((x) => x.url),
+    ].filter(Boolean)))];
     if (origins.length) {
       try {
         const has = await chrome.permissions.contains({ origins });

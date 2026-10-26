@@ -79,7 +79,7 @@ function renderTabs() {
 }
 
 // The topics picked in Settings, then any feeds added there.
-const feedList = (S) => [
+export const feedList = (S) => [
   ...S.news.topics.filter((t) => NEWS_TOPICS[t]).map((t) => ({ id: t, ...NEWS_TOPICS[t] })),
   ...S.news.custom.filter((f) => f.url).map((f, i) => ({ id: `custom${i}`, label: f.label || 'Feed', short: f.label || 'Feed', url: f.url })),
 ];
@@ -135,8 +135,9 @@ function tickerList() {
   return out;
 }
 
+// Settings → Ticker can leave some of the card's feeds out (news.ticker: the feed ids in it).
 export function refreshTicker(S, force) {
-  tickerFeeds = feedList(S);
+  tickerFeeds = feedList(S).filter((f) => !Array.isArray(S.news.ticker) || S.news.ticker.includes(f.id));
   if (!tickerFeeds.length) setTicker('news', []);
   for (const feed of tickerFeeds) {
     cached({
