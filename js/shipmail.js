@@ -98,11 +98,11 @@ function trackingLinks(doc) {
 
 const NOT_PRODUCT = /logo|icon|pixel|spacer|blank|beacon|track|open\.|\/o\.gif|badge|social|facebook|twitter|instagram|pinterest|tiktok|youtube|linkedin|app[-_ ]?store|google[-_ ]?play|banner|header|footer|divider|rating|stars?\b|arrow|button|btn|signature|qr|completed|pending|progress|status|marketing|hero|promo|confirm|deliver|truck|survey/i;
 
-// The picture in an email that looks most like the product: not a logo, a tracking pixel, a
-// social button, a banner or a progress bar.
-export function pictureIn(doc, title = '') {
+// The pictures in an email that look like products, in order, with how much: not a logo, a
+// tracking pixel, a social button, a banner or a progress bar.
+function productPictures(doc, title = '') {
   const words = new Set(title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3));
-  let best = null;
+  const out = [];
   for (const img of doc.querySelectorAll('img')) {
     let src = (img.getAttribute('src') || '').trim();
     // Gmail shows email pictures through its own copier, with the original after the #.
@@ -120,10 +120,13 @@ export function pictureIn(doc, title = '') {
     if (/product|item|catalog|sku|cdn\.shopify|scene7|\/is\/image\/|etsystatic|walmartimages|ebayimg|bbystatic/i.test(src)) score += 2;
     if (w >= 64 && h >= 64) score += 1;
     // Big alone isn't enough: stores' emails are full of big pictures that aren't the product.
-    if (score >= 2 && (!best || score > best.score)) best = { src, score };
+    if (score >= 2) out.push({ src, score });
   }
-  return best?.src || '';
+  return out;
 }
+
+// Of those, the one that looks most like the product.
+const bestPicture = (pics) => pics.reduce((best, p) => (!best || p.score > best.score ? p : best), null)?.src || '';
 
 // A product page: Amazon's /dp/ and /gp/product/, and the /products/, /ip/, /p/ and /itm/ of
 // other stores.
@@ -150,10 +153,20 @@ export function itemsIn(doc) {
   return out.slice(0, 8);
 }
 
-// One email with its HTML, as packages.js reads it.
+// One email with its HTML, as packages.js reads it. Its product pictures in order (pictures) let
+// packages.js tell whose picture is whose when only some of the items are shipped.
 export function fromHtml(m, html) {
   const { text, doc } = htmlText(html);
-  return { ...m, body: text.slice(0, BODY_CHARS), links: trackingLinks(doc), picture: pictureIn(doc, m.subject), items: itemsIn(doc), full: true };
+  const pics = productPictures(doc, m.subject);
+  return {
+    ...m,
+    body: text.slice(0, BODY_CHARS),
+    links: trackingLinks(doc),
+    picture: bestPicture(pics),
+    pictures: pics.slice(0, 20).map((p) => p.src),
+    items: itemsIn(doc),
+    full: true,
+  };
 }
 
 // One Gmail account's shipping emails, through its own page.

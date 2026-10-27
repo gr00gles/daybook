@@ -111,13 +111,14 @@ function dayIn(text, sent) {
 
 // The day an email says the package is due: the first date after a label like "Estimated
 // delivery", "Arriving" or "ETA", on the same line or the two after it. Other dates in an
-// email (when it was ordered, a sale ending) aren't about the delivery.
+// email (when it was ordered, a sale ending) aren't about the delivery, and neither are the
+// lines about what's picked up at the store (atStore; see pickupLines).
 const ETA = /\b(?:(?:estimated|expected|scheduled|anticipated|projected|new|updated|guaranteed)\s+(?:delivery|arrival)|eta\b|arriving|arrives|arrival date|delivery (?:date|by|on|window|estimate)|deliver(?:s|ed)? (?:by|on)|get it (?:by|on)|will arrive|should arrive)/i;
-function etaIn(body, sent) {
+function etaIn(body, sent, atStore) {
   const lines = body.split('\n');
   for (let i = 0; i < Math.min(lines.length, 400); i++) {
     const m = lines[i].match(ETA);
-    if (!m) continue;
+    if (!m || atStore?.[i]) continue;
     for (const part of [lines[i].slice(m.index + m[0].length), lines[i + 1], lines[i + 2]]) {
       const t = dayIn(part, sent);
       if (t != null) return t;
@@ -198,20 +199,56 @@ function forwarded(body) {
 // "Order #: WK12345678", "Order # 112-1234567-1234567": a number, not the next word.
 const ORDER = /\border\s*(?:#|number|no\.?|id)\s*:?\s*#?\s*((?=[A-Z-]*\d)[A-Z0-9][A-Z0-9-]{4,30})/i;
 
-// What's in the box: in a store's email, the line above each "Qty", "SKU" or "Item #", once each.
+// What's in the box: in a store's email, the line above each "Qty", "SKU" or "Item #", once each,
+// with the number of its line.
 const ITEM_NEXT = /^(?:qty|quantity|sku|item\s*(?:#|no\.?|number)|model\s*(?:#|no\.?|number)|unit price)\b/i;
 const NOT_ITEM = /^(?:order|ship|deliver|track|status|total|subtotal|tax|arriv|qty|quantity|sku|item\s*#|model|price|view|manage|return|sold by|size|colou?r)\b|\$\s?\d|@/i;
 const isItem = (l) => l.length >= 12 && l.length <= 200 && /[a-z]{3}\S*\s+\S*[a-z]{3}/i.test(l) && !NOT_ITEM.test(l) && !STEP.test(l);
-function itemsInText(body) {
-  const lines = body.split('\n');
+function itemLines(lines) {
   const out = [];
   lines.forEach((l, at) => {
     if (!at || !ITEM_NEXT.test(l)) return;
-    const item = lines.slice(Math.max(0, at - 3), at).reverse().find(isItem);
-    if (item && !out.includes(item)) out.push(item);
+    const back = lines.slice(Math.max(0, at - 3), at).reverse().findIndex(isItem);
+    const line = at - 1 - back;
+    if (back >= 0 && !out.some((x) => x.name === lines[line])) out.push({ line, name: lines[line] });
   });
-  return out.slice(0, 8);
+  return out;
 }
+
+// Store pickup: a store's order can be part picked up at the store and part shipped (Lowe's
+// lists some items under "Customer Pickup Location" and the rest under "Shipping Details"), and
+// what's picked up isn't a delivery. Each item's own line says which ("Estimated Pickup Date:
+// Oct. 27", "Estimated Delivery Date: Nov. 3"); failing that, the heading of the part it's in.
+const PICKUP = /\bpick[-\s]?up\b|\bcurbside\b/i;
+const PICKUP_HEAD = /^(?:(?:customer|store|in[-\s]?store|curbside)\s+)?pick[-\s]?up(?:\s+(?:in[-\s]?store|at (?:the )?store|location|details|items?|info(?:rmation)?|address|store))?\s*:?$|^(?:items? (?:for|to) pick[-\s]?up|ready for pick[-\s]?up)\s*:?$/i;
+const SHIP_HEAD = /^(?:shipping|delivery|ship to(?: home)?|home delivery|truck delivery)(?:\s+(?:details|address|info(?:rmation)?|items?|method))?\s*:?$|^items? (?:shipping|being shipped|for delivery)\s*:?$/i;
+// An item's own line gives a day or says it's ready: "Pickup" alone could be an offer ("Free store
+// pickup on your next order").
+const PICKUP_LINE = /\bpick[-\s]?up (?:date|by|on|after|time|window)\b|\bready for pick[-\s]?up\b/i;
+const SHIP_LINE = /\b(?:deliver(?:y|ed|s)?|ship(?:s|ped|ping)?|arriv(?:al|es|ing))\b/i;
+
+// For each line of an email listing items (itemLines), whether it's about what's picked up at the
+// store; null when none of the items are.
+function pickupLines(lines, items) {
+  if (!items.length || !lines.some((l) => PICKUP.test(l))) return null;
+  let atStore = false;
+  const out = lines.map((l) => (atStore = PICKUP_HEAD.test(l) || (atStore && !SHIP_HEAD.test(l))));
+  // An item's lines run to the next item or heading.
+  items.forEach(({ line }, k) => {
+    const end = Math.min(items[k + 1]?.line ?? lines.length, line + 10);
+    for (let i = line + 1; i < end && !PICKUP_HEAD.test(lines[i]) && !SHIP_HEAD.test(lines[i]); i++) {
+      const own = PICKUP_LINE.test(lines[i]) ? true : SHIP_LINE.test(lines[i]) ? false : null;
+      if (own == null) continue;
+      out.fill(own, line, i + 1);
+      break;
+    }
+  });
+  return items.some(({ line }) => out[line]) ? out : null;
+}
+
+// A store's word that an order is ready to pick up isn't news about a delivery; a carrier's is
+// (a package waiting at the post office or a UPS Access Point).
+const PICKUP_READY = /\bready (?:for|to) (?:be )?pick(?:ed)?[-\s]?up\b|\bavailable for (?:store |curbside |in[-\s]?store )?pick[-\s]?up\b|\bpick[-\s]?up reminder\b/i;
 
 const short = (s, n = 70) => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
 
@@ -258,6 +295,15 @@ function readMail(m) {
   if (fwdFrom) ({ subject, from, fromAddr } = { subject: subject.replace(/^(?:(?:fwd?|fw)\s*:\s*)+/i, ''), from: fwdFrom[1] || fwdFrom[2], fromAddr: fwdFrom[2] });
   // Bounced email, but not a carrier's own "undeliverable" notice about a package.
   if (BOUNCE_FROM.test(from) || (BOUNCE_SUBJECT.test(subject) && !SENDERS.some(([, re]) => re.test(from)))) return null;
+  const sender = SENDERS.find(([, re]) => re.test(`${from} ${subject}`))?.[0] || '';
+  if (PICKUP_READY.test(subject) && !sender && !CARRIER_DOMAINS.has(domainOf(fromAddr))) return null;
+  // What a store's email lists, and which of it is picked up at the store: an order that's all
+  // picked up isn't coming.
+  const lines = body.split('\n');
+  const listed = itemLines(lines);
+  const atStore = pickupLines(lines, listed);
+  if (atStore && listed.every(({ line }) => atStore[line])) return null;
+  const pickedUp = new Set(listed.filter(({ line }) => atStore?.[line]).map(({ name }) => name.toLowerCase()));
   const lead = body ? leadOf(body) : (m.snippet || '').replace(STEPS, ' ');
   const context = `${from} ${subject} ${lead}`;
   const upTop = numberIn(`${subject} ${lead}`.toUpperCase(), context);
@@ -272,13 +318,15 @@ function readMail(m) {
       ? fromLead
       : fromSubject || fromLead;
   const coming = !status || status.state === 'transit' || status.state === 'soon';
-  const eta = body && coming && status?.day == null ? etaIn(body, at) : null;
+  const eta = body && coming && status?.day == null ? etaIn(body, at, atStore) : null;
   if (!status && eta != null && (found || about)) status = { state: 'transit' };
   // A distinctive number deep in an ad doesn't make it a shipping email.
   const strong = found && !found.plain && (upTop || !PROMO.test(subject));
   if (!strong && (!(status || found) || !ABOUT_ORDER.test(`${subject} ${found ? lead : ''}`) || PROMO.test(subject))) return null;
-  const sender = SENDERS.find(([, re]) => re.test(`${from} ${subject}`))?.[0] || '';
-  const items = m.items?.length ? m.items : body ? itemsInText(body) : [];
+  const items = (m.items?.length ? m.items : listed.map(({ name }) => name)).filter((i) => !pickedUp.has(i.toLowerCase())).slice(0, 8);
+  // Part of it is picked up: the first shipped item's picture, when the email has a picture an item
+  // (in the same order), since the best-looking one may be of something picked up.
+  const picture = atStore ? (m.pictures?.length === listed.length && m.pictures[listed.findIndex(({ line }) => !atStore[line])]) || '' : m.picture || '';
   // "1 item: Pants": how many are in this box, of everything in the order.
   const count = Number(`${subject}\n${body || m.snippet || ''}`.match(/\b(\d{1,2})\s+items?\s*:/i)?.[1]) || 0;
   const title = titleOf(subject, from, itemsText(items) || (body ? shipperIn(body) : ''));
@@ -301,7 +349,7 @@ function readMail(m) {
     items,
     count,
     at,
-    picture: m.picture || '',
+    picture,
     full: Boolean(m.full),
     mailUrl: safeUrl(m.url),
   };
