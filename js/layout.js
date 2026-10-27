@@ -12,8 +12,8 @@
 // window and its cards split it by SHARE (see split); otherwise each card is its SHARE times
 // UNIT tall. A height set by dragging overrides either. A card with more than fits drops whole
 // items (emails, games, events, list rows) from the end, never a scroll bar. The exception:
-// Unread and Teams, and NYS jobs and Today, in one column share their room by how much mail or
-// how many postings there are (see LEAN).
+// Unread and Teams, NYS jobs and Today, and Deliveries and the flip card, in one column share
+// their room by how much mail, how many postings or how many packages there are (see LEAN).
 // Cards a saved layout doesn't name (a card added in a later version) keep their default spot.
 import { $, $$, esc, showPop, zoom, rectOf } from './util.js';
 import { icon } from './icons.js';
@@ -46,10 +46,12 @@ const KEEP = { 'card-jobs': 2, 'card-deliveries': 4, 'card-teams': 2 };
 // the second the rest, neither cut below its floor. Teams grows as the mail goes down, taking
 // all but one line when there's none.
 // With `cap`, the first takes no more than the split gave it: NYS jobs gives Today the room its
-// postings don't need, but never takes any of Today's.
+// postings don't need, but never takes any of Today's, and Deliveries the flip card the room its
+// packages don't.
 const LEAN = [
   ['card-mail', 'card-teams'],
   ['card-jobs', 'card-today', { cap: true }],
+  ['card-deliveries', 'card-flip', { cap: true }],
 ];
 const UNIT = 150; // pixels a share is worth when the cards don't fit the window
 const FIT_BOTTOM = 6; // room kept under the cards (the board's bottom padding), plus the credits line (#credits)
