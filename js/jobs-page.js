@@ -32,7 +32,7 @@ $('#jp-rules-label').textContent = `Only postings that pass my ${rules === 1 ? '
 $('#jp-days').innerHTML = `${JOB_DAYS.filter(([n]) => n || S.jobs.days === 0)
   .map(([n, l]) => `<option value="${n}"${n === view.days ? ' selected' : ''}>${esc(n ? l : 'Your dates in Settings')}</option>`)
   .join('')}<option value="closing"${view.days === 'closing' ? ' selected' : ''}>Closing within ${soon === 7 ? 'a week' : `${soon} days`}</option>`;
-// The postings in view: from the days picked, or every day kept for the ones closing soon.
+// The postings in view: from the days picked, or the card's days for the ones closing soon.
 const inView = (jobs, opts) => (view.days === 'closing' ? closing(jobs, S.jobs, soon, opts) : pick(jobs, { ...S.jobs, days: view.days }, opts));
 
 // The site's columns (or the ones Daybook could make out when the table had no headings), with

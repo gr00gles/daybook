@@ -462,12 +462,12 @@ export function pick(jobs, J, { rules = true, posted = true } = {}) {
 // How many options and rules are narrowing the list.
 export const ruleCount = (J) => searchTests(J.search).length + activeRules(J).length;
 
-// Postings whose deadline is today or in the next `days` days, soonest first, from every day
-// kept: the search bar's reminders (and jobs.html#closing) look past the days the card shows.
+// Postings whose deadline is today or in the next `days` days, soonest first, from the days
+// the card shows: the search bar's reminders (and jobs.html#closing) follow the same filters.
 export function closing(jobs, J, days, opts) {
   const today = isoDay(Date.now());
   const last = isoDay(addDays(Date.now(), days));
-  return pick(jobs, J, { ...opts, posted: false })
+  return pick(jobs, J, opts)
     .filter((j) => j.due && j.due >= today && j.due <= last)
     .sort((a, b) => a.due.localeCompare(b.due) || b.posted.localeCompare(a.posted));
 }
@@ -695,9 +695,10 @@ async function lookedAt() {
 }
 
 // ---- Closing soon, in the search bar ----------------------------------------------------
-// Postings you haven't reviewed that pass your options and rules and close within the days set
-// in Settings (a week to start) take turns in the bubble at the end of the search box (app.js),
-// soonest first: up to three, or two and how many more. The eye marks one as reviewed.
+// Postings you haven't reviewed that the card would show (posted in its days, passing your
+// options and rules) and that close within the days set in Settings (a week to start) take
+// turns in the bubble at the end of the search box (app.js), soonest first: up to three, or two
+// and how many more. The eye marks one as reviewed.
 
 const DUE_FACES = 3;
 let paintedDue = '';
