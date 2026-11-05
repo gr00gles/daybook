@@ -58,7 +58,7 @@ const FIT_BOTTOM = 6; // room kept under the cards (the board's bottom padding),
 const TUCK_GAP = 4; // least room kept above and below the ticker
 const TICKER_H = [24, 40]; // the ticker's least and greatest height
 // The band's lines of text, measured to their baseline: a line's box runs on below its letters.
-const TEXT_IN_BAND = '.clock, .greeting, .date-line, .nw-cond, .nw-meta, .nw-place, .nh-temp, .nh-pop:not(:empty)';
+const TEXT_IN_BAND = '.clock, .date-line, .nw-cond, .nw-meta, .nw-place, .nh-temp, .nh-pop:not(:empty)';
 // What else the band draws, measured to its edge.
 const DRAWN_IN_BAND = '.search-box, .shortcuts, .nw-alert, .nw-hours .wx-icon, #now-weather > .notice, #now-weather > .btn';
 

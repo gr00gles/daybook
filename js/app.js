@@ -56,7 +56,7 @@ $('#menu-btn').innerHTML = icon('gear');
 $('#refresh-btn').innerHTML = `${icon('refresh')}Refresh everything`;
 $('#settings-btn').innerHTML = `${icon('gear')}Settings`;
 
-// ---- Clock, greeting, sky ----------------------------------------------------------
+// ---- Clock, sky ----------------------------------------------------------
 
 function isoWeek(d) {
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -164,9 +164,6 @@ function tick(force = false) {
   const parts = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hour12: !S.clock24 }).formatToParts(d);
   $('#clock-time').textContent = parts.filter((p) => p.type !== 'dayPeriod').map((p) => p.value).join('').trim();
   $('#clock-ampm').textContent = parts.find((p) => p.type === 'dayPeriod')?.value || '';
-  const h = d.getHours();
-  const hello = h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  $('#greeting').textContent = S.name ? `${hello}, ${S.name}` : hello;
   $('#date-long').textContent = d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const dayOfYear = Math.round((d.setHours(0, 0, 0, 0) - new Date(d.getFullYear(), 0, 0)) / 86400000);
   $('#date-meta').textContent = `Week ${isoWeek(new Date())} · Day ${dayOfYear}`;

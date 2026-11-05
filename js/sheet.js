@@ -420,7 +420,6 @@ ${showBlock('shortcuts')}
   <section id="set-you">
     <h3>You</h3>
     <div class="grid2">
-      <label class="field"><span>Name for the greeting</span><input id="s-name" type="text" data-path="name" value="${esc(d.name)}" autocomplete="off"></label>
       <label class="field"><span>Theme</span><select id="s-theme" data-path="theme">${opt('system', 'Match my computer', d.theme)}${opt('light', 'Light', d.theme)}${opt('dark', 'Dark', d.theme)}</select></label>
       <label class="field"><span>Clock</span><select id="s-clock" data-path="clock24" data-type="bool">${opt(false, '12-hour (3:30 PM)', d.clock24)}${opt(true, '24-hour (15:30)', d.clock24)}</select></label>
       <label class="field"><span>Temperature</span><select id="s-units" data-path="units">${opt('F', 'Fahrenheit (°F)', d.units)}${opt('C', 'Celsius (°C)', d.units)}</select></label>
