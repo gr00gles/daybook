@@ -93,7 +93,7 @@ async function fetchWeather(loc, units) {
     longitude: loc.lon,
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
     hourly: 'temperature_2m,precipitation_probability,weather_code,is_day',
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,precipitation_sum,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset,uv_index_max',
     timezone: 'auto',
     timeformat: 'unixtime',
     past_days: '1',
@@ -102,6 +102,7 @@ async function fetchWeather(loc, units) {
   if (imperial) {
     q.set('temperature_unit', 'fahrenheit');
     q.set('wind_speed_unit', 'mph');
+    q.set('precipitation_unit', 'inch');
   }
   const aq = new URLSearchParams({ latitude: loc.lat, longitude: loc.lon, current: 'us_aqi', timezone: 'auto' });
   const [wx, air] = await Promise.allSettled([
@@ -115,6 +116,7 @@ async function fetchWeather(loc, units) {
     lat: +loc.lat,
     lon: +loc.lon,
     wind: imperial ? 'mph' : 'km/h',
+    precip: imperial ? 'in' : 'mm',
     current: w.current,
     hourly: w.hourly,
     daily: w.daily,
@@ -149,7 +151,8 @@ export async function refreshWeather(S, force, onData) {
   return cached({
     key: 'weather',
     // 2: the stored forecast carries its coordinates (weather alerts and event weather need them).
-    sig: hash([2, loc.lat, loc.lon, S.units]),
+    // 3: and each day's rain, wind and feels-like (a day picked in the week).
+    sig: hash([3, loc.lat, loc.lon, S.units]),
     maxAge: 15 * 60e3,
     force,
     fetch: () => fetchWeather(loc, S.units),
@@ -223,14 +226,43 @@ export function openWeekWeather(show = true) {
   if (!pop) return;
   showPop(pop, show);
   $('#nw-today')?.setAttribute('aria-expanded', String(show));
-  if (show) drawHourly();
+  if (show) {
+    if (picked != null) {
+      picked = null;
+      if (last) renderCard(last, lastMeta);
+    } else drawHourly();
+  }
 }
+
+// A day picked in the week (its midnight, in seconds) shows its hours and facts; null is now.
+let picked = null;
+function pickDay(t) {
+  picked = t === picked ? null : t;
+  if (last) renderCard(last, lastMeta);
+  $(`#weather-body .wk-row[data-day="${picked ?? todayStart()}"]`)?.focus();
+}
+const todayStart = () => last && last.daily.time[todayIndex(last.daily)];
 
 export function initWeather() {
   $('#wx-pop-close').innerHTML = icon('close');
   $('#wx-pop-close').addEventListener('click', () => openWeekWeather(false));
   $('#now-weather').addEventListener('click', (e) => {
     if (e.target.closest('#nw-today')) openWeekWeather($('#wx-pop').hidden);
+  });
+  $('#weather-body').addEventListener('click', (e) => {
+    const row = e.target.closest('.wk-row');
+    if (row) pickDay(Number(row.dataset.day));
+  });
+  $('#weather-body').addEventListener('keydown', (e) => {
+    const row = e.target.closest('.wk-row');
+    if (!row) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pickDay(Number(row.dataset.day));
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      (e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling)?.focus();
+    }
   });
   document.addEventListener('pointerdown', (e) => {
     if (!$('#wx-pop').hidden && !e.target.closest('#wx-pop, #nw-today, #nw-alert')) openWeekWeather(false);
@@ -277,7 +309,9 @@ export function renderSun() {
     <div class="st-caption">${caption}</div>`;
 }
 
+let lastMeta = {};
 function renderCard(d, meta) {
+  lastMeta = meta;
   const body = $('#weather-body');
   $('#weather-place').textContent = d.place;
   $('#weather-updated').textContent = meta.error ? "couldn't refresh" : '';
@@ -289,6 +323,10 @@ function renderCard(d, meta) {
   const lo = Math.min(...days.map((k) => dly.temperature_2m_min[k]));
   const hi = Math.max(...days.map((k) => dly.temperature_2m_max[k]));
   const pct = (t) => ((t - lo) / (hi - lo || 1)) * 100;
+  // The picked day, while it's still in the week and isn't today.
+  const sel = picked == null ? -1 : days.indexOf(dly.time.indexOf(picked));
+  const p = sel > 0 ? days[sel] : -1;
+  if (p < 0) picked = null;
   const week = days
     .map((k) => {
       const name = k === i ? 'Today' : new Date(dly.time[k] * 1000).toLocaleDateString(undefined, { weekday: 'short' });
@@ -297,7 +335,9 @@ function renderCard(d, meta) {
       const tmin = dly.temperature_2m_min[k];
       const tmax = dly.temperature_2m_max[k];
       const nowDot = k === i ? `<span class="range-now" style="left:${pct(c.temperature_2m)}%" title="Now ${round(c.temperature_2m)}°"></span>` : '';
-      return `<li class="wk-row" title="${esc(label)}">
+      const on = k === (p < 0 ? i : p);
+      const full = k === i ? 'today' : new Date(dly.time[k] * 1000).toLocaleDateString(undefined, { weekday: 'long' });
+      return `<li class="wk-row${on ? ' on' : ''}" data-day="${dly.time[k]}" role="button" tabindex="0" aria-pressed="${on}" title="${esc(label)} · ${k === i ? 'Today' : 'Show'} ${full}${k === i ? '' : ' by the hour'}">
         <span class="wk-day">${name}</span>
         <span class="wk-icon">${weatherIcon(glyph)}</span>
         <span class="wk-pop">${pop >= 10 ? `${icon('drop', 'drop')}${pop}%` : ''}</span>
@@ -318,11 +358,44 @@ function renderCard(d, meta) {
     ...(d.aqi != null ? [['Air quality', `${Math.round(d.aqi)}`, `<span class="status s-${aqiState}">${aqiText}</span>`]] : []),
   ];
 
+  const shown = p < 0 ? facts : dayFacts(d, p);
+  const head =
+    p < 0
+      ? ''
+      : `<p class="facts-head">${esc(new Date(dly.time[p] * 1000).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))} · ${esc(describe(dly.weather_code[p], 1).label)}</p>`;
   body.innerHTML = `
     <div class="hourly" id="wx-hourly"><div class="hourly-tip" id="wx-tip" hidden></div></div>
-    <ol class="week">${week}</ol>
-    <dl class="facts">${facts.map(([k, v, sub]) => `<div><dt>${k}</dt><dd>${v}${sub ? `<small>${sub}</small>` : ''}</dd></div>`).join('')}</dl>`;
+    <ol class="week" aria-label="The week; pick a day to see it by the hour">${week}</ol>
+    ${head}<dl class="facts${p < 0 ? '' : ' day'}">${shown.map(([k, v, sub]) => `<div><dt>${k}</dt><dd>${v}${sub ? `<small>${sub}</small>` : ''}</dd></div>`).join('')}</dl>`;
   drawHourly();
+}
+
+const COMPASS_AT = (deg) => (deg == null ? '' : ` ${COMPASS[Math.round(deg / 45) % 8]}`);
+const amount = (v, unit) => (unit === 'in' ? (v < 0.1 ? v.toFixed(2) : v.toFixed(1)) : v < 10 ? v.toFixed(1) : Math.round(v)) + ` ${unit}`;
+
+// A day ahead, as the facts under the week: its high and low, rain, wind, UV and daylight.
+function dayFacts(d, k) {
+  const dly = d.daily;
+  const h24 = settingsRef?.clock24;
+  const at = (key) => dly[key]?.[k] ?? null;
+  const pop = at('precipitation_probability_max');
+  const rain = at('precipitation_sum');
+  const snow = at('snowfall_sum');
+  const unit = d.precip || 'mm';
+  // Open-Meteo gives snow in cm when rain is in mm, in inches when it's in inches.
+  const snowText = snow > 0 ? `${unit === 'in' ? amount(snow, 'in') : amount(snow, 'cm')} of snow` : '';
+  const wind = at('wind_speed_10m_max');
+  const gust = at('wind_gusts_10m_max');
+  const uv = at('uv_index_max');
+  const aMax = at('apparent_temperature_max');
+  const aMin = at('apparent_temperature_min');
+  return [
+    ['High / low', `${round(at('temperature_2m_max'))}° / ${round(at('temperature_2m_min'))}°`, aMax != null && aMin != null ? `feels ${round(aMax)}° / ${round(aMin)}°` : ''],
+    ['Rain', pop == null ? '–' : `${pop}%`, snowText || (rain > 0 ? `${amount(rain, unit)} total` : '')],
+    ['Wind', wind == null ? '–' : `${round(wind)} ${d.wind}${COMPASS_AT(at('wind_direction_10m_dominant'))}`, gust != null && wind != null && gust > wind + 5 ? `gusts ${round(gust)}` : ''],
+    ['UV', uv == null ? '–' : `${Math.round(uv)}`, uvLabel(uv)],
+    ['Sunrise', fmtTime(at('sunrise') * 1000, h24), `sunset ${fmtTime(at('sunset') * 1000, h24)}`],
+  ];
 }
 
 let hourlyObserver;
@@ -346,10 +419,17 @@ function drawHourly() {
   const h24 = settingsRef?.clock24;
   const h = last.hourly;
   const nowS = Date.now() / 1000;
-  let start = h.time.findIndex((t) => t + 3600 > nowS);
-  if (start < 0) start = 0;
+  // Now: the next 24 hours. A picked day: its own, midnight to midnight.
+  const isNow = picked == null;
   const idx = [];
-  for (let k = start; k < Math.min(start + 25, h.time.length); k++) idx.push(k);
+  if (isNow) {
+    let start = h.time.findIndex((t) => t + 3600 > nowS);
+    if (start < 0) start = 0;
+    for (let k = start; k < Math.min(start + 25, h.time.length); k++) idx.push(k);
+  } else {
+    const end = last.daily.time[last.daily.time.indexOf(picked) + 1] ?? picked + 86400;
+    h.time.forEach((t, k) => t >= picked && t < end && idx.push(k));
+  }
   if (idx.length < 2) return;
   const temps = idx.map((k) => h.temperature_2m[k]);
   const probs = idx.map((k) => h.precipitation_probability[k] ?? 0);
@@ -379,22 +459,21 @@ function drawHourly() {
     })
     .join('');
   const ticks = idx
-    .map((k, j) => (j % 3 === 0 ? `<text x="${x(j).toFixed(1)}" y="${H - 4}" class="ax" text-anchor="${anchor(j)}">${j === 0 ? 'Now' : fmtHour(h.time[k] * 1000, h24)}</text>` : ''))
+    .map((k, j) => (j % 3 === 0 ? `<text x="${x(j).toFixed(1)}" y="${H - 4}" class="ax" text-anchor="${anchor(j)}">${j === 0 && isNow ? 'Now' : fmtHour(h.time[k] * 1000, h24)}</text>` : ''))
     .join('');
   const maxPop = Math.max(...probs);
   const label = (k, t, above) =>
     `<text x="${x(k).toFixed(1)}" y="${(y(t) + (above ? -9 : 17)).toFixed(1)}" class="val" text-anchor="${anchor(k)}">${round(t)}°</text>`;
 
-  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Temperature for the next 24 hours, from ${round(tMin)}° to ${round(tMax)}°">
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Temperature ${isNow ? 'for the next 24 hours' : `on ${new Date(picked * 1000).toLocaleDateString(undefined, { weekday: 'long' })}`}, from ${round(tMin)}° to ${round(tMax)}°">
       <defs><linearGradient id="tempfill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--temp)" stop-opacity=".22"/><stop offset="1" stop-color="var(--temp)" stop-opacity="0"/></linearGradient></defs>
       <line x1="${padX}" x2="${W - padX}" y1="${top + plotH}" y2="${top + plotH}" class="grid"/>
       <line x1="${padX}" x2="${W - padX}" y1="${base}" y2="${base}" class="grid"/>
       <path d="${area}" fill="url(#tempfill)"/>
       <path d="${line}" class="temp-line"/>
-      ${kMax > 2 ? label(kMax, tMax, true) : ''}
-      ${kMin > 2 && kMin !== kMax ? label(kMin, tMin, true) : ''}
-      <circle cx="${x(0)}" cy="${y(temps[0]).toFixed(1)}" r="4.5" class="temp-now"/>
-      ${label(0, temps[0], temps[0] >= (tMin + tMax) / 2 ? false : true)}
+      ${kMax > 2 || !isNow ? label(kMax, tMax, true) : ''}
+      ${(kMin > 2 || !isNow) && kMin !== kMax ? label(kMin, tMin, true) : ''}
+      ${isNow ? `<circle cx="${x(0)}" cy="${y(temps[0]).toFixed(1)}" r="4.5" class="temp-now"/>${label(0, temps[0], temps[0] >= (tMin + tMax) / 2 ? false : true)}` : ''}
       <text x="${padX}" y="${top + plotH + gap - 2}" class="ax cap">${maxPop ? `Chance of rain · peak ${maxPop}%` : 'No rain expected'}</text>
       ${bars}
       ${ticks}
@@ -423,7 +502,7 @@ function drawHourly() {
     crossDot.setAttribute('cy', y(temps[j]));
     crossDot.setAttribute('visibility', 'visible');
     const { label: cond } = describe(h.weather_code[k], h.is_day[k]);
-    tip.innerHTML = `<strong>${j === 0 ? 'Now' : fmtTime(h.time[k] * 1000, h24)}</strong><span>${round(temps[j])}° · ${esc(cond)}</span><span>${probs[j]}% chance of rain</span>`;
+    tip.innerHTML = `<strong>${j === 0 && isNow ? 'Now' : fmtTime(h.time[k] * 1000, h24)}</strong><span>${round(temps[j])}° · ${esc(cond)}</span><span>${probs[j]}% chance of rain</span>`;
     tip.hidden = false;
     const tw = tip.offsetWidth;
     tip.style.left = `${Math.min(W - tw, Math.max(0, x(j) - tw / 2))}px`;
