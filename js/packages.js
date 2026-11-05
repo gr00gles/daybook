@@ -157,12 +157,17 @@ function numberIn(text, context, { plain: plainOk = true } = {}) {
 const labeled = (body) => [...body.matchAll(/track(?:ing)?(?:\s*(?:number|no\.?|#|id|code))?\s*[:#]?/gi)].map((m) => body.slice(m.index, m.index + 80)).join('\n');
 
 // A tracking number in a link to a carrier's (or a store's) tracking page.
-const LINK_NUMBER = /(?:tracknum(?:bers?)?|trknbrs?|tlabels|tracking[-_]?(?:id|numbers?|nums?|no)|trackingnumbers?)=([0-9a-z]{8,40})/i;
+const LINK_NUMBER = /(?:tracknum(?:bers?)?|trknbrs?|tlabels\d?|tracking[-_]?(?:id|numbers?|nums?|no)|trackingnumbers?)=([0-9a-z]{8,40})/i;
 function numberInLinks(links = []) {
   for (const href of links) {
-    const n = (href.match(LINK_NUMBER)?.[1] || href.match(/\/tracking\/(TBA\d{12})\b/i)?.[1] || '').toUpperCase();
-    if (!n) continue;
     const site = ['ups', 'usps', 'fedex', 'dhl', 'amazon'].find((c) => new RegExp(`\\b${c}\\.`, 'i').test(href)) || '';
+    const n = (href.match(LINK_NUMBER)?.[1] || href.match(/\/tracking\/(TBA\d{12})\b/i)?.[1] || '').toUpperCase();
+    if (!n) {
+      // A carrier's own page with the number somewhere else in its address.
+      const found = site && numberIn(href.toUpperCase(), `${site} tracking`);
+      if (found) return { ...found, plain: false };
+      continue;
+    }
     const carrier = carrierOf(n, site);
     if (carrier) return { carrier, number: n, plain: false };
   }
@@ -263,7 +268,7 @@ function itemsText(items = []) {
 }
 
 // Subjects that only say something happened to "your order", or when it's due.
-const GENERIC = /\b(?:your|the|an?) (?:[\w’'.]+ ){0,2}(?:order|package|parcel|shipment|item|delivery|purchase)s?\b|^(?:is |has |was |has been )?(?:shipped|delivered|out for delivery|on (?:its|the) way|arriving|arrived|order)\b|^\d+ items?\b|^it[’']s time\b|^(?:let us know|how did we do|how was|rate|review|tell us|thank(?:s| you))\b|^(?:usps|ups|fedex|dhl)?\W*(?:expected|scheduled|estimated) delivery\b|^(?:now )?arriving\b|^\W*$/i;
+const GENERIC = /\b(?:your|the|an?) (?:[\w’'.]+ ){0,2}(?:order|package|parcel|shipment|item|delivery|purchase)s?\b|^(?:is |has |was |has been )?(?:shipped|delivered|out for delivery|on (?:its|the) way|arriving|arrived|order)\b|^(?:your |the |an? )?(?:order|package|parcel|shipment|delivery)s?\b|^it(?:[’']s| has)? shipped\b|^\d+ items?\b|^it[’']s time\b|^(?:let us know|how did we do|how was|rate|review|tell us|thank(?:s| you))\b|^(?:usps|ups|fedex|dhl)?\W*(?:expected|scheduled|estimated) delivery\b|^(?:now )?arriving\b|^\W*$/i;
 
 function titleOf(subject, from, item) {
   const t = subject
@@ -378,7 +383,8 @@ function present(p, now = Date.now()) {
     if (days === 1) return { state: 'soon', label: 'Arriving tomorrow' };
     return { state: 'transit', label: `Arriving ${shortDay(p.due)}` };
   }
-  return age < 7 * 86400e3 ? { state: 'transit', label: p.tracking ? 'Tracking' : 'On the way' } : null;
+  // No day and no tracking number to check: most boxes are there within five days of shipping.
+  return age < (p.number ? 7 : 5) * 86400e3 ? { state: 'transit', label: p.tracking ? 'Tracking' : 'On the way' } : null;
 }
 
 // One mail item → a delivery as it reads now, or null. Used to tag rows in the mail list.
