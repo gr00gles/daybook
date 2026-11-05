@@ -78,7 +78,6 @@ function body() {
       return `
         <h1 class="wiz-title">Make it yours</h1>
         <div class="grid2">
-          <label class="field"><span>Your first name, for the greeting</span><input id="wiz-name" type="text" value="${esc(draft.name)}" autocomplete="given-name"></label>
           <div class="field"><span>Temperature</span>
             <div class="seg" role="radiogroup" aria-label="Temperature units">
               <label><input type="radio" name="wiz-units" value="F"${draft.units === 'F' ? ' checked' : ''}><span>°F</span></label>
@@ -145,12 +144,6 @@ export function openWelcome(S) {
     else if (a === 'skip-all' || a === 'finish') return finish();
     save();
     render();
-  });
-  dlg.addEventListener('input', (e) => {
-    if (e.target.id === 'wiz-name') {
-      draft.name = e.target.value.trim();
-      save();
-    }
   });
   dlg.addEventListener('change', (e) => {
     if (e.target.name === 'wiz-units') draft.units = e.target.value;
